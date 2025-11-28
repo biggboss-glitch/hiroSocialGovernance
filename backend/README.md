@@ -63,22 +63,19 @@ python run.py
 ### 核心工作流程
 
 ```
-1. 创建项目（可选）
-   POST /api/graph/project/create
-   
-2. 上传文件 + 生成本体（接口1）
+1. 上传文件 + 生成本体（接口1）
    POST /api/graph/ontology/generate
-   → 返回 project_id
+   → 自动创建项目，返回 project_id
    
-3. 构建图谱（接口2）
+2. 构建图谱（接口2）
    POST /api/graph/build
    → 传入 project_id
    → 返回 task_id
    
-4. 查询任务进度
+3. 查询任务进度
    GET /api/graph/task/{task_id}
    
-5. 获取图谱数据
+4. 获取图谱数据
    GET /api/graph/data/{graph_id}
 ```
 
@@ -199,7 +196,6 @@ python run.py
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/graph/project/create` | 创建项目 |
 | GET | `/api/graph/project/{project_id}` | 获取项目详情 |
 | GET | `/api/graph/project/list` | 列出所有项目 |
 | DELETE | `/api/graph/project/{project_id}` | 删除项目 |

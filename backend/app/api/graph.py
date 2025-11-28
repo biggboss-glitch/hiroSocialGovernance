@@ -32,46 +32,6 @@ def allowed_file(filename: str) -> bool:
 
 # ============== 项目管理接口 ==============
 
-@graph_bp.route('/project/create', methods=['POST'])
-def create_project():
-    """
-    创建新项目
-    
-    请求（JSON）：
-        {
-            "name": "项目名称"  // 可选
-        }
-        
-    返回：
-        {
-            "success": true,
-            "data": {
-                "project_id": "proj_xxxx",
-                "name": "...",
-                "status": "created",
-                ...
-            }
-        }
-    """
-    try:
-        data = request.get_json() or {}
-        name = data.get('name', 'Unnamed Project')
-        
-        project = ProjectManager.create_project(name=name)
-        
-        return jsonify({
-            "success": True,
-            "data": project.to_dict()
-        })
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }), 500
-
-
 @graph_bp.route('/project/<project_id>', methods=['GET'])
 def get_project(project_id: str):
     """
