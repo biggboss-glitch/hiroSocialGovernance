@@ -31,6 +31,9 @@ def setup_logger(name: str = 'mirofish', level: int = logging.DEBUG) -> logging.
     logger = logging.getLogger(name)
     logger.setLevel(level)
     
+    # 阻止日志向上传播到根 logger，避免重复输出
+    logger.propagate = False
+    
     # 如果已经有处理器，不重复添加
     if logger.handlers:
         return logger

@@ -197,9 +197,14 @@ class GraphBuilderService:
     
     def set_ontology(self, graph_id: str, ontology: Dict[str, Any]):
         """设置图谱本体（公开方法）"""
+        import warnings
         from typing import Optional
         from pydantic import Field
         from zep_cloud.external_clients.ontology import EntityModel, EntityText, EdgeModel
+        
+        # 抑制 Pydantic v2 关于 Field(default=None) 的警告
+        # 这是 Zep SDK 要求的用法，警告来自动态类创建，可以安全忽略
+        warnings.filterwarnings('ignore', category=UserWarning, module='pydantic')
         
         # Zep 保留名称，不能作为属性名
         RESERVED_NAMES = {'uuid', 'name', 'group_id', 'name_embedding', 'summary', 'created_at'}
@@ -223,6 +228,7 @@ class GraphBuilderService:
             for attr_def in entity_def.get("attributes", []):
                 attr_name = safe_attr_name(attr_def["name"])  # 使用安全名称
                 attr_desc = attr_def.get("description", attr_name)
+                # Zep API 需要 Field 的 description，这是必需的
                 attrs[attr_name] = Field(description=attr_desc, default=None)
                 annotations[attr_name] = Optional[EntityText]  # 类型注解
             
@@ -246,6 +252,7 @@ class GraphBuilderService:
             for attr_def in edge_def.get("attributes", []):
                 attr_name = safe_attr_name(attr_def["name"])  # 使用安全名称
                 attr_desc = attr_def.get("description", attr_name)
+                # Zep API 需要 Field 的 description，这是必需的
                 attrs[attr_name] = Field(description=attr_desc, default=None)
                 annotations[attr_name] = Optional[str]  # 边属性用str类型
             

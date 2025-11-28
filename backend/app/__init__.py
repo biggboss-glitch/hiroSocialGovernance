@@ -2,6 +2,7 @@
 MiroFish Backend - Flask应用工厂
 """
 
+import os
 from flask import Flask, request
 from flask_cors import CORS
 
@@ -16,9 +17,16 @@ def create_app(config_class=Config):
     
     # 设置日志
     logger = setup_logger('mirofish')
-    logger.info("=" * 50)
-    logger.info("MiroFish Backend 启动中...")
-    logger.info("=" * 50)
+    
+    # 只在 reloader 子进程中打印启动信息（避免 debug 模式下打印两次）
+    is_reloader_process = os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
+    debug_mode = app.config.get('DEBUG', False)
+    should_log_startup = not debug_mode or is_reloader_process
+    
+    if should_log_startup:
+        logger.info("=" * 50)
+        logger.info("MiroFish Backend 启动中...")
+        logger.info("=" * 50)
     
     # 启用CORS
     CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -46,7 +54,8 @@ def create_app(config_class=Config):
     def health():
         return {'status': 'ok', 'service': 'MiroFish Backend'}
     
-    logger.info("MiroFish Backend 启动完成")
+    if should_log_startup:
+        logger.info("MiroFish Backend 启动完成")
     
     return app
 
