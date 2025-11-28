@@ -16,5 +16,7 @@
 .idea
 .pytest_cache
 .pytest_cache
+.cursor/
 
-.mydoc/
+mydoc/
+mytest/
