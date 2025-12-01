@@ -20,3 +20,7 @@ pydantic>=2.0.0
 # 文件处理
 werkzeug>=3.0.0
 
+# OASIS社交媒体模拟框架
+oasis-ai>=0.1.0
+camel-ai>=0.2.0
+

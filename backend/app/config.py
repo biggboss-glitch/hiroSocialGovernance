@@ -41,6 +41,20 @@ class Config:
     DEFAULT_CHUNK_SIZE = 500  # 默认切块大小
     DEFAULT_CHUNK_OVERLAP = 50  # 默认重叠大小
     
+    # OASIS模拟配置
+    OASIS_DEFAULT_MAX_ROUNDS = int(os.environ.get('OASIS_DEFAULT_MAX_ROUNDS', '10'))
+    OASIS_SIMULATION_DATA_DIR = os.path.join(os.path.dirname(__file__), '../uploads/simulations')
+    
+    # OASIS平台可用动作配置
+    OASIS_TWITTER_ACTIONS = [
+        'CREATE_POST', 'LIKE_POST', 'REPOST', 'FOLLOW', 'DO_NOTHING', 'QUOTE_POST'
+    ]
+    OASIS_REDDIT_ACTIONS = [
+        'LIKE_POST', 'DISLIKE_POST', 'CREATE_POST', 'CREATE_COMMENT',
+        'LIKE_COMMENT', 'DISLIKE_COMMENT', 'SEARCH_POSTS', 'SEARCH_USER',
+        'TREND', 'REFRESH', 'DO_NOTHING', 'FOLLOW', 'MUTE'
+    ]
+    
     @classmethod
     def validate(cls):
         """验证必要配置"""

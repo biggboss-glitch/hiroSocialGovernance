@@ -1,0 +1,1330 @@
+"""
+模拟相关API路由
+Step2: Zep实体读取与过滤、OASIS模拟准备与运行（全程自动化）
+"""
+
+import os
+import traceback
+from flask import request, jsonify, send_file
+
+from . import simulation_bp
+from ..config import Config
+from ..services.zep_entity_reader import ZepEntityReader
+from ..services.oasis_profile_generator import OasisProfileGenerator
+from ..services.simulation_manager import SimulationManager, SimulationStatus
+from ..services.simulation_runner import SimulationRunner, RunnerStatus
+from ..utils.logger import get_logger
+from ..models.project import ProjectManager
+
+logger = get_logger('mirofish.api.simulation')
+
+
+# ============== 实体读取接口 ==============
+
+@simulation_bp.route('/entities/<graph_id>', methods=['GET'])
+def get_graph_entities(graph_id: str):
+    """
+    获取图谱中的所有实体（已过滤）
+    
+    只返回符合预定义实体类型的节点（Labels不只是Entity的节点）
+    
+    Query参数：
+        entity_types: 逗号分隔的实体类型列表（可选，用于进一步过滤）
+        enrich: 是否获取相关边信息（默认true）
+    """
+    try:
+        if not Config.ZEP_API_KEY:
+            return jsonify({
+                "success": False,
+                "error": "ZEP_API_KEY未配置"
+            }), 500
+        
+        entity_types_str = request.args.get('entity_types', '')
+        entity_types = [t.strip() for t in entity_types_str.split(',') if t.strip()] if entity_types_str else None
+        enrich = request.args.get('enrich', 'true').lower() == 'true'
+        
+        logger.info(f"获取图谱实体: graph_id={graph_id}, entity_types={entity_types}, enrich={enrich}")
+        
+        reader = ZepEntityReader()
+        result = reader.filter_defined_entities(
+            graph_id=graph_id,
+            defined_entity_types=entity_types,
+            enrich_with_edges=enrich
+        )
+        
+        return jsonify({
+            "success": True,
+            "data": result.to_dict()
+        })
+        
+    except Exception as e:
+        logger.error(f"获取图谱实体失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@simulation_bp.route('/entities/<graph_id>/<entity_uuid>', methods=['GET'])
+def get_entity_detail(graph_id: str, entity_uuid: str):
+    """获取单个实体的详细信息"""
+    try:
+        if not Config.ZEP_API_KEY:
+            return jsonify({
+                "success": False,
+                "error": "ZEP_API_KEY未配置"
+            }), 500
+        
+        reader = ZepEntityReader()
+        entity = reader.get_entity_with_context(graph_id, entity_uuid)
+        
+        if not entity:
+            return jsonify({
+                "success": False,
+                "error": f"实体不存在: {entity_uuid}"
+            }), 404
+        
+        return jsonify({
+            "success": True,
+            "data": entity.to_dict()
+        })
+        
+    except Exception as e:
+        logger.error(f"获取实体详情失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@simulation_bp.route('/entities/<graph_id>/by-type/<entity_type>', methods=['GET'])
+def get_entities_by_type(graph_id: str, entity_type: str):
+    """获取指定类型的所有实体"""
+    try:
+        if not Config.ZEP_API_KEY:
+            return jsonify({
+                "success": False,
+                "error": "ZEP_API_KEY未配置"
+            }), 500
+        
+        enrich = request.args.get('enrich', 'true').lower() == 'true'
+        
+        reader = ZepEntityReader()
+        entities = reader.get_entities_by_type(
+            graph_id=graph_id,
+            entity_type=entity_type,
+            enrich_with_edges=enrich
+        )
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "entity_type": entity_type,
+                "count": len(entities),
+                "entities": [e.to_dict() for e in entities]
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"获取实体失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+# ============== 模拟管理接口 ==============
+
+@simulation_bp.route('/create', methods=['POST'])
+def create_simulation():
+    """
+    创建新的模拟
+    
+    注意：max_rounds等参数由LLM智能生成，无需手动设置
+    
+    请求（JSON）：
+        {
+            "project_id": "proj_xxxx",      // 必填
+            "graph_id": "mirofish_xxxx",    // 可选，如不提供则从project获取
+            "enable_twitter": true,          // 可选，默认true
+            "enable_reddit": true            // 可选，默认true
+        }
+    
+    返回：
+        {
+            "success": true,
+            "data": {
+                "simulation_id": "sim_xxxx",
+                "project_id": "proj_xxxx",
+                "graph_id": "mirofish_xxxx",
+                "status": "created",
+                "enable_twitter": true,
+                "enable_reddit": true,
+                "created_at": "2025-12-01T10:00:00"
+            }
+        }
+    """
+    try:
+        data = request.get_json() or {}
+        
+        project_id = data.get('project_id')
+        if not project_id:
+            return jsonify({
+                "success": False,
+                "error": "请提供 project_id"
+            }), 400
+        
+        project = ProjectManager.get_project(project_id)
+        if not project:
+            return jsonify({
+                "success": False,
+                "error": f"项目不存在: {project_id}"
+            }), 404
+        
+        graph_id = data.get('graph_id') or project.graph_id
+        if not graph_id:
+            return jsonify({
+                "success": False,
+                "error": "项目尚未构建图谱，请先调用 /api/graph/build"
+            }), 400
+        
+        manager = SimulationManager()
+        state = manager.create_simulation(
+            project_id=project_id,
+            graph_id=graph_id,
+            enable_twitter=data.get('enable_twitter', True),
+            enable_reddit=data.get('enable_reddit', True),
+        )
+        
+        return jsonify({
+            "success": True,
+            "data": state.to_dict()
+        })
+        
+    except Exception as e:
+        logger.error(f"创建模拟失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@simulation_bp.route('/prepare', methods=['POST'])
+def prepare_simulation():
+    """
+    准备模拟环境（异步任务，LLM智能生成所有参数）
+    
+    这是一个耗时操作，接口会立即返回task_id，
+    使用 GET /api/simulation/prepare/status 查询进度
+    
+    步骤：
+    1. 从Zep图谱读取并过滤实体
+    2. 为每个实体生成OASIS Agent Profile（带重试机制）
+    3. LLM智能生成模拟配置（带重试机制）
+    4. 保存配置文件和预设脚本
+    
+    请求（JSON）：
+        {
+            "simulation_id": "sim_xxxx",                   // 必填，模拟ID
+            "entity_types": ["Student", "PublicFigure"],  // 可选，指定实体类型
+            "use_llm_for_profiles": true                  // 可选，是否用LLM生成人设
+        }
+    
+    返回：
+        {
+            "success": true,
+            "data": {
+                "simulation_id": "sim_xxxx",
+                "task_id": "task_xxxx",
+                "status": "preparing",
+                "message": "准备任务已启动"
+            }
+        }
+    """
+    import threading
+    from ..models.task import TaskManager, TaskStatus
+    
+    try:
+        data = request.get_json() or {}
+        
+        simulation_id = data.get('simulation_id')
+        if not simulation_id:
+            return jsonify({
+                "success": False,
+                "error": "请提供 simulation_id"
+            }), 400
+        
+        manager = SimulationManager()
+        state = manager.get_simulation(simulation_id)
+        
+        if not state:
+            return jsonify({
+                "success": False,
+                "error": f"模拟不存在: {simulation_id}"
+            }), 404
+        
+        # 从项目获取必要信息
+        project = ProjectManager.get_project(state.project_id)
+        if not project:
+            return jsonify({
+                "success": False,
+                "error": f"项目不存在: {state.project_id}"
+            }), 404
+        
+        # 获取模拟需求
+        simulation_requirement = project.simulation_requirement or ""
+        if not simulation_requirement:
+            return jsonify({
+                "success": False,
+                "error": "项目缺少模拟需求描述 (simulation_requirement)"
+            }), 400
+        
+        # 获取文档文本
+        document_text = ProjectManager.get_extracted_text(state.project_id) or ""
+        
+        entity_types_list = data.get('entity_types')
+        use_llm_for_profiles = data.get('use_llm_for_profiles', True)
+        
+        # 创建异步任务
+        task_manager = TaskManager()
+        task_id = task_manager.create_task(
+            task_type="simulation_prepare",
+            metadata={
+                "simulation_id": simulation_id,
+                "project_id": state.project_id
+            }
+        )
+        
+        # 更新模拟状态
+        state.status = SimulationStatus.PREPARING
+        manager._save_simulation_state(state)
+        
+        # 定义后台任务
+        def run_prepare():
+            try:
+                task_manager.update_task(
+                    task_id,
+                    status=TaskStatus.PROCESSING,
+                    progress=0,
+                    message="开始准备模拟环境..."
+                )
+                
+                # 准备模拟（带进度回调）
+                # 存储阶段进度详情
+                stage_details = {}
+                
+                def progress_callback(stage, progress, message, **kwargs):
+                    # 计算总进度
+                    stage_weights = {
+                        "reading": (0, 20),           # 0-20%
+                        "generating_profiles": (20, 70),  # 20-70%
+                        "generating_config": (70, 90),    # 70-90%
+                        "copying_scripts": (90, 100)       # 90-100%
+                    }
+                    
+                    start, end = stage_weights.get(stage, (0, 100))
+                    current_progress = int(start + (end - start) * progress / 100)
+                    
+                    # 构建详细进度信息
+                    stage_names = {
+                        "reading": "读取图谱实体",
+                        "generating_profiles": "生成Agent人设",
+                        "generating_config": "生成模拟配置",
+                        "copying_scripts": "准备模拟脚本"
+                    }
+                    
+                    stage_index = list(stage_weights.keys()).index(stage) + 1 if stage in stage_weights else 1
+                    total_stages = len(stage_weights)
+                    
+                    # 更新阶段详情
+                    stage_details[stage] = {
+                        "stage_name": stage_names.get(stage, stage),
+                        "stage_progress": progress,
+                        "current": kwargs.get("current", 0),
+                        "total": kwargs.get("total", 0),
+                        "item_name": kwargs.get("item_name", "")
+                    }
+                    
+                    # 构建详细进度信息
+                    detail = stage_details[stage]
+                    progress_detail_data = {
+                        "current_stage": stage,
+                        "current_stage_name": stage_names.get(stage, stage),
+                        "stage_index": stage_index,
+                        "total_stages": total_stages,
+                        "stage_progress": progress,
+                        "current_item": detail["current"],
+                        "total_items": detail["total"],
+                        "item_description": message
+                    }
+                    
+                    # 构建简洁消息
+                    if detail["total"] > 0:
+                        detailed_message = (
+                            f"[{stage_index}/{total_stages}] {stage_names.get(stage, stage)}: "
+                            f"{detail['current']}/{detail['total']} - {message}"
+                        )
+                    else:
+                        detailed_message = f"[{stage_index}/{total_stages}] {stage_names.get(stage, stage)}: {message}"
+                    
+                    task_manager.update_task(
+                        task_id,
+                        progress=current_progress,
+                        message=detailed_message,
+                        progress_detail=progress_detail_data
+                    )
+                
+                result_state = manager.prepare_simulation(
+                    simulation_id=simulation_id,
+                    simulation_requirement=simulation_requirement,
+                    document_text=document_text,
+                    defined_entity_types=entity_types_list,
+                    use_llm_for_profiles=use_llm_for_profiles,
+                    progress_callback=progress_callback
+                )
+                
+                # 任务完成
+                task_manager.complete_task(
+                    task_id,
+                    result=result_state.to_simple_dict()
+                )
+                
+            except Exception as e:
+                logger.error(f"准备模拟失败: {str(e)}")
+                task_manager.fail_task(task_id, str(e))
+                
+                # 更新模拟状态为失败
+                state = manager.get_simulation(simulation_id)
+                if state:
+                    state.status = SimulationStatus.FAILED
+                    state.error = str(e)
+                    manager._save_simulation_state(state)
+        
+        # 启动后台线程
+        thread = threading.Thread(target=run_prepare, daemon=True)
+        thread.start()
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "simulation_id": simulation_id,
+                "task_id": task_id,
+                "status": "preparing",
+                "message": "准备任务已启动，请通过 /api/simulation/prepare/status 查询进度"
+            }
+        })
+        
+    except ValueError as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 404
+        
+    except Exception as e:
+        logger.error(f"启动准备任务失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@simulation_bp.route('/prepare/status', methods=['POST'])
+def get_prepare_status():
+    """
+    查询准备任务进度
+    
+    请求（JSON）：
+        {
+            "task_id": "task_xxxx"  // 必填，prepare返回的task_id
+        }
+    
+    返回：
+        {
+            "success": true,
+            "data": {
+                "task_id": "task_xxxx",
+                "status": "processing",   // pending/processing/completed/failed
+                "progress": 45,           // 0-100 总进度
+                "message": "[2/4] 生成Agent人设: 35/93 - 生成 教授张三 的人设...",
+                "progress_detail": {      // 详细进度信息
+                    "current_stage": "generating_profiles",
+                    "current_stage_name": "生成Agent人设",
+                    "stage_index": 2,     // 当前阶段序号
+                    "total_stages": 4,    // 总阶段数
+                    "stage_progress": 38, // 阶段内进度 0-100
+                    "current_item": 35,   // 当前处理项目序号
+                    "total_items": 93,    // 当前阶段总项目数
+                    "item_description": "生成 教授张三 的人设..."
+                },
+                "result": null,           // 完成后返回结果
+                "error": null             // 失败时返回错误信息
+            }
+        }
+    """
+    from ..models.task import TaskManager
+    
+    try:
+        data = request.get_json() or {}
+        
+        task_id = data.get('task_id')
+        if not task_id:
+            return jsonify({
+                "success": False,
+                "error": "请提供 task_id"
+            }), 400
+        
+        task_manager = TaskManager()
+        task = task_manager.get_task(task_id)
+        
+        if not task:
+            return jsonify({
+                "success": False,
+                "error": f"任务不存在: {task_id}"
+            }), 404
+        
+        return jsonify({
+            "success": True,
+            "data": task.to_dict()
+        })
+        
+    except Exception as e:
+        logger.error(f"查询任务状态失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@simulation_bp.route('/<simulation_id>', methods=['GET'])
+def get_simulation(simulation_id: str):
+    """获取模拟状态"""
+    try:
+        manager = SimulationManager()
+        state = manager.get_simulation(simulation_id)
+        
+        if not state:
+            return jsonify({
+                "success": False,
+                "error": f"模拟不存在: {simulation_id}"
+            }), 404
+        
+        result = state.to_dict()
+        
+        # 如果模拟已准备好，附加运行说明
+        if state.status == SimulationStatus.READY:
+            result["run_instructions"] = manager.get_run_instructions(simulation_id)
+        
+        return jsonify({
+            "success": True,
+            "data": result
+        })
+        
+    except Exception as e:
+        logger.error(f"获取模拟状态失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@simulation_bp.route('/list', methods=['GET'])
+def list_simulations():
+    """
+    列出所有模拟
+    
+    Query参数：
+        project_id: 按项目ID过滤（可选）
+    """
+    try:
+        project_id = request.args.get('project_id')
+        
+        manager = SimulationManager()
+        simulations = manager.list_simulations(project_id=project_id)
+        
+        return jsonify({
+            "success": True,
+            "data": [s.to_dict() for s in simulations],
+            "count": len(simulations)
+        })
+        
+    except Exception as e:
+        logger.error(f"列出模拟失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@simulation_bp.route('/<simulation_id>/profiles', methods=['GET'])
+def get_simulation_profiles(simulation_id: str):
+    """
+    获取模拟的Agent Profile
+    
+    Query参数：
+        platform: 平台类型（reddit/twitter，默认reddit）
+    """
+    try:
+        platform = request.args.get('platform', 'reddit')
+        
+        manager = SimulationManager()
+        profiles = manager.get_profiles(simulation_id, platform=platform)
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "platform": platform,
+                "count": len(profiles),
+                "profiles": profiles
+            }
+        })
+        
+    except ValueError as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 404
+        
+    except Exception as e:
+        logger.error(f"获取Profile失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@simulation_bp.route('/<simulation_id>/config', methods=['GET'])
+def get_simulation_config(simulation_id: str):
+    """
+    获取模拟配置（LLM智能生成的完整配置）
+    
+    返回包含：
+        - time_config: 时间配置（模拟时长、轮次、高峰/低谷时段）
+        - agent_configs: 每个Agent的活动配置（活跃度、发言频率、立场等）
+        - event_config: 事件配置（初始帖子、热点话题）
+        - platform_configs: 平台配置
+        - generation_reasoning: LLM的配置推理说明
+    """
+    try:
+        manager = SimulationManager()
+        config = manager.get_simulation_config(simulation_id)
+        
+        if not config:
+            return jsonify({
+                "success": False,
+                "error": f"模拟配置不存在，请先调用 /prepare 接口"
+            }), 404
+        
+        return jsonify({
+            "success": True,
+            "data": config
+        })
+        
+    except Exception as e:
+        logger.error(f"获取配置失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@simulation_bp.route('/<simulation_id>/config/download', methods=['GET'])
+def download_simulation_config(simulation_id: str):
+    """下载模拟配置文件"""
+    try:
+        manager = SimulationManager()
+        sim_dir = manager._get_simulation_dir(simulation_id)
+        config_path = os.path.join(sim_dir, "simulation_config.json")
+        
+        if not os.path.exists(config_path):
+            return jsonify({
+                "success": False,
+                "error": "配置文件不存在，请先调用 /prepare 接口"
+            }), 404
+        
+        return send_file(
+            config_path,
+            as_attachment=True,
+            download_name="simulation_config.json"
+        )
+        
+    except Exception as e:
+        logger.error(f"下载配置失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@simulation_bp.route('/<simulation_id>/script/<script_name>/download', methods=['GET'])
+def download_simulation_script(simulation_id: str, script_name: str):
+    """
+    下载模拟脚本文件
+    
+    script_name可选值：
+        - run_twitter_simulation.py
+        - run_reddit_simulation.py
+        - run_parallel_simulation.py
+    """
+    try:
+        manager = SimulationManager()
+        sim_dir = manager._get_simulation_dir(simulation_id)
+        
+        # 验证脚本名称
+        allowed_scripts = [
+            "run_twitter_simulation.py",
+            "run_reddit_simulation.py", 
+            "run_parallel_simulation.py"
+        ]
+        
+        if script_name not in allowed_scripts:
+            return jsonify({
+                "success": False,
+                "error": f"未知脚本: {script_name}，可选: {allowed_scripts}"
+            }), 400
+        
+        script_path = os.path.join(sim_dir, script_name)
+        
+        if not os.path.exists(script_path):
+            return jsonify({
+                "success": False,
+                "error": "脚本文件不存在，请先调用 /prepare 接口"
+            }), 404
+        
+        return send_file(
+            script_path,
+            as_attachment=True,
+            download_name=script_name
+        )
+        
+    except Exception as e:
+        logger.error(f"下载脚本失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+# ============== Profile生成接口（独立使用） ==============
+
+@simulation_bp.route('/generate-profiles', methods=['POST'])
+def generate_profiles():
+    """
+    直接从图谱生成OASIS Agent Profile（不创建模拟）
+    
+    请求（JSON）：
+        {
+            "graph_id": "mirofish_xxxx",     // 必填
+            "entity_types": ["Student"],      // 可选
+            "use_llm": true,                  // 可选
+            "platform": "reddit"              // 可选
+        }
+    """
+    try:
+        data = request.get_json() or {}
+        
+        graph_id = data.get('graph_id')
+        if not graph_id:
+            return jsonify({
+                "success": False,
+                "error": "请提供 graph_id"
+            }), 400
+        
+        entity_types = data.get('entity_types')
+        use_llm = data.get('use_llm', True)
+        platform = data.get('platform', 'reddit')
+        
+        reader = ZepEntityReader()
+        filtered = reader.filter_defined_entities(
+            graph_id=graph_id,
+            defined_entity_types=entity_types,
+            enrich_with_edges=True
+        )
+        
+        if filtered.filtered_count == 0:
+            return jsonify({
+                "success": False,
+                "error": "没有找到符合条件的实体"
+            }), 400
+        
+        generator = OasisProfileGenerator()
+        profiles = generator.generate_profiles_from_entities(
+            entities=filtered.entities,
+            use_llm=use_llm
+        )
+        
+        if platform == "reddit":
+            profiles_data = [p.to_reddit_format() for p in profiles]
+        elif platform == "twitter":
+            profiles_data = [p.to_twitter_format() for p in profiles]
+        else:
+            profiles_data = [p.to_dict() for p in profiles]
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "platform": platform,
+                "entity_types": list(filtered.entity_types),
+                "count": len(profiles_data),
+                "profiles": profiles_data
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"生成Profile失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+# ============== 模拟运行控制接口 ==============
+
+@simulation_bp.route('/start', methods=['POST'])
+def start_simulation():
+    """
+    开始运行模拟
+    
+    请求（JSON）：
+        {
+            "simulation_id": "sim_xxxx",  // 必填，模拟ID
+            "platform": "parallel"         // 可选: twitter / reddit / parallel (默认)
+        }
+    
+    返回：
+        {
+            "success": true,
+            "data": {
+                "simulation_id": "sim_xxxx",
+                "runner_status": "running",
+                "process_pid": 12345,
+                "twitter_running": true,
+                "reddit_running": true,
+                "started_at": "2025-12-01T10:00:00"
+            }
+        }
+    """
+    try:
+        data = request.get_json() or {}
+        
+        simulation_id = data.get('simulation_id')
+        if not simulation_id:
+            return jsonify({
+                "success": False,
+                "error": "请提供 simulation_id"
+            }), 400
+        
+        platform = data.get('platform', 'parallel')
+        
+        if platform not in ['twitter', 'reddit', 'parallel']:
+            return jsonify({
+                "success": False,
+                "error": f"无效的平台类型: {platform}，可选: twitter/reddit/parallel"
+            }), 400
+        
+        # 检查模拟是否已准备好
+        manager = SimulationManager()
+        state = manager.get_simulation(simulation_id)
+        
+        if not state:
+            return jsonify({
+                "success": False,
+                "error": f"模拟不存在: {simulation_id}"
+            }), 404
+        
+        if state.status != SimulationStatus.READY:
+            return jsonify({
+                "success": False,
+                "error": f"模拟未准备好，当前状态: {state.status.value}，请先调用 /prepare 接口"
+            }), 400
+        
+        # 启动模拟
+        run_state = SimulationRunner.start_simulation(simulation_id, platform)
+        
+        # 更新模拟状态
+        state.status = SimulationStatus.RUNNING
+        manager._save_simulation_state(state)
+        
+        return jsonify({
+            "success": True,
+            "data": run_state.to_dict()
+        })
+        
+    except ValueError as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 400
+        
+    except Exception as e:
+        logger.error(f"启动模拟失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@simulation_bp.route('/stop', methods=['POST'])
+def stop_simulation():
+    """
+    停止模拟
+    
+    请求（JSON）：
+        {
+            "simulation_id": "sim_xxxx"  // 必填，模拟ID
+        }
+    
+    返回：
+        {
+            "success": true,
+            "data": {
+                "simulation_id": "sim_xxxx",
+                "runner_status": "stopped",
+                "completed_at": "2025-12-01T12:00:00"
+            }
+        }
+    """
+    try:
+        data = request.get_json() or {}
+        
+        simulation_id = data.get('simulation_id')
+        if not simulation_id:
+            return jsonify({
+                "success": False,
+                "error": "请提供 simulation_id"
+            }), 400
+        
+        run_state = SimulationRunner.stop_simulation(simulation_id)
+        
+        # 更新模拟状态
+        manager = SimulationManager()
+        state = manager.get_simulation(simulation_id)
+        if state:
+            state.status = SimulationStatus.PAUSED
+            manager._save_simulation_state(state)
+        
+        return jsonify({
+            "success": True,
+            "data": run_state.to_dict()
+        })
+        
+    except ValueError as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 400
+        
+    except Exception as e:
+        logger.error(f"停止模拟失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+# ============== 实时状态监控接口 ==============
+
+@simulation_bp.route('/<simulation_id>/run-status', methods=['GET'])
+def get_run_status(simulation_id: str):
+    """
+    获取模拟运行实时状态（用于前端轮询）
+    
+    返回：
+        {
+            "success": true,
+            "data": {
+                "simulation_id": "sim_xxxx",
+                "runner_status": "running",
+                "current_round": 5,
+                "total_rounds": 144,
+                "progress_percent": 3.5,
+                "simulated_hours": 2,
+                "total_simulation_hours": 72,
+                "twitter_running": true,
+                "reddit_running": true,
+                "twitter_actions_count": 150,
+                "reddit_actions_count": 200,
+                "total_actions_count": 350,
+                "started_at": "2025-12-01T10:00:00",
+                "updated_at": "2025-12-01T10:30:00"
+            }
+        }
+    """
+    try:
+        run_state = SimulationRunner.get_run_state(simulation_id)
+        
+        if not run_state:
+            return jsonify({
+                "success": True,
+                "data": {
+                    "simulation_id": simulation_id,
+                    "runner_status": "idle",
+                    "current_round": 0,
+                    "total_rounds": 0,
+                    "progress_percent": 0,
+                    "twitter_actions_count": 0,
+                    "reddit_actions_count": 0,
+                    "total_actions_count": 0,
+                }
+            })
+        
+        return jsonify({
+            "success": True,
+            "data": run_state.to_dict()
+        })
+        
+    except Exception as e:
+        logger.error(f"获取运行状态失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@simulation_bp.route('/<simulation_id>/run-status/detail', methods=['GET'])
+def get_run_status_detail(simulation_id: str):
+    """
+    获取模拟运行详细状态（包含最近动作）
+    
+    用于前端展示实时动态
+    
+    返回：
+        {
+            "success": true,
+            "data": {
+                "simulation_id": "sim_xxxx",
+                "runner_status": "running",
+                "current_round": 5,
+                ...
+                "recent_actions": [
+                    {
+                        "round_num": 5,
+                        "timestamp": "2025-12-01T10:30:00",
+                        "platform": "twitter",
+                        "agent_id": 3,
+                        "agent_name": "Agent Name",
+                        "action_type": "CREATE_POST",
+                        "action_args": {"content": "..."},
+                        "result": null,
+                        "success": true
+                    },
+                    ...
+                ]
+            }
+        }
+    """
+    try:
+        run_state = SimulationRunner.get_run_state(simulation_id)
+        
+        if not run_state:
+            return jsonify({
+                "success": True,
+                "data": {
+                    "simulation_id": simulation_id,
+                    "runner_status": "idle",
+                    "recent_actions": []
+                }
+            })
+        
+        return jsonify({
+            "success": True,
+            "data": run_state.to_detail_dict()
+        })
+        
+    except Exception as e:
+        logger.error(f"获取详细状态失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@simulation_bp.route('/<simulation_id>/actions', methods=['GET'])
+def get_simulation_actions(simulation_id: str):
+    """
+    获取模拟中的Agent动作历史
+    
+    Query参数：
+        limit: 返回数量（默认100）
+        offset: 偏移量（默认0）
+        platform: 过滤平台（twitter/reddit）
+        agent_id: 过滤Agent ID
+        round_num: 过滤轮次
+    
+    返回：
+        {
+            "success": true,
+            "data": {
+                "count": 100,
+                "actions": [...]
+            }
+        }
+    """
+    try:
+        limit = request.args.get('limit', 100, type=int)
+        offset = request.args.get('offset', 0, type=int)
+        platform = request.args.get('platform')
+        agent_id = request.args.get('agent_id', type=int)
+        round_num = request.args.get('round_num', type=int)
+        
+        actions = SimulationRunner.get_actions(
+            simulation_id=simulation_id,
+            limit=limit,
+            offset=offset,
+            platform=platform,
+            agent_id=agent_id,
+            round_num=round_num
+        )
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "count": len(actions),
+                "actions": [a.to_dict() for a in actions]
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"获取动作历史失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@simulation_bp.route('/<simulation_id>/timeline', methods=['GET'])
+def get_simulation_timeline(simulation_id: str):
+    """
+    获取模拟时间线（按轮次汇总）
+    
+    用于前端展示进度条和时间线视图
+    
+    Query参数：
+        start_round: 起始轮次（默认0）
+        end_round: 结束轮次（默认全部）
+    
+    返回每轮的汇总信息
+    """
+    try:
+        start_round = request.args.get('start_round', 0, type=int)
+        end_round = request.args.get('end_round', type=int)
+        
+        timeline = SimulationRunner.get_timeline(
+            simulation_id=simulation_id,
+            start_round=start_round,
+            end_round=end_round
+        )
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "rounds_count": len(timeline),
+                "timeline": timeline
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"获取时间线失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@simulation_bp.route('/<simulation_id>/agent-stats', methods=['GET'])
+def get_agent_stats(simulation_id: str):
+    """
+    获取每个Agent的统计信息
+    
+    用于前端展示Agent活跃度排行、动作分布等
+    """
+    try:
+        stats = SimulationRunner.get_agent_stats(simulation_id)
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "agents_count": len(stats),
+                "stats": stats
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"获取Agent统计失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+# ============== 数据库查询接口 ==============
+
+@simulation_bp.route('/<simulation_id>/posts', methods=['GET'])
+def get_simulation_posts(simulation_id: str):
+    """
+    获取模拟中的帖子
+    
+    Query参数：
+        platform: 平台类型（twitter/reddit）
+        limit: 返回数量（默认50）
+        offset: 偏移量
+    
+    返回帖子列表（从SQLite数据库读取）
+    """
+    try:
+        platform = request.args.get('platform', 'reddit')
+        limit = request.args.get('limit', 50, type=int)
+        offset = request.args.get('offset', 0, type=int)
+        
+        sim_dir = os.path.join(
+            os.path.dirname(__file__),
+            f'../../uploads/simulations/{simulation_id}'
+        )
+        
+        db_file = f"{platform}_simulation.db"
+        db_path = os.path.join(sim_dir, db_file)
+        
+        if not os.path.exists(db_path):
+            return jsonify({
+                "success": True,
+                "data": {
+                    "platform": platform,
+                    "count": 0,
+                    "posts": [],
+                    "message": "数据库不存在，模拟可能尚未运行"
+                }
+            })
+        
+        import sqlite3
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                SELECT * FROM post 
+                ORDER BY created_at DESC 
+                LIMIT ? OFFSET ?
+            """, (limit, offset))
+            
+            posts = [dict(row) for row in cursor.fetchall()]
+            
+            cursor.execute("SELECT COUNT(*) FROM post")
+            total = cursor.fetchone()[0]
+            
+        except sqlite3.OperationalError:
+            posts = []
+            total = 0
+        
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "platform": platform,
+                "total": total,
+                "count": len(posts),
+                "posts": posts
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"获取帖子失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@simulation_bp.route('/<simulation_id>/comments', methods=['GET'])
+def get_simulation_comments(simulation_id: str):
+    """
+    获取模拟中的评论（仅Reddit）
+    
+    Query参数：
+        post_id: 过滤帖子ID（可选）
+        limit: 返回数量
+        offset: 偏移量
+    """
+    try:
+        post_id = request.args.get('post_id')
+        limit = request.args.get('limit', 50, type=int)
+        offset = request.args.get('offset', 0, type=int)
+        
+        sim_dir = os.path.join(
+            os.path.dirname(__file__),
+            f'../../uploads/simulations/{simulation_id}'
+        )
+        
+        db_path = os.path.join(sim_dir, "reddit_simulation.db")
+        
+        if not os.path.exists(db_path):
+            return jsonify({
+                "success": True,
+                "data": {
+                    "count": 0,
+                    "comments": []
+                }
+            })
+        
+        import sqlite3
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        try:
+            if post_id:
+                cursor.execute("""
+                    SELECT * FROM comment 
+                    WHERE post_id = ?
+                    ORDER BY created_at DESC 
+                    LIMIT ? OFFSET ?
+                """, (post_id, limit, offset))
+            else:
+                cursor.execute("""
+                    SELECT * FROM comment 
+                    ORDER BY created_at DESC 
+                    LIMIT ? OFFSET ?
+                """, (limit, offset))
+            
+            comments = [dict(row) for row in cursor.fetchall()]
+            
+        except sqlite3.OperationalError:
+            comments = []
+        
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "count": len(comments),
+                "comments": comments
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"获取评论失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500

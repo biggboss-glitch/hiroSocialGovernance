@@ -27,11 +27,12 @@ class Task:
     status: TaskStatus
     created_at: datetime
     updated_at: datetime
-    progress: int = 0              # 进度百分比 0-100
+    progress: int = 0              # 总进度百分比 0-100
     message: str = ""              # 状态消息
     result: Optional[Dict] = None  # 任务结果
     error: Optional[str] = None    # 错误信息
     metadata: Dict = field(default_factory=dict)  # 额外元数据
+    progress_detail: Dict = field(default_factory=dict)  # 详细进度信息
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
@@ -43,6 +44,7 @@ class Task:
             "updated_at": self.updated_at.isoformat(),
             "progress": self.progress,
             "message": self.message,
+            "progress_detail": self.progress_detail,
             "result": self.result,
             "error": self.error,
             "metadata": self.metadata,
@@ -108,7 +110,8 @@ class TaskManager:
         progress: Optional[int] = None,
         message: Optional[str] = None,
         result: Optional[Dict] = None,
-        error: Optional[str] = None
+        error: Optional[str] = None,
+        progress_detail: Optional[Dict] = None
     ):
         """
         更新任务状态
@@ -120,6 +123,7 @@ class TaskManager:
             message: 消息
             result: 结果
             error: 错误信息
+            progress_detail: 详细进度信息
         """
         with self._task_lock:
             task = self._tasks.get(task_id)
@@ -135,6 +139,8 @@ class TaskManager:
                     task.result = result
                 if error is not None:
                     task.error = error
+                if progress_detail is not None:
+                    task.progress_detail = progress_detail
     
     def complete_task(self, task_id: str, result: Dict):
         """标记任务完成"""
