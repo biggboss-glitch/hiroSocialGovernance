@@ -1057,9 +1057,165 @@ for node in all_nodes:
 
 | 方法 | 说明 |
 |------|------|
-| `generate_profile_from_entity(entity, user_id)` | 从实体生成单个Profile |
-| `generate_profiles_from_entities(entities)` | 批量生成Profile |
-| `save_profiles_to_json(profiles, path, platform)` | 保存到JSON文件 |
+| `generate_profile_from_entity(entity, user_id)` | 从实体生成单个Profile（带详细人设） |
+| `generate_profiles_from_entities(entities, graph_id)` | 批量生成Profile |
+| `save_profiles(profiles, path, platform)` | 保存Profile文件 |
+| `_search_zep_for_entity(entity_name)` | 调用Zep检索获取额外上下文 |
+
+### 优化特性（v2.0）
+
+1. **Zep混合搜索功能**：使用多种查询策略获取丰富的实体信息
+2. **区分实体类型**：个人实体 vs 群体/机构实体，使用不同的提示词
+3. **详细人设生成**：生成500字以上的详细人设描述
+
+### Zep混合搜索策略
+
+`_search_zep_for_entity()` 方法采用多种搜索策略获取丰富信息：
+
+**查询策略：**
+```python
+queries = [
+    f"总结{entity_name}的全部活动、事件和行为",
+    f"{entity_name}与其他实体的关系和互动",
+    f"{entity_name}的背景、历史和重要信息",
+    f"关于{entity_name}的所有事实和描述",
+]
+```
+
+**说明：** Zep没有内置的混合搜索接口，需要分别搜索edges和nodes。我们使用**并行请求**同时执行两个搜索：
+
+```python
+# 并行执行edges和nodes搜索
+with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+    edge_future = executor.submit(search_edges)  # scope="edges"
+    node_future = executor.submit(search_nodes)  # scope="nodes"
+    
+    edge_result = edge_future.result(timeout=30)
+    node_result = node_future.result(timeout=30)
+```
+
+**搜索参数：**
+
+| 搜索类型 | scope | limit | 说明 |
+|----------|-------|-------|------|
+| 边搜索 | edges | 30 | 获取事实/关系信息 |
+| 节点搜索 | nodes | 20 | 获取相关实体摘要 |
+
+**关键参数：**
+- 必须传递 `graph_id` 参数，否则Zep API会返回400错误
+- 使用 `rrf` (Reciprocal Rank Fusion) reranker，稳定可靠
+- 使用线程池并行执行，提高效率
+
+**返回数据结构：**
+```python
+{
+    "facts": [...],           # 事实列表（来自edges）
+    "node_summaries": [...],  # 相关节点摘要（来自nodes）
+    "context": "..."          # 综合上下文文本
+}
+```
+
+### LLM生成与JSON修复
+
+为了避免LLM生成的JSON解析失败，实现了以下优化：
+
+1. **不限制max_tokens**：让LLM自由发挥，充分利用模型的上下文能力
+2. **多次重试机制**：最多3次尝试，每次降低temperature
+3. **截断检测与修复**：检测`finish_reason='length'`，自动闭合JSON
+4. **完善JSON修复机制**：
+   - `_fix_truncated_json()`: 修复被截断的JSON（闭合括号和字符串）
+   - `_try_fix_json()`: 多级修复策略
+     - 提取JSON部分
+     - 替换字符串中的换行符
+     - 移除控制字符
+     - 从损坏JSON中提取部分信息
+5. **字段验证**：确保必需字段存在，缺失时使用entity_summary填充
+
+**错误处理流程**：
+```
+LLM调用 → 检查截断 → JSON解析 → 修复尝试 → 部分提取 → 规则生成
+```
+
+### 并行生成与实时输出
+
+支持并行生成Agent人设，提高生成效率：
+
+```python
+profiles = generator.generate_profiles_from_entities(
+    entities=filtered.entities,
+    use_llm=True,
+    graph_id="mirofish_xxx",
+    parallel_count=5  # 并行生成数量，默认5
+)
+```
+
+**API参数**：
+```json
+POST /api/simulation/prepare
+{
+    "simulation_id": "sim_xxx",
+    "parallel_profile_count": 5,   // 可选，并行生成人设数量，默认5
+    "force_regenerate": false      // 可选，强制重新生成，默认false
+}
+```
+
+**实时输出**：
+- 每生成一个人设，立即输出到控制台（完整内容不截断）
+- 包含用户名、简介、详细人设、年龄、性别、MBTI等信息
+- 方便实时监控生成进度和质量
+
+### 避免重复生成
+
+系统会自动检测已完成的准备工作，避免重复生成：
+
+**检测条件**：
+1. `state.json` 存在且 `config_generated=true`
+2. 必要文件存在：`reddit_profiles.json`, `twitter_profiles.csv`, `simulation_config.json`
+
+**API响应**：
+```json
+// 已准备完成时
+{
+    "success": true,
+    "data": {
+        "simulation_id": "sim_xxx",
+        "status": "ready",
+        "message": "已有完成的准备工作，无需重复生成",
+        "already_prepared": true,
+        "prepare_info": {
+            "entities_count": 93,
+            "profiles_count": 93,
+            "entity_types": ["Student", "Professor", ...],
+            "existing_files": [...]
+        }
+    }
+}
+```
+
+**强制重新生成**：
+```json
+POST /api/simulation/prepare
+{
+    "simulation_id": "sim_xxx",
+    "force_regenerate": true  // 忽略已有准备，强制重新生成
+}
+```
+
+### 实体类型分类
+
+```python
+# 个人类型实体 - 生成具体人物设定
+INDIVIDUAL_ENTITY_TYPES = [
+    "student", "alumni", "professor", "person", "publicfigure", 
+    "expert", "faculty", "official", "journalist", "activist"
+]
+
+# 群体/机构类型实体 - 生成官方账号设定
+GROUP_ENTITY_TYPES = [
+    "university", "governmentagency", "organization", "ngo", 
+    "mediaoutlet", "company", "institution", "group", "community"
+]
+```
 
 ### Profile数据结构
 
@@ -1071,7 +1227,7 @@ class OasisAgentProfile:
     user_name: str            # 用户名
     name: str                 # 显示名称
     bio: str                  # 简介（max 150字符）
-    persona: str              # 详细人设描述
+    persona: str              # 详细人设描述（500字以上）
     
     # Reddit字段
     karma: int = 1000
@@ -1092,6 +1248,37 @@ class OasisAgentProfile:
     # 来源信息
     source_entity_uuid: Optional[str] = None
     source_entity_type: Optional[str] = None
+```
+
+### 详细人设生成示例
+
+**个人实体人设结构：**
+```markdown
+## 一、基本信息
+- 姓名/称呼、年龄、职业/身份
+- 教育背景、所在地
+
+## 二、人物背景
+- 过去的重要经历
+- 与事件的关联
+- 社会关系网络
+
+## 三、性格特征
+- MBTI类型及表现
+- 核心性格特点
+- 情绪表达方式
+
+## 四、社交媒体行为模式
+- 发帖频率和时间
+- 内容偏好类型
+- 语言风格特点
+
+## 五、立场与观点
+- 对核心话题的态度
+- 可能被激怒/感动的内容
+
+## 六、独特特征
+- 口头禅、个人爱好等
 ```
 
 ### Profile生成策略
@@ -1135,12 +1322,31 @@ Generate a social media user profile with:
 
 使用LLM分析模拟需求、文档内容、图谱实体信息，自动生成最佳的模拟参数配置。
 
+**采用分步生成策略**（避免一次性生成过长内容导致失败）：
+1. 生成时间配置（轻量级）
+2. 生成事件配置和热点话题
+3. 分批生成Agent配置（**每批5个**，保证生成质量）
+4. 生成平台配置
+
 | 方法 | 说明 |
 |------|------|
-| `generate_config(...)` | 智能生成完整模拟配置 |
-| `_build_context(...)` | 构建LLM上下文（最大5万字） |
-| `_generate_config_with_llm(...)` | 调用LLM生成配置 |
-| `_generate_default_config(...)` | 默认配置（LLM失败时） |
+| `generate_config(...)` | 智能生成完整模拟配置（分步） |
+| `_generate_time_config(...)` | 生成时间配置 |
+| `_generate_event_config(...)` | 生成事件配置 |
+| `_generate_agent_configs_batch(...)` | 分批生成Agent配置 |
+| `_generate_agent_config_by_rule(...)` | 规则生成（LLM失败时） |
+
+### 中国人作息时间配置
+
+系统针对中国用户群体，采用符合北京时间的作息习惯：
+
+| 时段 | 时间范围 | 活跃度系数 | 说明 |
+|------|----------|------------|------|
+| 深夜 | 0:00-5:59 | 0.05 | 几乎无人活动 |
+| 早间 | 6:00-8:59 | 0.4 | 逐渐醒来 |
+| 工作 | 9:00-18:59 | 0.7 | 工作时段中等活跃 |
+| 高峰 | 19:00-22:59 | 1.5 | 晚间最活跃 |
+| 夜间 | 23:00-23:59 | 0.5 | 活跃度下降 |
 
 ### LLM智能生成的配置内容
 
@@ -1152,10 +1358,14 @@ class TimeSimulationConfig:
     minutes_per_round: int = 30           # 每轮代表的时间（分钟）
     agents_per_hour_min: int = 5          # 每小时激活Agent数量（最小）
     agents_per_hour_max: int = 20         # 每小时激活Agent数量（最大）
-    peak_hours: List[int]                 # 高峰时段 [9,10,11,14,15,20,21,22]
-    off_peak_hours: List[int]             # 低谷时段 [0,1,2,3,4,5]
+    peak_hours: List[int] = [19,20,21,22] # 高峰时段（晚间）
+    off_peak_hours: List[int] = [0,1,2,3,4,5]  # 低谷时段（凌晨）
     peak_activity_multiplier: float = 1.5 # 高峰活跃度乘数
-    off_peak_activity_multiplier: float = 0.3  # 低谷活跃度乘数
+    off_peak_activity_multiplier: float = 0.05  # 凌晨活跃度极低
+    morning_hours: List[int] = [6,7,8]    # 早间时段
+    morning_activity_multiplier: float = 0.4
+    work_hours: List[int] = [9-18]        # 工作时段
+    work_activity_multiplier: float = 0.7
 ```
 
 **2. AgentActivityConfig（每个Agent的活动配置）**
@@ -1178,14 +1388,18 @@ class AgentActivityConfig:
     influence_weight: float = 1.0         # 影响力权重
 ```
 
-**3. 不同实体类型的默认参数差异**
+**3. 不同实体类型的默认参数差异（符合中国人作息）**
 
-| 实体类型 | 活跃度 | 发帖频率 | 响应延迟 | 影响力 |
-|----------|--------|----------|----------|--------|
-| University/GovernmentAgency | 0.2 | 0.1/小时 | 60-240分钟 | 3.0 |
-| MediaOutlet | 0.6 | 1.0/小时 | 5-30分钟 | 2.5 |
-| PublicFigure/Expert | 0.5 | 0.3/小时 | 10-60分钟 | 2.0 |
-| Student/Person | 0.7 | 0.5/小时 | 1-20分钟 | 1.0 |
+| 实体类型 | 活跃度 | 发帖频率 | 活跃时段 | 响应延迟 | 影响力 |
+|----------|--------|----------|----------|----------|--------|
+| University/GovernmentAgency | 0.2 | 0.1/小时 | 9:00-17:59（工作时间） | 60-240分钟 | 3.0 |
+| MediaOutlet | 0.5 | 0.8/小时 | 7:00-23:59（全天） | 5-30分钟 | 2.5 |
+| Professor/Expert | 0.4 | 0.3/小时 | 8:00-21:59（工作+晚间） | 15-90分钟 | 2.0 |
+| Student | 0.8 | 0.6/小时 | 8-13, 18-23（上午+晚间） | 1-15分钟 | 0.8 |
+| Alumni | 0.6 | 0.4/小时 | 12-13, 19-23（午休+晚间） | 5-30分钟 | 1.0 |
+| Person（普通人） | 0.7 | 0.5/小时 | 9-13, 18-23（白天+晚间） | 2-20分钟 | 1.0 |
+
+**注意**：凌晨0-5点所有实体类型都几乎不活动（符合中国人作息习惯）
 
 ---
 
@@ -1228,8 +1442,41 @@ uploads/simulations/sim_xxxx/
 ```
 
 **重要：OASIS平台的Profile格式要求不同：**
-- **Twitter**: 使用CSV格式，字段：`user_id,user_name,name,bio,friend_count,follower_count,statuses_count,created_at`
-- **Reddit**: 使用JSON格式，支持详细人设字段：`realname,username,bio,persona,age,gender,mbti,country,profession,interested_topics`
+
+**Twitter CSV格式**（符合OASIS官方要求）：
+```csv
+user_id,name,username,user_char,description
+0,张教授,professor_zhang,"完整人设描述（LLM内部使用）","简短简介（外部显示）"
+```
+- `user_id`: 从0开始的顺序ID
+- `name`: 真实姓名
+- `username`: 系统用户名
+- `user_char`: 完整人设（bio + persona），注入LLM系统提示，指导Agent行为
+- `description`: 简短简介，显示在用户资料页面
+
+**Reddit JSON格式**：
+```json
+[
+  {
+    "realname": "张教授",
+    "username": "professor_zhang",
+    "bio": "简短简介",
+    "persona": "详细人设描述",
+    "age": 42,
+    "gender": "男",
+    "mbti": "INTJ",
+    "country": "中国",
+    "profession": "教授",
+    "interested_topics": ["高等教育", "学术诚信"]
+  }
+]
+```
+
+**user_char vs description 区别**：
+| 字段 | 用途 | 可见性 |
+|------|------|--------|
+| user_char | LLM系统提示，决定Agent如何思考和行动 | 内部使用 |
+| description | 用户资料页面的简介 | 其他用户可见 |
 
 ### 配置文件示例 (simulation_config.json)
 

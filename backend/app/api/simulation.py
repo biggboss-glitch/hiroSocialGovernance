@@ -213,6 +213,112 @@ def create_simulation():
         }), 500
 
 
+def _check_simulation_prepared(simulation_id: str) -> tuple:
+    """
+    检查模拟是否已经准备完成
+    
+    检查条件：
+    1. state.json 存在且 status 为 "ready"
+    2. 必要文件存在：reddit_profiles.json, twitter_profiles.csv, simulation_config.json
+    
+    Args:
+        simulation_id: 模拟ID
+        
+    Returns:
+        (is_prepared: bool, info: dict)
+    """
+    import os
+    from ..config import Config
+    
+    simulation_dir = os.path.join(Config.OASIS_SIMULATION_DATA_DIR, simulation_id)
+    
+    # 检查目录是否存在
+    if not os.path.exists(simulation_dir):
+        return False, {"reason": "模拟目录不存在"}
+    
+    # 必要文件列表
+    required_files = [
+        "state.json",
+        "simulation_config.json",
+        "reddit_profiles.json",
+        "twitter_profiles.csv",
+        "run_reddit_simulation.py",
+        "run_twitter_simulation.py",
+        "run_parallel_simulation.py"
+    ]
+    
+    # 检查文件是否存在
+    existing_files = []
+    missing_files = []
+    for f in required_files:
+        file_path = os.path.join(simulation_dir, f)
+        if os.path.exists(file_path):
+            existing_files.append(f)
+        else:
+            missing_files.append(f)
+    
+    if missing_files:
+        return False, {
+            "reason": "缺少必要文件",
+            "missing_files": missing_files,
+            "existing_files": existing_files
+        }
+    
+    # 检查state.json中的状态
+    state_file = os.path.join(simulation_dir, "state.json")
+    try:
+        import json
+        with open(state_file, 'r', encoding='utf-8') as f:
+            state_data = json.load(f)
+        
+        status = state_data.get("status", "")
+        
+        # 如果状态是ready或preparing（已有文件），认为准备完成
+        if status in ["ready", "preparing"] and state_data.get("config_generated"):
+            # 获取文件统计信息
+            profiles_file = os.path.join(simulation_dir, "reddit_profiles.json")
+            config_file = os.path.join(simulation_dir, "simulation_config.json")
+            
+            profiles_count = 0
+            if os.path.exists(profiles_file):
+                with open(profiles_file, 'r', encoding='utf-8') as f:
+                    profiles_data = json.load(f)
+                    profiles_count = len(profiles_data) if isinstance(profiles_data, list) else 0
+            
+            # 如果状态是preparing但文件已完成，自动更新状态为ready
+            if status == "preparing":
+                try:
+                    state_data["status"] = "ready"
+                    from datetime import datetime
+                    state_data["updated_at"] = datetime.now().isoformat()
+                    with open(state_file, 'w', encoding='utf-8') as f:
+                        json.dump(state_data, f, ensure_ascii=False, indent=2)
+                    logger.info(f"自动更新模拟状态: {simulation_id} preparing -> ready")
+                    status = "ready"
+                except Exception as e:
+                    logger.warning(f"自动更新状态失败: {e}")
+            
+            return True, {
+                "status": status,
+                "entities_count": state_data.get("entities_count", 0),
+                "profiles_count": profiles_count,
+                "entity_types": state_data.get("entity_types", []),
+                "config_generated": state_data.get("config_generated", False),
+                "created_at": state_data.get("created_at"),
+                "updated_at": state_data.get("updated_at"),
+                "existing_files": existing_files
+            }
+        else:
+            return False, {
+                "reason": f"状态不是ready: {status}",
+                "status": status,
+                "config_generated": state_data.get("config_generated", False)
+            }
+            
+    except Exception as e:
+        return False, {"reason": f"读取状态文件失败: {str(e)}"}
+
+
 @simulation_bp.route('/prepare', methods=['POST'])
 def prepare_simulation():
     """
@@ -221,17 +327,25 @@ def prepare_simulation():
     这是一个耗时操作，接口会立即返回task_id，
     使用 GET /api/simulation/prepare/status 查询进度
     
+    特性：
+    - 自动检测已完成的准备工作，避免重复生成
+    - 如果已准备完成，直接返回已有结果
+    - 支持强制重新生成（force_regenerate=true）
+    
     步骤：
-    1. 从Zep图谱读取并过滤实体
-    2. 为每个实体生成OASIS Agent Profile（带重试机制）
-    3. LLM智能生成模拟配置（带重试机制）
-    4. 保存配置文件和预设脚本
+    1. 检查是否已有完成的准备工作
+    2. 从Zep图谱读取并过滤实体
+    3. 为每个实体生成OASIS Agent Profile（带重试机制）
+    4. LLM智能生成模拟配置（带重试机制）
+    5. 保存配置文件和预设脚本
     
     请求（JSON）：
         {
             "simulation_id": "sim_xxxx",                   // 必填，模拟ID
             "entity_types": ["Student", "PublicFigure"],  // 可选，指定实体类型
-            "use_llm_for_profiles": true                  // 可选，是否用LLM生成人设
+            "use_llm_for_profiles": true,                 // 可选，是否用LLM生成人设
+            "parallel_profile_count": 5,                  // 可选，并行生成人设数量，默认5
+            "force_regenerate": false                     // 可选，强制重新生成，默认false
         }
     
     返回：
@@ -239,14 +353,17 @@ def prepare_simulation():
             "success": true,
             "data": {
                 "simulation_id": "sim_xxxx",
-                "task_id": "task_xxxx",
-                "status": "preparing",
-                "message": "准备任务已启动"
+                "task_id": "task_xxxx",           // 新任务时返回
+                "status": "preparing|ready",
+                "message": "准备任务已启动|已有完成的准备工作",
+                "already_prepared": true|false    // 是否已准备完成
             }
         }
     """
     import threading
+    import os
     from ..models.task import TaskManager, TaskStatus
+    from ..config import Config
     
     try:
         data = request.get_json() or {}
@@ -266,6 +383,25 @@ def prepare_simulation():
                 "success": False,
                 "error": f"模拟不存在: {simulation_id}"
             }), 404
+        
+        # 检查是否强制重新生成
+        force_regenerate = data.get('force_regenerate', False)
+        
+        # 检查是否已经准备完成（避免重复生成）
+        if not force_regenerate:
+            is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
+            if is_prepared:
+                logger.info(f"模拟 {simulation_id} 已准备完成，跳过重复生成")
+                return jsonify({
+                    "success": True,
+                    "data": {
+                        "simulation_id": simulation_id,
+                        "status": "ready",
+                        "message": "已有完成的准备工作，无需重复生成",
+                        "already_prepared": True,
+                        "prepare_info": prepare_info
+                    }
+                })
         
         # 从项目获取必要信息
         project = ProjectManager.get_project(state.project_id)
@@ -288,6 +424,7 @@ def prepare_simulation():
         
         entity_types_list = data.get('entity_types')
         use_llm_for_profiles = data.get('use_llm_for_profiles', True)
+        parallel_profile_count = data.get('parallel_profile_count', 5)
         
         # 创建异步任务
         task_manager = TaskManager()
@@ -384,7 +521,8 @@ def prepare_simulation():
                     document_text=document_text,
                     defined_entity_types=entity_types_list,
                     use_llm_for_profiles=use_llm_for_profiles,
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
+                    parallel_profile_count=parallel_profile_count
                 )
                 
                 # 任务完成
@@ -414,7 +552,8 @@ def prepare_simulation():
                 "simulation_id": simulation_id,
                 "task_id": task_id,
                 "status": "preparing",
-                "message": "准备任务已启动，请通过 /api/simulation/prepare/status 查询进度"
+                "message": "准备任务已启动，请通过 /api/simulation/prepare/status 查询进度",
+                "already_prepared": False
             }
         })
         
@@ -438,9 +577,14 @@ def get_prepare_status():
     """
     查询准备任务进度
     
+    支持两种查询方式：
+    1. 通过task_id查询正在进行的任务进度
+    2. 通过simulation_id检查是否已有完成的准备工作
+    
     请求（JSON）：
         {
-            "task_id": "task_xxxx"  // 必填，prepare返回的task_id
+            "task_id": "task_xxxx",          // 可选，prepare返回的task_id
+            "simulation_id": "sim_xxxx"      // 可选，模拟ID（用于检查已完成的准备）
         }
     
     返回：
@@ -448,21 +592,11 @@ def get_prepare_status():
             "success": true,
             "data": {
                 "task_id": "task_xxxx",
-                "status": "processing",   // pending/processing/completed/failed
-                "progress": 45,           // 0-100 总进度
-                "message": "[2/4] 生成Agent人设: 35/93 - 生成 教授张三 的人设...",
-                "progress_detail": {      // 详细进度信息
-                    "current_stage": "generating_profiles",
-                    "current_stage_name": "生成Agent人设",
-                    "stage_index": 2,     // 当前阶段序号
-                    "total_stages": 4,    // 总阶段数
-                    "stage_progress": 38, // 阶段内进度 0-100
-                    "current_item": 35,   // 当前处理项目序号
-                    "total_items": 93,    // 当前阶段总项目数
-                    "item_description": "生成 教授张三 的人设..."
-                },
-                "result": null,           // 完成后返回结果
-                "error": null             // 失败时返回错误信息
+                "status": "processing|completed|ready",
+                "progress": 45,
+                "message": "...",
+                "already_prepared": true|false,  // 是否已有完成的准备
+                "prepare_info": {...}            // 已准备完成时的详细信息
             }
         }
     """
@@ -472,24 +606,75 @@ def get_prepare_status():
         data = request.get_json() or {}
         
         task_id = data.get('task_id')
+        simulation_id = data.get('simulation_id')
+        
+        # 如果提供了simulation_id，先检查是否已准备完成
+        if simulation_id:
+            is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
+            if is_prepared:
+                return jsonify({
+                    "success": True,
+                    "data": {
+                        "simulation_id": simulation_id,
+                        "status": "ready",
+                        "progress": 100,
+                        "message": "已有完成的准备工作",
+                        "already_prepared": True,
+                        "prepare_info": prepare_info
+                    }
+                })
+        
+        # 如果没有task_id，返回错误
         if not task_id:
+            if simulation_id:
+                # 有simulation_id但未准备完成
+                return jsonify({
+                    "success": True,
+                    "data": {
+                        "simulation_id": simulation_id,
+                        "status": "not_started",
+                        "progress": 0,
+                        "message": "尚未开始准备，请调用 /api/simulation/prepare 开始",
+                        "already_prepared": False
+                    }
+                })
             return jsonify({
                 "success": False,
-                "error": "请提供 task_id"
+                "error": "请提供 task_id 或 simulation_id"
             }), 400
         
         task_manager = TaskManager()
         task = task_manager.get_task(task_id)
         
         if not task:
+            # 任务不存在，但如果有simulation_id，检查是否已准备完成
+            if simulation_id:
+                is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
+                if is_prepared:
+                    return jsonify({
+                        "success": True,
+                        "data": {
+                            "simulation_id": simulation_id,
+                            "task_id": task_id,
+                            "status": "ready",
+                            "progress": 100,
+                            "message": "任务已完成（准备工作已存在）",
+                            "already_prepared": True,
+                            "prepare_info": prepare_info
+                        }
+                    })
+            
             return jsonify({
                 "success": False,
                 "error": f"任务不存在: {task_id}"
             }), 404
         
+        task_dict = task.to_dict()
+        task_dict["already_prepared"] = False
+        
         return jsonify({
             "success": True,
-            "data": task.to_dict()
+            "data": task_dict
         })
         
     except Exception as e:

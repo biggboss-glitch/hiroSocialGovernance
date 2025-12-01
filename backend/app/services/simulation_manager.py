@@ -238,14 +238,15 @@ class SimulationManager:
         document_text: str,
         defined_entity_types: Optional[List[str]] = None,
         use_llm_for_profiles: bool = True,
-        progress_callback: Optional[callable] = None
+        progress_callback: Optional[callable] = None,
+        parallel_profile_count: int = 3
     ) -> SimulationState:
         """
         准备模拟环境（全程自动化）
         
         步骤：
         1. 从Zep图谱读取并过滤实体
-        2. 为每个实体生成OASIS Agent Profile（可选LLM增强）
+        2. 为每个实体生成OASIS Agent Profile（可选LLM增强，支持并行）
         3. 使用LLM智能生成模拟配置参数（时间、活跃度、发言频率等）
         4. 保存配置文件和Profile文件
         5. 复制预设脚本到模拟目录
@@ -257,6 +258,7 @@ class SimulationManager:
             defined_entity_types: 预定义的实体类型（可选）
             use_llm_for_profiles: 是否使用LLM生成详细人设
             progress_callback: 进度回调函数 (stage, progress, message)
+            parallel_profile_count: 并行生成人设的数量，默认3
             
         Returns:
             SimulationState
@@ -314,7 +316,8 @@ class SimulationManager:
                     total=total_entities
                 )
             
-            generator = OasisProfileGenerator()
+            # 传入graph_id以启用Zep检索功能，获取更丰富的上下文
+            generator = OasisProfileGenerator(graph_id=state.graph_id)
             
             def profile_progress(current, total, msg):
                 if progress_callback:
@@ -330,7 +333,9 @@ class SimulationManager:
             profiles = generator.generate_profiles_from_entities(
                 entities=filtered.entities,
                 use_llm=use_llm_for_profiles,
-                progress_callback=profile_progress
+                progress_callback=profile_progress,
+                graph_id=state.graph_id,  # 传入graph_id用于Zep检索
+                parallel_count=parallel_profile_count  # 并行生成数量
             )
             
             state.profiles_count = len(profiles)
