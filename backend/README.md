@@ -1,1838 +1,1687 @@
-# MiroFish Backend
+# MiroFish Backend - 详细技术文档
 
-社会舆论模拟系统后端服务，基于Flask框架。
+## 目录
+
+- [项目简介](#项目简介)
+- [技术架构](#技术架构)
+- [技术栈](#技术栈)
+- [项目结构](#项目结构)
+- [核心功能模块](#核心功能模块)
+- [API接口文档](#api接口文档)
+- [数据模型](#数据模型)
+- [服务层详解](#服务层详解)
+- [工具类](#工具类)
+- [配置说明](#配置说明)
+- [运行指南](#运行指南)
+- [开发指南](#开发指南)
+- [常见问题](#常见问题)
+
+---
+
+## 项目简介
+
+**MiroFish Backend** 是一个基于 Flask 的后端服务,用于社交媒体舆论模拟。系统核心功能包括:
+
+1. **知识图谱构建**: 从文档中提取实体和关系,使用 Zep Cloud 构建知识图谱
+2. **本体生成**: 使用 LLM 自动分析文档并生成适合舆论模拟的实体类型和关系类型
+3. **Agent人设生成**: 基于图谱实体,使用 LLM 生成详细的社交媒体用户人设
+4. **模拟配置智能生成**: 使用 LLM 根据需求自动生成模拟参数(时间、活跃度、事件等)
+5. **双平台模拟**: 支持 Twitter 和 Reddit 双平台并行舆论模拟(基于 OASIS 框架)
+
+---
+
+## 技术架构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        MiroFish Backend                       │
+├─────────────────────────────────────────────────────────────┤
+│  Flask Web Framework + CORS                                  │
+│  ┌────────────────┐  ┌──────────────┐  ┌─────────────────┐ │
+│  │  API层         │  │  服务层      │  │  模型层         │ │
+│  │  - graph.py    │→ │  - 本体生成  │→ │  - Project      │ │
+│  │  - simulation  │  │  - 图谱构建  │  │  - Task         │ │
+│  └────────────────┘  │  - 实体读取  │  └─────────────────┘ │
+│                      │  - 人设生成  │                        │
+│                      │  - 配置生成  │                        │
+│                      │  - 模拟运行  │                        │
+│                      └──────────────┘                        │
+├─────────────────────────────────────────────────────────────┤
+│  外部服务集成                                                │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │ Zep Cloud│  │ LLM API  │  │  OASIS   │  │  文件系统│   │
+│  │ 知识图谱 │  │ (OpenAI) │  │  社交模拟│  │  存储    │   │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 核心流程
+
+1. **图谱构建流程**:
+   ```
+   上传文档 → 提取文本 → LLM生成本体 → 文本分块 → Zep构建图谱
+   ```
+
+2. **模拟准备流程**:
+   ```
+   创建模拟 → 读取图谱实体 → LLM生成人设 → LLM生成配置 → 准备完成
+   ```
+
+3. **模拟运行流程**:
+   ```
+   启动模拟 → 运行OASIS脚本 → 实时监控 → 记录动作 → 状态查询
+   ```
+
+---
+
+## 技术栈
+
+### 核心框架
+- **Flask 3.0+**: Web 框架
+- **Flask-CORS**: 跨域支持
+
+### AI & 知识图谱
+- **Zep Cloud SDK 2.0+**: 知识图谱构建与管理
+- **OpenAI SDK 1.0+**: LLM 调用(支持 OpenAI 兼容接口)
+- **OASIS-AI**: 社交媒体模拟框架
+- **CAMEL-AI**: Agent 行为模拟
+
+### 数据处理
+- **PyMuPDF (fitz)**: PDF 文本提取
+- **Pydantic 2.0+**: 数据验证
+- **Python-dotenv**: 环境变量管理
+
+### 文件处理
+- **Werkzeug 3.0+**: 文件上传处理
+
+---
 
 ## 项目结构
 
 ```
 backend/
-├── app/
-│   ├── __init__.py              # Flask应用工厂
-│   ├── config.py                # 配置管理
-│   ├── api/                     # API路由
-│   │   ├── __init__.py          # Blueprint注册
-│   │   ├── graph.py             # Step1: 图谱相关接口
-│   │   └── simulation.py        # Step2: 模拟相关接口
-│   ├── services/                # 业务逻辑层
-│   │   ├── __init__.py          # 服务模块导出
-│   │   ├── ontology_generator.py         # 本体生成服务
-│   │   ├── graph_builder.py              # 图谱构建服务
-│   │   ├── text_processor.py             # 文本处理服务
-│   │   ├── zep_entity_reader.py          # Zep实体读取与过滤
-│   │   ├── oasis_profile_generator.py    # Agent Profile生成器
-│   │   ├── simulation_config_generator.py # LLM智能配置生成器（核心）
-│   │   └── simulation_manager.py         # 模拟管理器
-│   ├── models/                  # 数据模型
-│   │   ├── task.py              # 任务状态管理
-│   │   └── project.py           # 项目上下文管理
-│   └── utils/                   # 工具模块
-│       ├── file_parser.py       # 文件解析
-│       ├── llm_client.py        # LLM客户端
-│       └── logger.py            # 日志工具
-├── scripts/                     # 预设模拟脚本
-│   ├── run_twitter_simulation.py    # Twitter模拟脚本
-│   ├── run_reddit_simulation.py     # Reddit模拟脚本
-│   └── run_parallel_simulation.py   # 双平台并行脚本
-├── uploads/                     # 上传文件存储
-│   ├── projects/                # 项目文件
-│   └── simulations/             # 模拟数据（含配置和脚本副本）
-├── requirements.txt
-└── run.py                       # 启动入口
+├── run.py                      # 启动入口
+├── requirements.txt            # Python依赖
+├── .env                        # 环境配置(需创建)
+├── logs/                       # 日志文件
+│   └── YYYY-MM-DD.log
+├── uploads/                    # 数据存储
+│   ├── projects/               # 项目数据
+│   │   └── proj_xxx/
+│   │       ├── project.json    # 项目元数据
+│   │       ├── files/          # 上传的文件
+│   │       └── extracted_text.txt  # 提取的文本
+│   └── simulations/            # 模拟数据
+│       └── sim_xxx/
+│           ├── state.json      # 模拟状态
+│           ├── simulation_config.json  # 模拟配置
+│           ├── reddit_profiles.json    # Reddit人设
+│           ├── twitter_profiles.csv    # Twitter人设
+│           ├── run_state.json  # 运行状态
+│           ├── simulation.log  # 主日志
+│           ├── twitter/        # Twitter数据
+│           │   ├── actions.jsonl
+│           │   └── twitter_simulation.db
+│           └── reddit/         # Reddit数据
+│               ├── actions.jsonl
+│               └── reddit_simulation.db
+├── scripts/                    # 模拟运行脚本
+│   ├── run_twitter_simulation.py
+│   ├── run_reddit_simulation.py
+│   ├── run_parallel_simulation.py
+│   └── action_logger.py
+└── app/
+    ├── __init__.py            # Flask应用工厂
+    ├── config.py              # 配置管理
+    ├── api/                   # API路由
+    │   ├── __init__.py
+    │   ├── graph.py           # 图谱相关接口
+    │   └── simulation.py      # 模拟相关接口
+    ├── models/                # 数据模型
+    │   ├── __init__.py
+    │   ├── project.py         # 项目模型
+    │   └── task.py            # 任务模型
+    ├── services/              # 业务服务
+    │   ├── __init__.py
+    │   ├── ontology_generator.py          # 本体生成
+    │   ├── graph_builder.py               # 图谱构建
+    │   ├── text_processor.py              # 文本处理
+    │   ├── zep_entity_reader.py           # 实体读取
+    │   ├── oasis_profile_generator.py     # 人设生成
+    │   ├── simulation_config_generator.py # 配置生成
+    │   ├── simulation_manager.py          # 模拟管理
+    │   └── simulation_runner.py           # 模拟运行
+    └── utils/                 # 工具类
+        ├── __init__.py
+        ├── file_parser.py     # 文件解析
+        ├── llm_client.py      # LLM客户端
+        ├── logger.py          # 日志配置
+        └── retry.py           # 重试机制
 ```
 
-## 安装
+---
 
-```bash
-conda activate MiroFish
-cd backend
-pip install -r requirements.txt
+## 核心功能模块
+
+### 1. 图谱构建模块
+
+**功能**: 从文档构建知识图谱
+
+**流程**:
+1. 上传文档(PDF/TXT/MD)
+2. 提取文本内容
+3. LLM分析生成本体(实体类型+关系类型)
+4. 文本分块(chunk_size=500, overlap=50)
+5. 调用 Zep API 构建图谱
+6. 等待 Zep 处理完成
+7. 返回图谱ID和统计信息
+
+**核心服务**:
+- `OntologyGenerator`: 本体生成
+- `GraphBuilderService`: 图谱构建
+- `TextProcessor`: 文本处理
+
+### 2. 模拟准备模块
+
+**功能**: 准备舆论模拟所需的所有数据
+
+**流程**:
+1. 创建模拟(指定project_id和graph_id)
+2. 从 Zep 图谱读取并过滤实体
+3. 为每个实体生成 OASIS Agent Profile(支持并行)
+4. 使用 LLM 智能生成模拟配置(时间/活跃度/事件)
+5. 保存配置文件和人设文件
+
+**核心服务**:
+- `ZepEntityReader`: 实体读取与过滤
+- `OasisProfileGenerator`: Agent人设生成
+- `SimulationConfigGenerator`: 模拟配置生成
+- `SimulationManager`: 模拟管理
+
+### 3. 模拟运行模块
+
+**功能**: 运行 Twitter/Reddit 双平台舆论模拟
+
+**流程**:
+1. 检查模拟准备状态
+2. 启动 OASIS 模拟进程(subprocess)
+3. 监控进程运行状态
+4. 解析动作日志(actions.jsonl)
+5. 实时更新运行状态
+6. 支持停止/暂停/恢复
+
+**核心服务**:
+- `SimulationRunner`: 模拟运行器
+
+---
+
+## API接口文档
+
+### 图谱管理接口
+
+#### 1. 生成本体
+
+**接口**: `POST /api/graph/ontology/generate`
+
+**请求类型**: `multipart/form-data`
+
+**请求参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| files | File[] | 是 | 上传的文档(PDF/MD/TXT) |
+| simulation_requirement | String | 是 | 模拟需求描述 |
+| project_name | String | 否 | 项目名称 |
+| additional_context | String | 否 | 额外说明 |
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "project_id": "proj_33469c670f56",
+    "project_name": "学术不端事件模拟",
+    "ontology": {
+      "entity_types": [
+        {
+          "name": "Student",
+          "description": "Students involved in the event",
+          "attributes": [
+            {"name": "full_name", "type": "text", "description": "Student full name"},
+            {"name": "major", "type": "text", "description": "Major field"}
+          ],
+          "examples": ["张三", "李四"]
+        },
+        {
+          "name": "Professor",
+          "description": "Faculty members",
+          "attributes": [...]
+        },
+        ...
+        {
+          "name": "Person",
+          "description": "Any individual person not fitting other specific person types",
+          "attributes": [...]
+        },
+        {
+          "name": "Organization",
+          "description": "Any organization not fitting other specific types",
+          "attributes": [...]
+        }
+      ],
+      "edge_types": [
+        {
+          "name": "STUDIES_AT",
+          "description": "Student studies at university",
+          "source_targets": [
+            {"source": "Student", "target": "University"}
+          ],
+          "attributes": []
+        },
+        ...
+      ]
+    },
+    "analysis_summary": "文档涉及学术不端事件...",
+    "files": [
+      {"filename": "document.pdf", "size": 102400}
+    ],
+    "total_text_length": 12345
+  }
+}
 ```
 
-## 配置
+**说明**:
+- 本体设计必须包含10个实体类型,最后2个为兜底类型(`Person`和`Organization`)
+- 实体类型必须是现实中可以发声的主体
+- 属性名不能使用保留字(`name`, `uuid`, `group_id`, `created_at`, `summary`)
 
-在项目根目录 `MiroFish/.env` 中配置：
+---
+
+#### 2. 构建图谱
+
+**接口**: `POST /api/graph/build`
+
+**请求类型**: `application/json`
+
+**请求参数**:
+```json
+{
+  "project_id": "proj_33469c670f56",
+  "graph_name": "学术不端事件图谱",
+  "chunk_size": 500,
+  "chunk_overlap": 50,
+  "force": false
+}
+```
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| project_id | String | 是 | - | 项目ID(来自接口1) |
+| graph_name | String | 否 | 项目名称 | 图谱名称 |
+| chunk_size | Integer | 否 | 500 | 文本块大小 |
+| chunk_overlap | Integer | 否 | 50 | 块重叠大小 |
+| force | Boolean | 否 | false | 强制重新构建 |
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "project_id": "proj_33469c670f56",
+    "task_id": "a1b2c3d4-e5f6-...",
+    "message": "图谱构建任务已启动,请通过 /task/{task_id} 查询进度"
+  }
+}
+```
+
+**异步任务**: 此接口立即返回task_id,实际构建在后台进行
+
+---
+
+#### 3. 查询任务状态
+
+**接口**: `GET /api/graph/task/{task_id}`
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "task_id": "a1b2c3d4-e5f6-...",
+    "task_type": "graph_build",
+    "status": "processing",
+    "created_at": "2025-12-02T10:00:00",
+    "updated_at": "2025-12-02T10:05:00",
+    "progress": 45,
+    "message": "Zep处理中... 10/30 完成",
+    "result": null,
+    "error": null,
+    "metadata": {
+      "project_id": "proj_33469c670f56"
+    }
+  }
+}
+```
+
+**状态值**:
+- `pending`: 等待中
+- `processing`: 处理中
+- `completed`: 已完成
+- `failed`: 失败
+
+---
+
+#### 4. 获取图谱数据
+
+**接口**: `GET /api/graph/data/{graph_id}`
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "graph_id": "mirofish_abc123",
+    "nodes": [
+      {
+        "uuid": "node-uuid-1",
+        "name": "张三",
+        "labels": ["Entity", "Student"],
+        "summary": "某大学计算机专业学生",
+        "attributes": {
+          "full_name": "张三",
+          "major": "计算机科学"
+        }
+      },
+      ...
+    ],
+    "edges": [
+      {
+        "uuid": "edge-uuid-1",
+        "name": "STUDIES_AT",
+        "fact": "张三就读于某大学",
+        "source_node_uuid": "node-uuid-1",
+        "target_node_uuid": "node-uuid-2",
+        "attributes": {}
+      },
+      ...
+    ],
+    "node_count": 50,
+    "edge_count": 120
+  }
+}
+```
+
+---
+
+#### 5. 项目管理接口
+
+**获取项目**: `GET /api/graph/project/{project_id}`
+
+**列出项目**: `GET /api/graph/project/list?limit=50`
+
+**删除项目**: `DELETE /api/graph/project/{project_id}`
+
+**重置项目**: `POST /api/graph/project/{project_id}/reset`
+
+---
+
+### 模拟管理接口
+
+#### 1. 创建模拟
+
+**接口**: `POST /api/simulation/create`
+
+**请求参数**:
+```json
+{
+  "project_id": "proj_33469c670f56",
+  "graph_id": "mirofish_abc123",
+  "enable_twitter": true,
+  "enable_reddit": true
+}
+```
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "simulation_id": "sim_10b494550540",
+    "project_id": "proj_33469c670f56",
+    "graph_id": "mirofish_abc123",
+    "status": "created",
+    "enable_twitter": true,
+    "enable_reddit": true,
+    "created_at": "2025-12-02T10:00:00"
+  }
+}
+```
+
+---
+
+#### 2. 准备模拟
+
+**接口**: `POST /api/simulation/prepare`
+
+**请求参数**:
+```json
+{
+  "simulation_id": "sim_10b494550540",
+  "entity_types": ["Student", "Professor"],
+  "use_llm_for_profiles": true,
+  "parallel_profile_count": 5,
+  "force_regenerate": false
+}
+```
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| simulation_id | String | 是 | - | 模拟ID |
+| entity_types | String[] | 否 | null | 指定实体类型(为空则全部) |
+| use_llm_for_profiles | Boolean | 否 | true | 是否用LLM生成详细人设 |
+| parallel_profile_count | Integer | 否 | 5 | 并行生成人设数量 |
+| force_regenerate | Boolean | 否 | false | 强制重新生成 |
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "simulation_id": "sim_10b494550540",
+    "task_id": "task_xyz789",
+    "status": "preparing",
+    "message": "准备任务已启动",
+    "already_prepared": false
+  }
+}
+```
+
+**特性**:
+- 自动检测已完成的准备工作,避免重复生成
+- 支持并行生成人设(默认5个并发)
+- 支持强制重新生成
+
+---
+
+#### 3. 查询准备进度
+
+**接口**: `POST /api/simulation/prepare/status`
+
+**请求参数**:
+```json
+{
+  "task_id": "task_xyz789",
+  "simulation_id": "sim_10b494550540"
+}
+```
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "task_id": "task_xyz789",
+    "status": "processing",
+    "progress": 45,
+    "message": "[2/4] 生成Agent配置: 5/15 - 已完成 Student: 张三",
+    "progress_detail": {
+      "current_stage": "generating_profiles",
+      "current_stage_name": "生成Agent人设",
+      "stage_index": 2,
+      "total_stages": 4,
+      "stage_progress": 33,
+      "current_item": 5,
+      "total_items": 15,
+      "item_description": "已完成 Student: 张三"
+    },
+    "already_prepared": false
+  }
+}
+```
+
+**进度阶段**:
+1. `reading`: 读取图谱实体 (0-20%)
+2. `generating_profiles`: 生成Agent人设 (20-70%)
+3. `generating_config`: 生成模拟配置 (70-90%)
+4. `copying_scripts`: 准备模拟脚本 (90-100%)
+
+---
+
+#### 4. 启动模拟
+
+**接口**: `POST /api/simulation/start`
+
+**请求参数**:
+```json
+{
+  "simulation_id": "sim_10b494550540",
+  "platform": "parallel"
+}
+```
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| simulation_id | String | 是 | - | 模拟ID |
+| platform | String | 否 | parallel | 运行平台: twitter/reddit/parallel |
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "simulation_id": "sim_10b494550540",
+    "runner_status": "running",
+    "process_pid": 12345,
+    "twitter_running": true,
+    "reddit_running": true,
+    "started_at": "2025-12-02T11:00:00"
+  }
+}
+```
+
+---
+
+#### 5. 停止模拟
+
+**接口**: `POST /api/simulation/stop`
+
+**请求参数**:
+```json
+{
+  "simulation_id": "sim_10b494550540"
+}
+```
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "simulation_id": "sim_10b494550540",
+    "runner_status": "stopped",
+    "completed_at": "2025-12-02T12:00:00"
+  }
+}
+```
+
+---
+
+#### 6. 获取运行状态
+
+**接口**: `GET /api/simulation/{simulation_id}/run-status`
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "simulation_id": "sim_10b494550540",
+    "runner_status": "running",
+    "current_round": 5,
+    "total_rounds": 144,
+    "progress_percent": 3.5,
+    "simulated_hours": 2,
+    "total_simulation_hours": 72,
+    "twitter_running": true,
+    "reddit_running": true,
+    "twitter_actions_count": 150,
+    "reddit_actions_count": 200,
+    "total_actions_count": 350,
+    "started_at": "2025-12-02T11:00:00",
+    "updated_at": "2025-12-02T11:30:00"
+  }
+}
+```
+
+---
+
+#### 7. 获取详细状态(含最近动作)
+
+**接口**: `GET /api/simulation/{simulation_id}/run-status/detail`
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    ... (基本状态同上) ...,
+    "recent_actions": [
+      {
+        "round_num": 5,
+        "timestamp": "2025-12-02T11:30:15",
+        "platform": "twitter",
+        "agent_id": 3,
+        "agent_name": "张三_123",
+        "action_type": "CREATE_POST",
+        "action_args": {
+          "content": "对学术不端事件的看法..."
+        },
+        "result": "post_id_123",
+        "success": true
+      },
+      ...
+    ]
+  }
+}
+```
+
+---
+
+#### 8. 其他接口
+
+**获取实体列表**: `GET /api/simulation/entities/{graph_id}`
+
+**获取模拟配置**: `GET /api/simulation/{simulation_id}/config`
+
+**获取Agent人设**: `GET /api/simulation/{simulation_id}/profiles?platform=reddit`
+
+**获取动作历史**: `GET /api/simulation/{simulation_id}/actions?limit=100&platform=twitter`
+
+**获取时间线**: `GET /api/simulation/{simulation_id}/timeline?start_round=0&end_round=10`
+
+**获取Agent统计**: `GET /api/simulation/{simulation_id}/agent-stats`
+
+**获取帖子**: `GET /api/simulation/{simulation_id}/posts?platform=reddit&limit=50`
+
+**获取评论**: `GET /api/simulation/{simulation_id}/comments?post_id=123`
+
+---
+
+## 数据模型
+
+### 1. Project (项目模型)
+
+**文件**: `app/models/project.py`
+
+**字段**:
+```python
+project_id: str              # 项目ID (proj_xxx)
+name: str                    # 项目名称
+status: ProjectStatus        # 状态
+created_at: str              # 创建时间
+updated_at: str              # 更新时间
+
+# 文件信息
+files: List[Dict]            # 上传的文件列表
+total_text_length: int       # 文本总长度
+
+# 本体信息
+ontology: Dict               # 实体类型和关系类型
+analysis_summary: str        # 分析摘要
+
+# 图谱信息
+graph_id: str                # Zep图谱ID
+graph_build_task_id: str     # 构建任务ID
+
+# 配置
+simulation_requirement: str  # 模拟需求
+chunk_size: int              # 文本块大小
+chunk_overlap: int           # 块重叠大小
+
+# 错误信息
+error: str                   # 错误描述
+```
+
+**状态枚举**:
+```python
+CREATED = "created"                      # 已创建
+ONTOLOGY_GENERATED = "ontology_generated"  # 本体已生成
+GRAPH_BUILDING = "graph_building"        # 图谱构建中
+GRAPH_COMPLETED = "graph_completed"      # 图谱已完成
+FAILED = "failed"                        # 失败
+```
+
+---
+
+### 2. Task (任务模型)
+
+**文件**: `app/models/task.py`
+
+**字段**:
+```python
+task_id: str                 # 任务ID (UUID)
+task_type: str               # 任务类型
+status: TaskStatus           # 状态
+created_at: datetime         # 创建时间
+updated_at: datetime         # 更新时间
+progress: int                # 进度 (0-100)
+message: str                 # 状态消息
+result: Dict                 # 任务结果
+error: str                   # 错误信息
+metadata: Dict               # 元数据
+progress_detail: Dict        # 详细进度
+```
+
+**状态枚举**:
+```python
+PENDING = "pending"          # 等待中
+PROCESSING = "processing"    # 处理中
+COMPLETED = "completed"      # 已完成
+FAILED = "failed"            # 失败
+```
+
+---
+
+### 3. SimulationState (模拟状态)
+
+**文件**: `app/services/simulation_manager.py`
+
+**字段**:
+```python
+simulation_id: str           # 模拟ID (sim_xxx)
+project_id: str              # 项目ID
+graph_id: str                # 图谱ID
+enable_twitter: bool         # 启用Twitter
+enable_reddit: bool          # 启用Reddit
+status: SimulationStatus     # 状态
+entities_count: int          # 实体数量
+profiles_count: int          # 人设数量
+entity_types: List[str]      # 实体类型列表
+config_generated: bool       # 配置已生成
+config_reasoning: str        # 配置推理说明
+current_round: int           # 当前轮次
+twitter_status: str          # Twitter状态
+reddit_status: str           # Reddit状态
+created_at: str              # 创建时间
+updated_at: str              # 更新时间
+error: str                   # 错误信息
+```
+
+---
+
+### 4. EntityNode (实体节点)
+
+**文件**: `app/services/zep_entity_reader.py`
+
+**字段**:
+```python
+uuid: str                    # 实体UUID
+name: str                    # 实体名称
+labels: List[str]            # 标签列表
+summary: str                 # 摘要
+attributes: Dict             # 属性字典
+related_edges: List[Dict]    # 相关边信息
+related_nodes: List[Dict]    # 关联节点信息
+```
+
+---
+
+### 5. OasisAgentProfile (Agent人设)
+
+**文件**: `app/services/oasis_profile_generator.py`
+
+**字段**:
+```python
+user_id: int                 # 用户ID
+user_name: str               # 用户名
+name: str                    # 真实姓名
+bio: str                     # 简介 (200字)
+persona: str                 # 详细人设 (2000字)
+karma: int                   # Reddit积分
+friend_count: int            # Twitter好友数
+follower_count: int          # 粉丝数
+statuses_count: int          # 发帖数
+age: int                     # 年龄
+gender: str                  # 性别 (male/female/other)
+mbti: str                    # MBTI类型
+country: str                 # 国家
+profession: str              # 职业
+interested_topics: List[str] # 兴趣话题
+source_entity_uuid: str      # 来源实体UUID
+source_entity_type: str      # 来源实体类型
+created_at: str              # 创建时间
+```
+
+---
+
+### 6. SimulationParameters (模拟参数)
+
+**文件**: `app/services/simulation_config_generator.py`
+
+**字段**:
+```python
+simulation_id: str           # 模拟ID
+project_id: str              # 项目ID
+graph_id: str                # 图谱ID
+simulation_requirement: str  # 模拟需求
+
+# 时间配置
+time_config: TimeSimulationConfig
+  ├── total_simulation_hours: int        # 总时长(小时)
+  ├── minutes_per_round: int             # 每轮分钟数
+  ├── agents_per_hour_min: int           # 每小时最少激活Agent数
+  ├── agents_per_hour_max: int           # 每小时最多激活Agent数
+  ├── peak_hours: List[int]              # 高峰时段 [19,20,21,22]
+  ├── off_peak_hours: List[int]          # 低谷时段 [0,1,2,3,4,5]
+  ├── morning_hours: List[int]           # 早间时段 [6,7,8]
+  ├── work_hours: List[int]              # 工作时段 [9-18]
+  ├── peak_activity_multiplier: float    # 高峰活跃度系数 1.5
+  ├── off_peak_activity_multiplier: float # 低谷活跃度系数 0.05
+  ├── morning_activity_multiplier: float # 早间活跃度系数 0.4
+  └── work_activity_multiplier: float    # 工作时段活跃度系数 0.7
+
+# Agent配置列表
+agent_configs: List[AgentActivityConfig]
+  ├── agent_id: int              # Agent ID
+  ├── entity_uuid: str           # 实体UUID
+  ├── entity_name: str           # 实体名称
+  ├── entity_type: str           # 实体类型
+  ├── activity_level: float      # 活跃度 (0.0-1.0)
+  ├── posts_per_hour: float      # 每小时发帖数
+  ├── comments_per_hour: float   # 每小时评论数
+  ├── active_hours: List[int]    # 活跃时间段
+  ├── response_delay_min: int    # 最小响应延迟(分钟)
+  ├── response_delay_max: int    # 最大响应延迟(分钟)
+  ├── sentiment_bias: float      # 情感倾向 (-1.0到1.0)
+  ├── stance: str                # 立场 (supportive/opposing/neutral/observer)
+  └── influence_weight: float    # 影响力权重
+
+# 事件配置
+event_config: EventConfig
+  ├── initial_posts: List[Dict]  # 初始帖子
+  ├── scheduled_events: List[Dict] # 定时事件
+  ├── hot_topics: List[str]      # 热点话题
+  └── narrative_direction: str   # 舆论方向
+
+# 平台配置
+twitter_config: PlatformConfig
+reddit_config: PlatformConfig
+  ├── platform: str              # 平台名称
+  ├── recency_weight: float      # 时间新鲜度权重
+  ├── popularity_weight: float   # 热度权重
+  ├── relevance_weight: float    # 相关性权重
+  ├── viral_threshold: int       # 病毒传播阈值
+  └── echo_chamber_strength: float # 回声室效应强度
+
+# LLM配置
+llm_model: str               # LLM模型名称
+llm_base_url: str            # LLM API地址
+generated_at: str            # 生成时间
+generation_reasoning: str    # LLM推理说明
+```
+
+---
+
+## 服务层详解
+
+### 1. OntologyGenerator (本体生成器)
+
+**文件**: `app/services/ontology_generator.py`
+
+**功能**: 使用LLM分析文档内容,生成适合舆论模拟的实体类型和关系类型
+
+**核心方法**:
+```python
+def generate(
+    document_texts: List[str],
+    simulation_requirement: str,
+    additional_context: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    生成本体定义
+    
+    Returns:
+        {
+            "entity_types": [...],  # 10个实体类型(最后2个为Person和Organization)
+            "edge_types": [...],     # 6-10个关系类型
+            "analysis_summary": "..." # 分析摘要
+        }
+    """
+```
+
+**设计原则**:
+- 必须返回**10个实体类型**,最后2个为兜底类型
+- 实体必须是现实中可以发声的主体(人/组织)
+- 属性名不能使用Zep保留字
+- 关系类型要反映社交媒体互动
+
+**LLM提示词要点**:
+- 系统角色: 知识图谱本体设计专家
+- 任务背景: 社交媒体舆论模拟
+- 输出格式: 严格的JSON结构
+- 实体类型层次: 具体类型(8个) + 兜底类型(2个)
+
+---
+
+### 2. GraphBuilderService (图谱构建服务)
+
+**文件**: `app/services/graph_builder.py`
+
+**功能**: 调用Zep API构建知识图谱
+
+**核心方法**:
+```python
+def create_graph(name: str) -> str:
+    """创建Zep图谱"""
+
+def set_ontology(graph_id: str, ontology: Dict):
+    """设置图谱本体(动态创建Pydantic类)"""
+
+def add_text_batches(
+    graph_id: str, 
+    chunks: List[str], 
+    batch_size: int = 3,
+    progress_callback: Optional[Callable] = None
+) -> List[str]:
+    """分批添加文本,返回episode UUIDs"""
+
+def _wait_for_episodes(
+    episode_uuids: List[str],
+    progress_callback: Optional[Callable] = None,
+    timeout: int = 600
+):
+    """等待所有episode处理完成"""
+
+def get_graph_data(graph_id: str) -> Dict:
+    """获取完整图谱数据(节点和边)"""
+```
+
+**关键技术点**:
+1. **动态类创建**: 根据本体定义动态创建Pydantic类
+2. **批量上传**: 避免一次性提交大量数据
+3. **异步等待**: 轮询episode的`processed`状态
+4. **容错重试**: 所有API调用带重试机制
+
+---
+
+### 3. ZepEntityReader (实体读取器)
+
+**文件**: `app/services/zep_entity_reader.py`
+
+**功能**: 从Zep图谱读取并过滤实体
+
+**核心方法**:
+```python
+def get_all_nodes(graph_id: str) -> List[Dict]:
+    """获取所有节点(带重试)"""
+
+def get_all_edges(graph_id: str) -> List[Dict]:
+    """获取所有边(带重试)"""
+
+def filter_defined_entities(
+    graph_id: str,
+    defined_entity_types: Optional[List[str]] = None,
+    enrich_with_edges: bool = True
+) -> FilteredEntities:
+    """
+    筛选符合预定义类型的实体
+    
+    筛选逻辑:
+    - 只保留Labels中包含除"Entity"和"Node"外的自定义标签的节点
+    - 如果指定了entity_types,只保留匹配的类型
+    - 可选:获取每个实体的相关边和关联节点
+    """
+
+def get_entity_with_context(
+    graph_id: str, 
+    entity_uuid: str
+) -> Optional[EntityNode]:
+    """获取单个实体及其完整上下文"""
+```
+
+**容错机制**:
+- 所有Zep API调用带**3次重试**
+- 使用指数退避策略
+- 详细的日志记录
+
+---
+
+### 4. OasisProfileGenerator (人设生成器)
+
+**文件**: `app/services/oasis_profile_generator.py`
+
+**功能**: 将图谱实体转换为OASIS Agent Profile
+
+**核心方法**:
+```python
+def generate_profile_from_entity(
+    entity: EntityNode, 
+    user_id: int,
+    use_llm: bool = True
+) -> OasisAgentProfile:
+    """
+    从实体生成Agent人设
+    
+    步骤:
+    1. 构建实体上下文(属性+边+关联节点+Zep检索)
+    2. 使用LLM生成详细人设(2000字persona)
+    3. 返回OasisAgentProfile对象
+    """
+
+def generate_profiles_from_entities(
+    entities: List[EntityNode],
+    use_llm: bool = True,
+    progress_callback: Optional[callable] = None,
+    graph_id: Optional[str] = None,
+    parallel_count: int = 5
+) -> List[OasisAgentProfile]:
+    """
+    批量生成人设(支持并行)
+    
+    特性:
+    - 并行生成(默认5个并发)
+    - Zep混合检索增强上下文
+    - 区分个人实体和机构实体
+    - 容错处理(失败则使用规则生成)
+    """
+```
+
+**LLM提示词设计**:
+- **个人实体**: 生成2000字详细人设(基本信息+背景+性格+社交行为+立场观点+个人记忆)
+- **机构实体**: 生成官方账号设定(机构信息+账号定位+发言风格+发布内容+立场态度+机构记忆)
+- **输出格式**: JSON (bio, persona, age, gender, mbti, country, profession, interested_topics)
+
+**容错措施**:
+1. LLM调用失败:最多重试3次
+2. JSON解析失败:尝试修复JSON
+3. 完全失败:使用规则生成基础人设
+
+---
+
+### 5. SimulationConfigGenerator (配置生成器)
+
+**文件**: `app/services/simulation_config_generator.py`
+
+**功能**: 使用LLM智能生成模拟配置参数
+
+**核心方法**:
+```python
+def generate_config(
+    simulation_id: str,
+    project_id: str,
+    graph_id: str,
+    simulation_requirement: str,
+    document_text: str,
+    entities: List[EntityNode],
+    enable_twitter: bool = True,
+    enable_reddit: bool = True,
+    progress_callback: Optional[Callable] = None,
+) -> SimulationParameters:
+    """
+    智能生成完整模拟配置
+    
+    分步生成策略(避免一次性生成过长):
+    1. 生成时间配置(符合中国人作息)
+    2. 生成事件配置(热点话题+初始帖子)
+    3. 分批生成Agent配置(每批15个)
+    4. 生成平台配置
+    """
+```
+
+**时间配置特点**:
+- **高峰时段**: 19-22点(活跃度系数1.5)
+- **低谷时段**: 0-5点(活跃度系数0.05)
+- **早间时段**: 6-8点(活跃度系数0.4)
+- **工作时段**: 9-18点(活跃度系数0.7)
+
+**Agent配置规则**:
+- **官方机构**: 活跃度低(0.1-0.3),工作时间活动,响应慢,影响力高(2.5-3.0)
+- **媒体**: 活跃度中(0.4-0.6),全天活动,响应快,影响力高(2.0-2.5)
+- **个人/学生**: 活跃度高(0.6-0.9),晚间活动,响应快,影响力低(0.8-1.2)
+- **专家/教授**: 活跃度中(0.4-0.6),工作+晚间,影响力中高(1.5-2.0)
+
+---
+
+### 6. SimulationManager (模拟管理器)
+
+**文件**: `app/services/simulation_manager.py`
+
+**功能**: 管理模拟的完整生命周期
+
+**核心方法**:
+```python
+def create_simulation(
+    project_id: str,
+    graph_id: str,
+    enable_twitter: bool = True,
+    enable_reddit: bool = True,
+) -> SimulationState:
+    """创建新模拟"""
+
+def prepare_simulation(
+    simulation_id: str,
+    simulation_requirement: str,
+    document_text: str,
+    defined_entity_types: Optional[List[str]] = None,
+    use_llm_for_profiles: bool = True,
+    progress_callback: Optional[callable] = None,
+    parallel_profile_count: int = 3
+) -> SimulationState:
+    """
+    准备模拟环境(全程自动化)
+    
+    步骤:
+    1. 读取并过滤图谱实体
+    2. 并行生成Agent人设(带Zep检索增强)
+    3. LLM智能生成模拟配置
+    4. 保存配置和人设文件
+    """
+
+def get_simulation(simulation_id: str) -> Optional[SimulationState]:
+    """获取模拟状态"""
+
+def list_simulations(project_id: Optional[str] = None) -> List[SimulationState]:
+    """列出所有模拟"""
+```
+
+**数据存储**:
+```
+uploads/simulations/sim_xxx/
+├── state.json                  # 模拟状态
+├── simulation_config.json      # 模拟配置(LLM生成)
+├── reddit_profiles.json        # Reddit人设(JSON格式)
+├── twitter_profiles.csv        # Twitter人设(CSV格式)
+├── run_state.json              # 运行状态
+├── simulation.log              # 主日志
+├── twitter/
+│   ├── actions.jsonl           # Twitter动作日志
+│   └── twitter_simulation.db   # Twitter数据库
+└── reddit/
+    ├── actions.jsonl           # Reddit动作日志
+    └── reddit_simulation.db    # Reddit数据库
+```
+
+---
+
+### 7. SimulationRunner (模拟运行器)
+
+**文件**: `app/services/simulation_runner.py`
+
+**功能**: 在后台运行OASIS模拟并实时监控
+
+**核心方法**:
+```python
+@classmethod
+def start_simulation(
+    cls,
+    simulation_id: str,
+    platform: str = "parallel"
+) -> SimulationRunState:
+    """
+    启动模拟
+    
+    步骤:
+    1. 启动模拟进程(subprocess)
+    2. 创建监控线程
+    3. 解析动作日志
+    4. 实时更新状态
+    """
+
+@classmethod
+def stop_simulation(cls, simulation_id: str) -> SimulationRunState:
+    """
+    停止模拟
+    
+    使用进程组终止(确保子进程也被终止)
+    """
+
+@classmethod
+def get_run_state(cls, simulation_id: str) -> Optional[SimulationRunState]:
+    """获取运行状态"""
+
+@classmethod
+def get_actions(
+    cls,
+    simulation_id: str,
+    limit: int = 100,
+    offset: int = 0,
+    platform: Optional[str] = None,
+    agent_id: Optional[int] = None,
+    round_num: Optional[int] = None
+) -> List[AgentAction]:
+    """获取动作历史(支持过滤)"""
+
+@classmethod
+def cleanup_all_simulations(cls):
+    """清理所有运行中的模拟进程(服务器关闭时调用)"""
+```
+
+**进程管理**:
+- 使用`subprocess.Popen`启动模拟脚本
+- 使用`start_new_session=True`创建新进程组
+- 使用`os.killpg`终止整个进程组
+- 支持优雅关闭(SIGTERM)和强制终止(SIGKILL)
+
+**日志解析**:
+- 实时读取`twitter/actions.jsonl`和`reddit/actions.jsonl`
+- 解析每个Agent的动作记录
+- 更新运行状态和进度
+- 保存最近50个动作用于前端展示
+
+---
+
+## 工具类
+
+### 1. FileParser (文件解析器)
+
+**文件**: `app/utils/file_parser.py`
+
+**功能**: 从PDF/MD/TXT文件提取文本
+
+**支持格式**:
+- PDF: 使用PyMuPDF
+- Markdown: 直接读取
+- TXT: 直接读取
+
+**核心方法**:
+```python
+@classmethod
+def extract_text(cls, file_path: str) -> str:
+    """从文件提取文本"""
+
+@classmethod
+def extract_from_multiple(cls, file_paths: List[str]) -> str:
+    """从多个文件提取并合并文本"""
+
+def split_text_into_chunks(
+    text: str, 
+    chunk_size: int = 500, 
+    overlap: int = 50
+) -> List[str]:
+    """
+    文本分块
+    
+    特点:
+    - 尝试在句子边界分割
+    - 支持中英文句子结束符
+    - 块之间有重叠(overlap)
+    """
+```
+
+---
+
+### 2. LLMClient (LLM客户端)
+
+**文件**: `app/utils/llm_client.py`
+
+**功能**: 统一的LLM调用封装(OpenAI格式)
+
+**核心方法**:
+```python
+def chat(
+    self,
+    messages: List[Dict[str, str]],
+    temperature: float = 0.7,
+    max_tokens: int = 4096,
+    response_format: Optional[Dict] = None
+) -> str:
+    """发送聊天请求"""
+
+def chat_json(
+    self,
+    messages: List[Dict[str, str]],
+    temperature: float = 0.3,
+    max_tokens: int = 4096
+) -> Dict[str, Any]:
+    """发送聊天请求并返回JSON"""
+```
+
+**配置**:
+- 从`Config.LLM_API_KEY`读取API密钥
+- 从`Config.LLM_BASE_URL`读取API地址
+- 从`Config.LLM_MODEL_NAME`读取模型名称
+
+---
+
+### 3. Logger (日志管理)
+
+**文件**: `app/utils/logger.py`
+
+**功能**: 统一的日志配置
+
+**特点**:
+- 双输出:控制台(INFO+) + 文件(DEBUG+)
+- 按日期命名日志文件
+- 日志轮转(10MB,保留5个备份)
+- 详细格式(文件) + 简洁格式(控制台)
+
+**使用方法**:
+```python
+from app.utils.logger import get_logger
+
+logger = get_logger('mirofish.mymodule')
+logger.debug("调试信息")
+logger.info("普通信息")
+logger.warning("警告")
+logger.error("错误")
+```
+
+---
+
+### 4. Retry (重试机制)
+
+**文件**: `app/utils/retry.py`
+
+**功能**: API调用重试装饰器
+
+**核心方法**:
+```python
+@retry_with_backoff(
+    max_retries=3,
+    initial_delay=1.0,
+    backoff_factor=2.0,
+    exceptions=(ConnectionError, TimeoutError)
+)
+def call_api():
+    ...
+```
+
+**特点**:
+- 指数退避
+- 随机抖动(避免雷击)
+- 自定义异常类型
+- 重试回调
+
+---
+
+## 配置说明
+
+### 环境变量配置
+
+在项目根目录创建`.env`文件:
 
 ```bash
-# LLM配置（统一使用OpenAI格式）
-LLM_API_KEY=your-llm-api-key
-LLM_BASE_URL=https://openrouter.ai/api/v1
+# Flask配置
+FLASK_DEBUG=True
+FLASK_HOST=0.0.0.0
+FLASK_PORT=5001
+SECRET_KEY=your-secret-key
+
+# LLM配置(OpenAI兼容接口)
+LLM_API_KEY=sk-xxx
+LLM_BASE_URL=https://api.openai.com/v1
 LLM_MODEL_NAME=gpt-4o-mini
 
 # Zep配置
-ZEP_API_KEY=your-zep-api-key
+ZEP_API_KEY=z_xxx
 
-# OASIS模拟配置（可选）
+# OASIS模拟配置
 OASIS_DEFAULT_MAX_ROUNDS=10
 ```
 
-## 启动服务
+### 配置项说明
+
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| FLASK_DEBUG | Boolean | True | 调试模式 |
+| FLASK_HOST | String | 0.0.0.0 | 监听地址 |
+| FLASK_PORT | Integer | 5001 | 监听端口 |
+| SECRET_KEY | String | - | Flask密钥 |
+| LLM_API_KEY | String | - | LLM API密钥(必填) |
+| LLM_BASE_URL | String | https://api.openai.com/v1 | LLM API地址 |
+| LLM_MODEL_NAME | String | gpt-4o-mini | LLM模型名称 |
+| ZEP_API_KEY | String | - | Zep API密钥(必填) |
+| OASIS_DEFAULT_MAX_ROUNDS | Integer | 10 | 默认模拟轮数 |
+
+---
+
+## 运行指南
+
+### 1. 环境准备
 
 ```bash
+# 1. 激活conda环境
+conda activate MiroFish
+
+# 2. 安装依赖
+cd backend
+pip install -r requirements.txt
+
+# 3. 配置环境变量
+cp .env.example .env
+# 编辑.env文件,填入API密钥
+```
+
+### 2. 启动服务
+
+```bash
+# 启动Flask服务
 python run.py
 ```
 
-服务默认运行在 http://localhost:5001
+服务启动后访问:
+- 主页: http://localhost:5001
+- 健康检查: http://localhost:5001/health
+- API文档: (见上文API接口文档)
 
----
+### 3. 使用流程
 
-# 系统架构
-
-## 完整工作流程
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           Step 1: 图谱构建                               │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   上传文档 ──→ 生成本体定义 ──→ 构建Zep图谱 ──→ 图谱数据               │
-│   (PDF/MD/TXT)  (LLM分析)      (异步任务)      (节点/边)               │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      Step 2: 实体读取与模拟准备                          │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   读取图谱节点 ──→ 过滤符合条件实体 ──→ 生成Agent Profile ──→ 生成脚本  │
-│   (Zep API)       (按Labels筛选)      (LLM生成人设)      (OASIS启动)    │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      Step 3: 双平台并行模拟                              │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   ┌─────────────────┐          ┌─────────────────┐                     │
-│   │  Twitter模拟    │          │   Reddit模拟    │                     │
-│   │  (短平快交互)   │ 并行运行 │  (深度话题讨论)  │                     │
-│   └─────────────────┘          └─────────────────┘                     │
-│                        │                                                │
-│                        ▼                                                │
-│               同一批智能体，模拟真实社交环境                             │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-# Step 1: 图谱构建 API
-
-## 核心工作流程
-
-```
-1. 上传文件 + 生成本体
-   POST /api/graph/ontology/generate
-   → 返回 project_id
-   
-2. 构建图谱
-   POST /api/graph/build
-   → 返回 task_id
-   
-3. 查询任务进度
-   GET /api/graph/task/{task_id}
-   
-4. 获取图谱数据
-   GET /api/graph/data/{graph_id}
-```
-
----
-
-### 接口1：生成本体定义
-
-**POST** `/api/graph/ontology/generate`
-
-上传文档，分析生成适合社会模拟的实体和关系类型定义。
-
-**请求（form-data）：**
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `files` | File | 是 | PDF/MD/TXT文件，可多个 |
-| `simulation_requirement` | Text | 是 | 模拟需求描述 |
-| `project_name` | Text | 否 | 项目名称 |
-| `additional_context` | Text | 否 | 额外说明 |
-
-**响应示例：**
-```json
-{
-    "success": true,
-    "data": {
-        "project_id": "proj_abc123def456",
-        "project_name": "武汉大学舆情分析",
-        "ontology": {
-            "entity_types": [
-                {
-                    "name": "Student",
-                    "description": "Students enrolled in educational institutions",
-                    "attributes": [
-                        {"name": "student_id", "type": "text", "description": "Unique identifier"},
-                        {"name": "major", "type": "text", "description": "Field of study"}
-                    ]
-                }
-            ],
-            "edge_types": [
-                {
-                    "name": "AFFILIATED_WITH",
-                    "description": "Indicates affiliation between entities",
-                    "source_targets": [
-                        {"source": "Student", "target": "University"}
-                    ]
-                }
-            ]
-        },
-        "analysis_summary": "分析说明...",
-        "files": [{"filename": "报告.pdf", "size": 123456}],
-        "total_text_length": 20833
-    }
-}
-```
-
----
-
-### 接口2：构建图谱
-
-**POST** `/api/graph/build`
-
-根据 `project_id` 构建Zep知识图谱（异步任务）。
-
-**请求（JSON）：**
-```json
-{
-    "project_id": "proj_abc123def456",
-    "graph_name": "图谱名称",
-    "chunk_size": 500,
-    "chunk_overlap": 50
-}
-```
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `project_id` | string | 是 | 来自接口1的返回 |
-| `graph_name` | string | 否 | 图谱名称 |
-| `chunk_size` | int | 否 | 文本块大小，默认500 |
-| `chunk_overlap` | int | 否 | 块重叠字符，默认50 |
-
-**响应：**
-```json
-{
-    "success": true,
-    "data": {
-        "project_id": "proj_abc123def456",
-        "task_id": "task_xyz789",
-        "message": "图谱构建任务已启动"
-    }
-}
-```
-
----
-
-### 任务状态查询
-
-**GET** `/api/graph/task/{task_id}`
-
-```json
-{
-    "success": true,
-    "data": {
-        "task_id": "task_xyz789",
-        "status": "processing",
-        "progress": 45,
-        "message": "Zep处理中... 15/30 完成",
-        "result": null
-    }
-}
-```
-
-**状态值：**
-- `pending` - 等待中
-- `processing` - 处理中
-- `completed` - 已完成
-- `failed` - 失败
-
----
-
-### 项目管理接口
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/graph/project/{project_id}` | 获取项目详情 |
-| GET | `/api/graph/project/list` | 列出所有项目 |
-| DELETE | `/api/graph/project/{project_id}` | 删除项目 |
-
----
-
-### 图谱数据接口
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/graph/data/{graph_id}` | 获取图谱节点和边 |
-| DELETE | `/api/graph/delete/{graph_id}` | 删除Zep图谱 |
-
----
-
-# Step 2: 实体读取与模拟运行 API
-
-## 核心设计理念
-
-**全程自动化，无需人工设置参数：**
-- 脚本是**预设的**，不是动态生成
-- 所有模拟参数由**LLM智能生成**
-- LLM读取模拟需求+文档+图谱信息，自动设置最佳参数
-- **通过API接口启动和监控模拟**，前端可实时展示
-
-## 核心工作流程
-
-```
-1. 创建模拟
-   POST /api/simulation/create
-   → 返回 simulation_id
-   
-2. 准备模拟环境（异步任务）
-   POST /api/simulation/prepare
-   Body: { "simulation_id": "sim_xxxx" }
-   → 返回 task_id（立即响应）
-   
-   查询进度:
-   POST /api/simulation/prepare/status
-   Body: { "task_id": "task_xxxx" }
-   → 返回 status, progress, result
-   
-3. 开始模拟
-   POST /api/simulation/start
-   Body: { "simulation_id": "sim_xxxx", "platform": "parallel" }
-   → 在后台启动OASIS模拟进程
-   → 返回运行状态
-
-4. 实时监控（前端轮询）
-   GET /api/simulation/{simulation_id}/run-status/detail
-   → 返回当前进度、最近Agent动作
-   
-5. 停止模拟（可选）
-   POST /api/simulation/stop
-   Body: { "simulation_id": "sim_xxxx" }
-```
-
----
-
-## 实体读取接口
-
-### 获取图谱实体（已过滤）
-
-**GET** `/api/simulation/entities/{graph_id}`
-
-获取图谱中符合预定义实体类型的节点。
-
-**实体过滤逻辑：**
-- Zep对符合预定义类型的实体，Labels为 `["Entity", "Student"]`
-- 对不符合预定义类型的实体，Labels仅为 `["Entity"]`
-- **筛选规则**：只保留Labels中包含除"Entity"和"Node"之外标签的节点
-
-**Query参数：**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `entity_types` | string | 否 | 逗号分隔的实体类型，用于进一步过滤 |
-| `enrich` | boolean | 否 | 是否获取相关边信息，默认true |
-
-**响应示例：**
-```json
-{
-    "success": true,
-    "data": {
-        "entities": [
-            {
-                "uuid": "node_uuid_123",
-                "name": "杨景媛",
-                "labels": ["Entity", "Student"],
-                "summary": "武汉大学学生，图书馆事件当事人",
-                "attributes": {
-                    "student_id": "2021001",
-                    "major": "计算机科学"
-                },
-                "related_edges": [
-                    {
-                        "direction": "outgoing",
-                        "edge_name": "AFFILIATED_WITH",
-                        "fact": "杨景媛是武汉大学的学生",
-                        "target_node_uuid": "node_uuid_456"
-                    }
-                ],
-                "related_nodes": [
-                    {
-                        "uuid": "node_uuid_456",
-                        "name": "武汉大学",
-                        "labels": ["Entity", "University"],
-                        "summary": "中国著名高等学府"
-                    }
-                ]
-            }
-        ],
-        "entity_types": ["Student", "University", "PublicFigure"],
-        "total_count": 100,
-        "filtered_count": 45
-    }
-}
-```
-
----
-
-### 获取单个实体详情
-
-**GET** `/api/simulation/entities/{graph_id}/{entity_uuid}`
-
-获取单个实体的完整信息，包含所有相关边和关联节点。
-
----
-
-### 按类型获取实体
-
-**GET** `/api/simulation/entities/{graph_id}/by-type/{entity_type}`
-
-获取指定类型（如Student、PublicFigure）的所有实体。
-
----
-
-## 模拟管理接口
-
-### 创建模拟
-
-**POST** `/api/simulation/create`
-
-**请求（JSON）：**
-```json
-{
-    "project_id": "proj_abc123def456",
-    "graph_id": "mirofish_xxxx",
-    "enable_twitter": true,
-    "enable_reddit": true,
-    "max_rounds": 10,
-    "agents_per_round": -1
-}
-```
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `project_id` | string | 是 | 项目ID |
-| `graph_id` | string | 否 | 图谱ID，不提供则从project获取 |
-| `enable_twitter` | boolean | 否 | 启用Twitter模拟，默认true |
-| `enable_reddit` | boolean | 否 | 启用Reddit模拟，默认true |
-| `max_rounds` | int | 否 | 最大模拟轮数，默认10 |
-| `agents_per_round` | int | 否 | 每轮激活智能体数，-1表示全部 |
-
-**响应示例：**
-```json
-{
-    "success": true,
-    "data": {
-        "simulation_id": "sim_abc123def456",
-        "config": {
-            "project_id": "proj_xxxx",
-            "graph_id": "mirofish_xxxx",
-            "enable_twitter": true,
-            "enable_reddit": true,
-            "max_rounds": 10
-        },
-        "status": "created",
-        "created_at": "2025-12-01T10:00:00"
-    }
-}
-```
-
----
-
-### 准备模拟环境（异步任务）
-
-**POST** `/api/simulation/prepare`
-
-**异步接口**：这是一个耗时操作，接口会立即返回`task_id`，通过`/prepare/status`查询进度。
-
-执行模拟准备流程（LLM智能生成所有参数，带自动重试机制）：
-1. 从Zep图谱读取并过滤实体
-2. 为每个实体生成OASIS Agent Profile（带重试）
-3. LLM智能生成模拟配置（带重试）
-4. 保存配置文件和复制预设脚本
-
-**请求（JSON）：**
-```json
-{
-    "simulation_id": "sim_xxxx",
-    "entity_types": ["Student", "PublicFigure"],
-    "use_llm_for_profiles": true
-}
-```
-
-**响应示例：**
-```json
-{
-    "success": true,
-    "data": {
-        "simulation_id": "sim_xxxx",
-        "task_id": "task_xxxx",
-        "status": "preparing",
-        "message": "准备任务已启动，请通过 /api/simulation/prepare/status 查询进度"
-    }
-}
-```
-
----
-
-### 查询准备进度
-
-**POST** `/api/simulation/prepare/status`
-
-查询准备任务的执行进度。
-
-**请求（JSON）：**
-```json
-{
-    "task_id": "task_xxxx"
-}
-```
-
-**响应示例：**
-```json
-{
-    "success": true,
-    "data": {
-        "task_id": "task_xxxx",
-        "task_type": "simulation_prepare",
-        "status": "processing",
-        "progress": 45,
-        "message": "[2/4] 生成Agent人设: 35/93 - 生成 教授张三 的人设...",
-        "progress_detail": {
-            "current_stage": "generating_profiles",
-            "current_stage_name": "生成Agent人设",
-            "stage_index": 2,
-            "total_stages": 4,
-            "stage_progress": 38,
-            "current_item": 35,
-            "total_items": 93,
-            "item_description": "生成 教授张三 的人设..."
-        },
-        "result": null,
-        "error": null,
-        "metadata": {
-            "project_id": "proj_xxxx",
-            "simulation_id": "sim_xxxx"
-        }
-    }
-}
-```
-
-**进度详情字段（progress_detail）：**
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `current_stage` | string | 当前阶段标识 (reading/generating_profiles/generating_config/copying_scripts) |
-| `current_stage_name` | string | 当前阶段中文名称 |
-| `stage_index` | int | 当前阶段序号 (1-4) |
-| `total_stages` | int | 总阶段数 (4) |
-| `stage_progress` | int | 当前阶段内进度 (0-100) |
-| `current_item` | int | 当前处理的项目序号 |
-| `total_items` | int | 当前阶段总项目数 |
-| `item_description` | string | 当前项目描述 |
-
-**阶段说明：**
-
-| 阶段 | 名称 | 权重 | 说明 |
-|------|------|------|------|
-| 1 | 读取图谱实体 | 0-20% | 从Zep读取并过滤实体 |
-| 2 | 生成Agent人设 | 20-70% | 为每个实体生成OASIS Profile |
-| 3 | 生成模拟配置 | 70-90% | LLM智能生成模拟参数 |
-| 4 | 准备模拟脚本 | 90-100% | 复制预设脚本到模拟目录 |
-
-**状态值（status）：**
-- `pending` - 等待中
-- `processing` - 处理中
-- `completed` - 已完成（此时result包含结果）
-- `failed` - 失败（此时error包含错误信息）
-
-**完成后的响应：**
-```json
-{
-    "success": true,
-    "data": {
-        "task_id": "task_xxxx",
-        "status": "completed",
-        "progress": 100,
-        "message": "任务完成",
-        "result": {
-            "simulation_id": "sim_xxxx",
-            "project_id": "proj_xxxx",
-            "graph_id": "mirofish_xxxx",
-            "status": "ready",
-            "entities_count": 93,
-            "profiles_count": 93,
-            "entity_types": ["University", "Student", ...],
-            "config_generated": true,
-            "error": null
-        }
-    }
-}
-```
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `entity_types` | array | 否 | 指定实体类型进行过滤 |
-| `use_llm_for_profiles` | boolean | 否 | 是否使用LLM生成人设，默认true |
-
-**注意**：`simulation_requirement`和`document_text`自动从项目中获取
-
-**响应示例：**
-```json
-{
-    "success": true,
-    "data": {
-        "simulation_id": "sim_abc123def456",
-        "status": "ready",
-        "entities_count": 45,
-        "profiles_count": 45,
-        "entity_types": ["Student", "PublicFigure", "University"],
-        "config_generated": true,
-        "config_reasoning": "根据武汉大学图书馆事件的特点，设置72小时模拟时长...",
-        "run_instructions": {
-            "simulation_dir": "/path/to/sim_xxx",
-            "commands": {...},
-            "instructions": "..."
-        }
-    }
-}
-```
-
----
-
-### 获取模拟状态
-
-**GET** `/api/simulation/{simulation_id}`
-
-**响应示例：**
-```json
-{
-    "success": true,
-    "data": {
-        "simulation_id": "sim_abc123def456",
-        "status": "ready",
-        "entities_count": 45,
-        "profiles_count": 45,
-        "entity_types": ["Student", "PublicFigure"],
-        "current_round": 0,
-        "twitter_status": "not_started",
-        "reddit_status": "not_started"
-    }
-}
-```
-
----
-
-### 列出所有模拟
-
-**GET** `/api/simulation/list`
-
-| Query参数 | 类型 | 说明 |
-|-----------|------|------|
-| `project_id` | string | 按项目ID过滤（可选） |
-
----
-
-### 获取Agent Profile
-
-**GET** `/api/simulation/{simulation_id}/profiles`
-
-| Query参数 | 类型 | 说明 |
-|-----------|------|------|
-| `platform` | string | 平台类型：reddit 或 twitter |
-
-**响应示例：**
-```json
-{
-    "success": true,
-    "data": {
-        "platform": "reddit",
-        "count": 45,
-        "profiles": [
-            {
-                "user_id": 0,
-                "user_name": "yangjingyuan_123",
-                "name": "杨景媛",
-                "bio": "武汉大学学生，关注教育公平与学生权益",
-                "persona": "杨景媛是一名积极参与社会讨论的大学生，性格内敛但观点鲜明...",
-                "karma": 1500,
-                "age": 22,
-                "gender": "female",
-                "mbti": "INFJ",
-                "country": "China",
-                "profession": "Student",
-                "interested_topics": ["Education", "Social Issues"]
-            }
-        ]
-    }
-}
-```
-
----
-
-### 获取模拟配置
-
-**GET** `/api/simulation/{simulation_id}/config`
-
-获取LLM智能生成的完整配置，包含：
-- `time_config`: 时间配置
-- `agent_configs`: 每个Agent的活动配置
-- `event_config`: 事件配置
-- `generation_reasoning`: LLM的配置推理说明
-
----
-
-### 下载文件
-
-| 接口 | 说明 |
-|------|------|
-| GET `/api/simulation/{id}/config/download` | 下载配置文件 |
-| GET `/api/simulation/{id}/script/{script_name}/download` | 下载脚本文件 |
-
-**脚本名称：** 
-- `run_twitter_simulation.py`
-- `run_reddit_simulation.py`
-- `run_parallel_simulation.py`
-
----
-
-### 直接生成Profile
-
-**POST** `/api/simulation/generate-profiles`
-
-不创建模拟，直接从图谱生成Agent Profile。
-
-```json
-{
-    "graph_id": "mirofish_xxxx",
-    "entity_types": ["Student", "PublicFigure"],
-    "use_llm": true,
-    "platform": "reddit"
-}
-```
-
----
-
-## 模拟运行控制接口
-
-### 开始模拟
-
-**POST** `/api/simulation/start`
-
-启动OASIS模拟，在后台运行。
-
-**请求（JSON）：**
-```json
-{
-    "simulation_id": "sim_xxxx",  // 必填
-    "platform": "parallel"         // 可选: twitter / reddit / parallel (默认)
-}
-```
-
-**响应示例：**
-```json
-{
-    "success": true,
-    "data": {
-        "simulation_id": "sim_xxxx",
-        "runner_status": "running",
-        "process_pid": 12345,
-        "twitter_running": true,
-        "reddit_running": true,
-        "total_rounds": 144,
-        "total_simulation_hours": 72,
-        "started_at": "2025-12-01T10:00:00"
-    }
-}
-```
-
----
-
-### 停止模拟
-
-**POST** `/api/simulation/stop`
-
-停止正在运行的模拟。
-
-**请求（JSON）：**
-```json
-{
-    "simulation_id": "sim_xxxx"  // 必填
-}
-```
-
-**响应示例：**
-```json
-{
-    "success": true,
-    "data": {
-        "simulation_id": "sim_xxxx",
-        "runner_status": "stopped",
-        "completed_at": "2025-12-01T12:00:00",
-        "twitter_actions_count": 500,
-        "reddit_actions_count": 650
-    }
-}
-```
-
----
-
-## 实时状态监控接口
-
-### 获取运行状态（基础）
-
-**GET** `/api/simulation/{simulation_id}/run-status`
-
-获取模拟运行的实时状态，用于前端轮询。
-
-**响应示例：**
-```json
-{
-    "success": true,
-    "data": {
-        "simulation_id": "sim_xxxx",
-        "runner_status": "running",
-        "current_round": 25,
-        "total_rounds": 144,
-        "progress_percent": 17.4,
-        "simulated_hours": 12,
-        "total_simulation_hours": 72,
-        "twitter_running": true,
-        "reddit_running": true,
-        "twitter_actions_count": 150,
-        "reddit_actions_count": 200,
-        "total_actions_count": 350,
-        "started_at": "2025-12-01T10:00:00",
-        "updated_at": "2025-12-01T10:30:00"
-    }
-}
-```
-
-**运行状态值（runner_status）：**
-- `idle` - 未运行
-- `starting` - 启动中
-- `running` - 运行中
-- `paused` - 已暂停
-- `stopping` - 停止中
-- `stopped` - 已停止
-- `completed` - 已完成
-- `failed` - 失败
-
----
-
-### 获取运行状态（详细，含最近动作）
-
-**GET** `/api/simulation/{simulation_id}/run-status/detail`
-
-获取详细运行状态，包含最近的Agent动作列表，**用于前端实时展示动态**。
-
-**响应示例：**
-```json
-{
-    "success": true,
-    "data": {
-        "simulation_id": "sim_xxxx",
-        "runner_status": "running",
-        "current_round": 25,
-        "progress_percent": 17.4,
-        "recent_actions": [
-            {
-                "round_num": 25,
-                "timestamp": "2025-12-01T10:30:00",
-                "platform": "twitter",
-                "agent_id": 3,
-                "agent_name": "Entity Name",
-                "action_type": "CREATE_POST",
-                "action_args": {"content": "Post content..."},
-                "result": null,
-                "success": true
-            },
-            {
-                "round_num": 25,
-                "timestamp": "2025-12-01T10:29:55",
-                "platform": "reddit",
-                "agent_id": 7,
-                "agent_name": "Another Entity",
-                "action_type": "LIKE_POST",
-                "action_args": {"post_id": 5},
-                "success": true
-            }
-        ]
-    }
-}
-```
-
----
-
-### 获取动作历史
-
-**GET** `/api/simulation/{simulation_id}/actions`
-
-获取完整的Agent动作历史记录。
-
-**Query参数：**
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `limit` | int | 返回数量（默认100） |
-| `offset` | int | 偏移量（默认0） |
-| `platform` | string | 过滤平台（twitter/reddit） |
-| `agent_id` | int | 过滤Agent ID |
-| `round_num` | int | 过滤轮次 |
-
----
-
-### 获取时间线
-
-**GET** `/api/simulation/{simulation_id}/timeline`
-
-获取按轮次汇总的时间线，用于前端展示进度条和时间线视图。
-
-**Query参数：**
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `start_round` | int | 起始轮次（默认0） |
-| `end_round` | int | 结束轮次（默认全部） |
-
-**响应示例：**
-```json
-{
-    "success": true,
-    "data": {
-        "rounds_count": 25,
-        "timeline": [
-            {
-                "round_num": 1,
-                "twitter_actions": 10,
-                "reddit_actions": 15,
-                "total_actions": 25,
-                "active_agents_count": 8,
-                "active_agents": [0, 1, 3, 5, 7, 10, 12, 15],
-                "action_types": {"CREATE_POST": 5, "LIKE_POST": 10, "LLM_ACTION": 10},
-                "first_action_time": "2025-12-01T10:00:00",
-                "last_action_time": "2025-12-01T10:05:00"
-            }
-        ]
-    }
-}
-```
-
----
-
-### 获取Agent统计
-
-**GET** `/api/simulation/{simulation_id}/agent-stats`
-
-获取每个Agent的活跃度统计，用于展示排行榜。
-
-**响应示例：**
-```json
-{
-    "success": true,
-    "data": {
-        "agents_count": 45,
-        "stats": [
-            {
-                "agent_id": 3,
-                "agent_name": "Active Agent",
-                "total_actions": 50,
-                "twitter_actions": 30,
-                "reddit_actions": 20,
-                "action_types": {"CREATE_POST": 10, "LIKE_POST": 25, "REPOST": 15},
-                "first_action_time": "2025-12-01T10:00:00",
-                "last_action_time": "2025-12-01T12:30:00"
-            }
-        ]
-    }
-}
-```
-
----
-
-## 数据库查询接口
-
-### 获取帖子
-
-**GET** `/api/simulation/{simulation_id}/posts`
-
-从模拟数据库获取帖子列表。
-
-**Query参数：**
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `platform` | string | 平台类型（twitter/reddit，默认reddit） |
-| `limit` | int | 返回数量（默认50） |
-| `offset` | int | 偏移量 |
-
----
-
-### 获取评论
-
-**GET** `/api/simulation/{simulation_id}/comments`
-
-从Reddit模拟数据库获取评论列表。
-
-**Query参数：**
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `post_id` | string | 过滤帖子ID（可选） |
-| `limit` | int | 返回数量（默认50） |
-| `offset` | int | 偏移量 |
-
----
-
-# 服务层实现细节
-
-## 1. ZepEntityReader（Zep实体读取服务）
-
-**文件：** `app/services/zep_entity_reader.py`
-
-### 核心功能
-
-| 方法 | 说明 |
-|------|------|
-| `get_all_nodes(graph_id)` | 获取图谱所有节点 |
-| `get_all_edges(graph_id)` | 获取图谱所有边 |
-| `filter_defined_entities(graph_id, ...)` | 筛选符合条件的实体 |
-| `get_entity_with_context(graph_id, uuid)` | 获取实体完整上下文 |
-| `get_entities_by_type(graph_id, type)` | 按类型获取实体 |
-
-### 数据结构
-
-```python
-@dataclass
-class EntityNode:
-    uuid: str                    # 节点UUID
-    name: str                    # 实体名称
-    labels: List[str]            # 标签列表 ["Entity", "Student"]
-    summary: str                 # 实体摘要
-    attributes: Dict[str, Any]   # 属性字典
-    related_edges: List[Dict]    # 相关边信息
-    related_nodes: List[Dict]    # 关联节点信息
-    
-    def get_entity_type(self) -> Optional[str]:
-        """获取实体类型（排除默认Entity标签）"""
-
-@dataclass
-class FilteredEntities:
-    entities: List[EntityNode]   # 实体列表
-    entity_types: Set[str]       # 发现的实体类型
-    total_count: int             # 总节点数
-    filtered_count: int          # 过滤后数量
-```
-
-### 过滤逻辑示例
-
-```python
-# Zep返回的节点Labels示例：
-# 符合预定义类型: ["Entity", "Student"]
-# 不符合预定义类型: ["Entity"]
-
-for node in all_nodes:
-    labels = node.get("labels", [])
-    custom_labels = [l for l in labels if l not in ["Entity", "Node"]]
-    
-    if not custom_labels:
-        # 只有默认标签，跳过
-        continue
-    
-    # 保留符合条件的实体
-    entity_type = custom_labels[0]
-    filtered_entities.append(node)
-```
-
----
-
-## 2. OasisProfileGenerator（Agent Profile生成器）
-
-**文件：** `app/services/oasis_profile_generator.py`
-
-### 核心功能
-
-| 方法 | 说明 |
-|------|------|
-| `generate_profile_from_entity(entity, user_id)` | 从实体生成单个Profile（带详细人设） |
-| `generate_profiles_from_entities(entities, graph_id)` | 批量生成Profile |
-| `save_profiles(profiles, path, platform)` | 保存Profile文件 |
-| `_search_zep_for_entity(entity_name)` | 调用Zep检索获取额外上下文 |
-
-### 优化特性（v2.0）
-
-1. **Zep混合搜索功能**：使用多种查询策略获取丰富的实体信息
-2. **区分实体类型**：个人实体 vs 群体/机构实体，使用不同的提示词
-3. **详细人设生成**：生成500字以上的详细人设描述
-
-### Zep混合搜索策略
-
-`_search_zep_for_entity()` 方法采用多种搜索策略获取丰富信息：
-
-**查询策略：**
-```python
-queries = [
-    f"总结{entity_name}的全部活动、事件和行为",
-    f"{entity_name}与其他实体的关系和互动",
-    f"{entity_name}的背景、历史和重要信息",
-    f"关于{entity_name}的所有事实和描述",
-]
-```
-
-**说明：** Zep没有内置的混合搜索接口，需要分别搜索edges和nodes。我们使用**并行请求**同时执行两个搜索：
-
-```python
-# 并行执行edges和nodes搜索
-with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-    edge_future = executor.submit(search_edges)  # scope="edges"
-    node_future = executor.submit(search_nodes)  # scope="nodes"
-    
-    edge_result = edge_future.result(timeout=30)
-    node_result = node_future.result(timeout=30)
-```
-
-**搜索参数：**
-
-| 搜索类型 | scope | limit | 说明 |
-|----------|-------|-------|------|
-| 边搜索 | edges | 30 | 获取事实/关系信息 |
-| 节点搜索 | nodes | 20 | 获取相关实体摘要 |
-
-**关键参数：**
-- 必须传递 `graph_id` 参数，否则Zep API会返回400错误
-- 使用 `rrf` (Reciprocal Rank Fusion) reranker，稳定可靠
-- 使用线程池并行执行，提高效率
-
-**返回数据结构：**
-```python
-{
-    "facts": [...],           # 事实列表（来自edges）
-    "node_summaries": [...],  # 相关节点摘要（来自nodes）
-    "context": "..."          # 综合上下文文本
-}
-```
-
-### LLM生成与JSON修复
-
-为了避免LLM生成的JSON解析失败，实现了以下优化：
-
-1. **不限制max_tokens**：让LLM自由发挥，充分利用模型的上下文能力
-2. **多次重试机制**：最多3次尝试，每次降低temperature
-3. **截断检测与修复**：检测`finish_reason='length'`，自动闭合JSON
-4. **完善JSON修复机制**：
-   - `_fix_truncated_json()`: 修复被截断的JSON（闭合括号和字符串）
-   - `_try_fix_json()`: 多级修复策略
-     - 提取JSON部分
-     - 替换字符串中的换行符
-     - 移除控制字符
-     - 从损坏JSON中提取部分信息
-5. **字段验证**：确保必需字段存在，缺失时使用entity_summary填充
-
-**错误处理流程**：
-```
-LLM调用 → 检查截断 → JSON解析 → 修复尝试 → 部分提取 → 规则生成
-```
-
-### 并行生成与实时输出
-
-支持并行生成Agent人设，提高生成效率：
-
-```python
-profiles = generator.generate_profiles_from_entities(
-    entities=filtered.entities,
-    use_llm=True,
-    graph_id="mirofish_xxx",
-    parallel_count=5  # 并行生成数量，默认5
-)
-```
-
-**API参数**：
-```json
-POST /api/simulation/prepare
-{
-    "simulation_id": "sim_xxx",
-    "parallel_profile_count": 5,   // 可选，并行生成人设数量，默认5
-    "force_regenerate": false      // 可选，强制重新生成，默认false
-}
-```
-
-**实时输出**：
-- 每生成一个人设，立即输出到控制台（完整内容不截断）
-- 包含用户名、简介、详细人设、年龄、性别、MBTI等信息
-- 方便实时监控生成进度和质量
-
-### 避免重复生成
-
-系统会自动检测已完成的准备工作，避免重复生成：
-
-**检测条件**：
-1. `state.json` 存在且 `config_generated=true`
-2. 必要文件存在：`reddit_profiles.json`, `twitter_profiles.csv`, `simulation_config.json`
-
-**API响应**：
-```json
-// 已准备完成时
-{
-    "success": true,
-    "data": {
-        "simulation_id": "sim_xxx",
-        "status": "ready",
-        "message": "已有完成的准备工作，无需重复生成",
-        "already_prepared": true,
-        "prepare_info": {
-            "entities_count": 93,
-            "profiles_count": 93,
-            "entity_types": ["Student", "Professor", ...],
-            "existing_files": [...]
-        }
-    }
-}
-```
-
-**强制重新生成**：
-```json
-POST /api/simulation/prepare
-{
-    "simulation_id": "sim_xxx",
-    "force_regenerate": true  // 忽略已有准备，强制重新生成
-}
-```
-
-### 实体类型分类
-
-```python
-# 个人类型实体 - 生成具体人物设定
-INDIVIDUAL_ENTITY_TYPES = [
-    "student", "alumni", "professor", "person", "publicfigure", 
-    "expert", "faculty", "official", "journalist", "activist"
-]
-
-# 群体/机构类型实体 - 生成官方账号设定
-GROUP_ENTITY_TYPES = [
-    "university", "governmentagency", "organization", "ngo", 
-    "mediaoutlet", "company", "institution", "group", "community"
-]
-```
-
-### Profile数据结构
-
-```python
-@dataclass
-class OasisAgentProfile:
-    # 基础字段
-    user_id: int              # 用户ID
-    user_name: str            # 用户名
-    name: str                 # 显示名称
-    bio: str                  # 简介（max 150字符）
-    persona: str              # 详细人设描述（500字以上）
-    
-    # Reddit字段
-    karma: int = 1000
-    
-    # Twitter字段
-    friend_count: int = 100
-    follower_count: int = 150
-    statuses_count: int = 500
-    
-    # 人设详情
-    age: Optional[int] = None
-    gender: Optional[str] = None
-    mbti: Optional[str] = None       # INTJ, ENFP等
-    country: Optional[str] = None
-    profession: Optional[str] = None
-    interested_topics: List[str] = []
-    
-    # 来源信息
-    source_entity_uuid: Optional[str] = None
-    source_entity_type: Optional[str] = None
-```
-
-### 详细人设生成示例
-
-**个人实体人设结构：**
-```markdown
-## 一、基本信息
-- 姓名/称呼、年龄、职业/身份
-- 教育背景、所在地
-
-## 二、人物背景
-- 过去的重要经历
-- 与事件的关联
-- 社会关系网络
-
-## 三、性格特征
-- MBTI类型及表现
-- 核心性格特点
-- 情绪表达方式
-
-## 四、社交媒体行为模式
-- 发帖频率和时间
-- 内容偏好类型
-- 语言风格特点
-
-## 五、立场与观点
-- 对核心话题的态度
-- 可能被激怒/感动的内容
-
-## 六、独特特征
-- 口头禅、个人爱好等
-```
-
-### Profile生成策略
-
-**1. LLM生成（默认）**
-
-使用LLM根据实体信息生成详细人设：
-
-```python
-prompt = f"""
-Entity: {entity_name} ({entity_type})
-Summary: {entity_summary}
-Context: {related_edges_and_nodes}
-
-Generate a social media user profile with:
-- bio (max 150 chars)
-- persona (detailed description)
-- age, gender, mbti, country
-- profession, interested_topics
-"""
-```
-
-**2. 规则生成（Fallback）**
-
-根据实体类型使用预定义模板：
-
-| 实体类型 | 生成策略 |
-|----------|----------|
-| Student/Alumni | 年龄18-30，学生身份，关注教育话题 |
-| PublicFigure/Expert | 年龄35-60，专业人士，政治经济话题 |
-| MediaOutlet | 媒体官方账号，新闻时事话题 |
-| University/GovernmentAgency | 机构官方账号，政策公告话题 |
-
----
-
-## 3. SimulationConfigGenerator（模拟配置智能生成器）
-
-**文件：** `app/services/simulation_config_generator.py`
-
-### 核心功能
-
-使用LLM分析模拟需求、文档内容、图谱实体信息，自动生成最佳的模拟参数配置。
-
-**采用分步生成策略**（避免一次性生成过长内容导致失败）：
-1. 生成时间配置（轻量级）
-2. 生成事件配置和热点话题
-3. 分批生成Agent配置（**每批5个**，保证生成质量）
-4. 生成平台配置
-
-| 方法 | 说明 |
-|------|------|
-| `generate_config(...)` | 智能生成完整模拟配置（分步） |
-| `_generate_time_config(...)` | 生成时间配置 |
-| `_generate_event_config(...)` | 生成事件配置 |
-| `_generate_agent_configs_batch(...)` | 分批生成Agent配置 |
-| `_generate_agent_config_by_rule(...)` | 规则生成（LLM失败时） |
-
-### 中国人作息时间配置
-
-系统针对中国用户群体，采用符合北京时间的作息习惯：
-
-| 时段 | 时间范围 | 活跃度系数 | 说明 |
-|------|----------|------------|------|
-| 深夜 | 0:00-5:59 | 0.05 | 几乎无人活动 |
-| 早间 | 6:00-8:59 | 0.4 | 逐渐醒来 |
-| 工作 | 9:00-18:59 | 0.7 | 工作时段中等活跃 |
-| 高峰 | 19:00-22:59 | 1.5 | 晚间最活跃 |
-| 夜间 | 23:00-23:59 | 0.5 | 活跃度下降 |
-
-### LLM智能生成的配置内容
-
-**1. TimeSimulationConfig（时间配置）**
-```python
-@dataclass
-class TimeSimulationConfig:
-    total_simulation_hours: int = 72      # 模拟总时长（小时）
-    minutes_per_round: int = 30           # 每轮代表的时间（分钟）
-    agents_per_hour_min: int = 5          # 每小时激活Agent数量（最小）
-    agents_per_hour_max: int = 20         # 每小时激活Agent数量（最大）
-    peak_hours: List[int] = [19,20,21,22] # 高峰时段（晚间）
-    off_peak_hours: List[int] = [0,1,2,3,4,5]  # 低谷时段（凌晨）
-    peak_activity_multiplier: float = 1.5 # 高峰活跃度乘数
-    off_peak_activity_multiplier: float = 0.05  # 凌晨活跃度极低
-    morning_hours: List[int] = [6,7,8]    # 早间时段
-    morning_activity_multiplier: float = 0.4
-    work_hours: List[int] = [9-18]        # 工作时段
-    work_activity_multiplier: float = 0.7
-```
-
-**2. AgentActivityConfig（每个Agent的活动配置）**
-```python
-@dataclass
-class AgentActivityConfig:
-    agent_id: int
-    entity_uuid: str
-    entity_name: str
-    entity_type: str
-    
-    activity_level: float = 0.5           # 整体活跃度 (0.0-1.0)
-    posts_per_hour: float = 1.0           # 每小时发帖频率
-    comments_per_hour: float = 2.0        # 每小时评论频率
-    active_hours: List[int]               # 活跃时间段 (0-23)
-    response_delay_min: int = 5           # 响应延迟最小值（分钟）
-    response_delay_max: int = 60          # 响应延迟最大值（分钟）
-    sentiment_bias: float = 0.0           # 情感倾向 (-1到1)
-    stance: str = "neutral"               # 立场 (supportive/opposing/neutral/observer)
-    influence_weight: float = 1.0         # 影响力权重
-```
-
-**3. 不同实体类型的默认参数差异（符合中国人作息）**
-
-| 实体类型 | 活跃度 | 发帖频率 | 活跃时段 | 响应延迟 | 影响力 |
-|----------|--------|----------|----------|----------|--------|
-| University/GovernmentAgency | 0.2 | 0.1/小时 | 9:00-17:59（工作时间） | 60-240分钟 | 3.0 |
-| MediaOutlet | 0.5 | 0.8/小时 | 7:00-23:59（全天） | 5-30分钟 | 2.5 |
-| Professor/Expert | 0.4 | 0.3/小时 | 8:00-21:59（工作+晚间） | 15-90分钟 | 2.0 |
-| Student | 0.8 | 0.6/小时 | 8-13, 18-23（上午+晚间） | 1-15分钟 | 0.8 |
-| Alumni | 0.6 | 0.4/小时 | 12-13, 19-23（午休+晚间） | 5-30分钟 | 1.0 |
-| Person（普通人） | 0.7 | 0.5/小时 | 9-13, 18-23（白天+晚间） | 2-20分钟 | 1.0 |
-
-**注意**：凌晨0-5点所有实体类型都几乎不活动（符合中国人作息习惯）
-
----
-
-## 4. SimulationManager（模拟管理器）
-
-**文件：** `app/services/simulation_manager.py`
-
-### 核心功能
-
-| 方法 | 说明 |
-|------|------|
-| `create_simulation(project_id, graph_id, ...)` | 创建模拟 |
-| `prepare_simulation(simulation_id, ...)` | 准备模拟环境（调用配置生成器） |
-| `get_simulation(simulation_id)` | 获取模拟状态 |
-| `get_profiles(simulation_id, platform)` | 获取Profile |
-| `get_simulation_config(simulation_id)` | 获取模拟配置 |
-| `get_run_instructions(simulation_id)` | 获取运行说明 |
-
-### 模拟状态流转
-
-```
-created → preparing → ready → running → completed
-                ↓              ↓
-             failed         paused
-```
-
-### 生成的文件结构
-
-```
-uploads/simulations/sim_xxxx/
-├── state.json                      # 模拟状态
-├── simulation_config.json          # LLM生成的模拟配置（核心文件）
-├── reddit_profiles.json            # Reddit Agent Profile（JSON格式）
-├── twitter_profiles.csv            # Twitter Agent Profile（CSV格式）
-├── run_reddit_simulation.py        # 预设Reddit模拟脚本
-├── run_twitter_simulation.py       # 预设Twitter模拟脚本
-├── run_parallel_simulation.py      # 预设双平台并行脚本
-├── reddit_simulation.db            # Reddit数据库（运行后生成）
-└── twitter_simulation.db           # Twitter数据库（运行后生成）
-```
-
-**重要：OASIS平台的Profile格式要求不同：**
-
-**Twitter CSV格式**（符合OASIS官方要求）：
-```csv
-user_id,name,username,user_char,description
-0,张教授,professor_zhang,"完整人设描述（LLM内部使用）","简短简介（外部显示）"
-```
-- `user_id`: 从0开始的顺序ID
-- `name`: 真实姓名
-- `username`: 系统用户名
-- `user_char`: 完整人设（bio + persona），注入LLM系统提示，指导Agent行为
-- `description`: 简短简介，显示在用户资料页面
-
-**Reddit JSON格式**：
-```json
-[
-  {
-    "realname": "张教授",
-    "username": "professor_zhang",
-    "bio": "简短简介",
-    "persona": "详细人设描述",
-    "age": 42,
-    "gender": "男",
-    "mbti": "INTJ",
-    "country": "中国",
-    "profession": "教授",
-    "interested_topics": ["高等教育", "学术诚信"]
-  }
-]
-```
-
-**user_char vs description 区别**：
-| 字段 | 用途 | 可见性 |
-|------|------|--------|
-| user_char | LLM系统提示，决定Agent如何思考和行动 | 内部使用 |
-| description | 用户资料页面的简介 | 其他用户可见 |
-
-### 配置文件示例 (simulation_config.json)
-
-```json
-{
-  "simulation_id": "sim_abc123",
-  "project_id": "proj_xxx",
-  "graph_id": "mirofish_xxx",
-  "simulation_requirement": "分析武汉大学图书馆事件舆论传播",
-  
-  "time_config": {
-    "total_simulation_hours": 72,
-    "minutes_per_round": 30,
-    "agents_per_hour_min": 5,
-    "agents_per_hour_max": 15,
-    "peak_hours": [9, 10, 11, 14, 15, 20, 21, 22],
-    "off_peak_hours": [0, 1, 2, 3, 4, 5],
-    "peak_activity_multiplier": 1.5,
-    "off_peak_activity_multiplier": 0.3
-  },
-  
-  "agent_configs": [
-    {
-      "agent_id": 0,
-      "entity_name": "武汉大学",
-      "entity_type": "University",
-      "activity_level": 0.15,
-      "posts_per_hour": 0.08,
-      "comments_per_hour": 0.02,
-      "active_hours": [9, 10, 11, 14, 15, 16, 17],
-      "response_delay_min": 120,
-      "response_delay_max": 360,
-      "sentiment_bias": 0.1,
-      "stance": "neutral",
-      "influence_weight": 4.0
-    },
-    {
-      "agent_id": 1,
-      "entity_name": "杨景媛",
-      "entity_type": "Student",
-      "activity_level": 0.8,
-      "posts_per_hour": 0.5,
-      "comments_per_hour": 2.0,
-      "active_hours": [7, 8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],
-      "response_delay_min": 1,
-      "response_delay_max": 15,
-      "sentiment_bias": -0.3,
-      "stance": "opposing",
-      "influence_weight": 1.5
-    }
-  ],
-  
-  "event_config": {
-    "initial_posts": [
-      {
-        "poster_agent_id": 1,
-        "content": "今天在图书馆发生的事情让我非常失望..."
-      }
-    ],
-    "hot_topics": ["图书馆事件", "学生权益", "校方回应"],
-    "narrative_direction": "事件发酵后各方反应的模拟"
-  },
-  
-  "generation_reasoning": "根据武汉大学图书馆事件的特点：1)涉及学生与校方的冲突，设置学生高活跃度、校方低频但高影响力；2)事件性质属于短期热点，设置72小时模拟时长；3)主要当事人杨景媛设置为高活跃度且持opposing立场..."
-}
-
----
-
-## 5. 预设模拟脚本
-
-**目录：** `backend/scripts/`
-
-脚本是**预设的**，不是动态生成。每次准备模拟时，脚本会被复制到模拟目录。
-
-### 脚本说明
-
-| 脚本 | 说明 |
-|------|------|
-| `run_twitter_simulation.py` | Twitter单平台模拟 |
-| `run_reddit_simulation.py` | Reddit单平台模拟 |
-| `run_parallel_simulation.py` | 双平台并行模拟（推荐） |
-
-### 脚本工作原理
-
-```python
-# 脚本读取配置文件，自动设置所有参数
-class TwitterSimulationRunner:
-    def __init__(self, config_path: str):
-        self.config = self._load_config()  # 读取simulation_config.json
-    
-    def _get_active_agents_for_round(self, env, current_hour, round_num):
-        """根据时间和配置决定本轮激活哪些Agent"""
-        time_config = self.config.get("time_config", {})
-        agent_configs = self.config.get("agent_configs", [])
-        
-        # 1. 检查是否高峰/低谷时段，调整激活数量
-        # 2. 遍历每个Agent配置，检查是否在活跃时间
-        # 3. 根据activity_level计算激活概率
-        # 4. 返回本轮应激活的Agent列表
-        ...
-    
-    async def run(self):
-        # 1. 创建LLM模型
-        # 2. 加载Agent图
-        # 3. 执行初始事件（从event_config读取）
-        # 4. 主循环：根据配置激活不同Agent
-        ...
-```
-
-### 使用方式
+**完整流程示例**:
 
 ```bash
-# 进入模拟目录
-cd backend/uploads/simulations/sim_xxxx/
+# Step 1: 上传文档并生成本体
+curl -X POST http://localhost:5001/api/graph/ontology/generate \
+  -F "files=@document.pdf" \
+  -F "simulation_requirement=模拟学术不端事件的舆论发展" \
+  -F "project_name=学术不端事件"
 
-# 运行模拟
-python run_parallel_simulation.py --config simulation_config.json
+# 返回: project_id, ontology
 
-# 其他选项
-python run_parallel_simulation.py --config simulation_config.json --twitter-only
-python run_parallel_simulation.py --config simulation_config.json --reddit-only
+# Step 2: 构建图谱
+curl -X POST http://localhost:5001/api/graph/build \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_id": "proj_xxx",
+    "graph_name": "学术不端事件图谱"
+  }'
+
+# 返回: task_id
+
+# Step 3: 查询构建进度
+curl http://localhost:5001/api/graph/task/{task_id}
+
+# 等待status=completed, 获取graph_id
+
+# Step 4: 创建模拟
+curl -X POST http://localhost:5001/api/simulation/create \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_id": "proj_xxx",
+    "graph_id": "mirofish_xxx"
+  }'
+
+# 返回: simulation_id
+
+# Step 5: 准备模拟
+curl -X POST http://localhost:5001/api/simulation/prepare \
+  -H "Content-Type: application/json" \
+  -d '{
+    "simulation_id": "sim_xxx",
+    "use_llm_for_profiles": true,
+    "parallel_profile_count": 5
+  }'
+
+# 返回: task_id
+
+# Step 6: 查询准备进度
+curl -X POST http://localhost:5001/api/simulation/prepare/status \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task_id": "task_xxx",
+    "simulation_id": "sim_xxx"
+  }'
+
+# 等待status=completed
+
+# Step 7: 启动模拟
+curl -X POST http://localhost:5001/api/simulation/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "simulation_id": "sim_xxx",
+    "platform": "parallel"
+  }'
+
+# Step 8: 实时查询运行状态
+curl http://localhost:5001/api/simulation/{sim_xxx}/run-status
+
+# Step 9: 停止模拟
+curl -X POST http://localhost:5001/api/simulation/stop \
+  -H "Content-Type: application/json" \
+  -d '{
+    "simulation_id": "sim_xxx"
+  }'
 ```
 
 ---
 
-## 6. Profile文件格式说明
+## 开发指南
 
-**OASIS对两个平台的Profile格式有不同要求：**
+### 添加新的实体类型
 
-### Twitter Profile (CSV格式)
+1. 修改本体生成提示词(`app/services/ontology_generator.py`)
+2. 更新实体类型参考列表
+3. 测试本体生成
 
-```csv
-user_id,user_name,name,bio,friend_count,follower_count,statuses_count,created_at
-0,user0,User Zero,I am user zero with interests in technology.,100,150,500,2023-01-01
-1,user1,User One,Tech enthusiast and coffee lover.,200,250,1000,2023-01-02
-```
+### 添加新的平台支持
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `user_id` | int | 用户ID |
-| `user_name` | string | 用户名 |
-| `name` | string | 显示名称 |
-| `bio` | string | 简介 |
-| `friend_count` | int | 关注数 |
-| `follower_count` | int | 粉丝数 |
-| `statuses_count` | int | 发帖数 |
-| `created_at` | string | 创建日期 |
+1. 在`app/services/oasis_profile_generator.py`添加平台格式转换方法
+2. 在`app/services/simulation_manager.py`更新文件保存逻辑
+3. 在`scripts/`目录添加平台模拟脚本
+4. 更新`SimulationRunner`的平台检测逻辑
 
-### Reddit Profile (JSON详细格式)
+### 自定义LLM提示词
 
-```json
-[
-  {
-    "realname": "Test User",
-    "username": "test_user_123",
-    "bio": "A test user for validation",
-    "persona": "Test User is an enthusiastic participant in social discussions.",
-    "age": 25,
-    "gender": "male",
-    "mbti": "INTJ",
-    "country": "China",
-    "profession": "Student",
-    "interested_topics": ["Technology", "Education"]
-  }
-]
-```
+主要提示词文件:
+- 本体生成: `app/services/ontology_generator.py` → `ONTOLOGY_SYSTEM_PROMPT`
+- 人设生成: `app/services/oasis_profile_generator.py` → `_build_individual_persona_prompt`
+- 配置生成: `app/services/simulation_config_generator.py` → `_generate_time_config`
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `realname` | string | 是 | 真实姓名 |
-| `username` | string | 是 | 用户名 |
-| `bio` | string | 是 | 简介（最大150字符） |
-| `persona` | string | 是 | 详细人设描述 |
-| `age` | int | 否 | 年龄 |
-| `gender` | string | 否 | 性别 |
-| `mbti` | string | 否 | MBTI人格类型 |
-| `country` | string | 否 | 国家 |
-| `profession` | string | 否 | 职业 |
-| `interested_topics` | array | 否 | 感兴趣话题列表 |
+### 调试技巧
+
+1. **查看日志**:
+   ```bash
+   tail -f logs/$(date +%Y-%m-%d).log
+   ```
+
+2. **测试API**:
+   ```bash
+   # 使用httpie
+   http POST localhost:5001/api/graph/ontology/generate \
+     files@document.pdf \
+     simulation_requirement="测试需求"
+   ```
+
+3. **调试模式**:
+   ```python
+   # 在代码中添加断点
+   import pdb; pdb.set_trace()
+   ```
 
 ---
 
-## 7. OASIS平台动作类型
+## 常见问题
 
-### Twitter可用动作
+### Q1: Zep API调用失败
 
-| 动作 | 说明 |
-|------|------|
-| `CREATE_POST` | 发布推文 |
-| `LIKE_POST` | 点赞推文 |
-| `REPOST` | 转发推文 |
-| `FOLLOW` | 关注用户 |
-| `QUOTE_POST` | 引用转发 |
-| `DO_NOTHING` | 不执行动作 |
+**原因**: API密钥错误或网络问题
 
-### Reddit可用动作
+**解决**:
+1. 检查`.env`中的`ZEP_API_KEY`
+2. 测试Zep连接:
+   ```python
+   from zep_cloud.client import Zep
+   client = Zep(api_key="your-key")
+   client.graph.list()
+   ```
+3. 查看日志中的详细错误信息
 
-| 动作 | 说明 |
-|------|------|
-| `CREATE_POST` | 发布帖子 |
-| `CREATE_COMMENT` | 发表评论 |
-| `LIKE_POST` | 点赞帖子 |
-| `DISLIKE_POST` | 踩帖子 |
-| `LIKE_COMMENT` | 点赞评论 |
-| `DISLIKE_COMMENT` | 踩评论 |
-| `SEARCH_POSTS` | 搜索帖子 |
-| `SEARCH_USER` | 搜索用户 |
-| `TREND` | 查看热门 |
-| `REFRESH` | 刷新推荐 |
-| `FOLLOW` | 关注用户 |
-| `MUTE` | 屏蔽用户 |
-| `DO_NOTHING` | 不执行动作 |
+### Q2: LLM生成的JSON解析失败
 
----
+**原因**: LLM输出被截断或格式不正确
 
-# 实体设计原则
+**解决**:
+- 系统已实现JSON修复逻辑
+- 如仍失败,会自动回退到规则生成
+- 可调整`temperature`参数降低随机性
 
-本系统专为社会舆论模拟设计，实体必须是：
+### Q3: 模拟进程启动失败
 
-**可以是：**
-- 具体的个人（有名有姓）
-- 注册的公司、组织、机构
-- 媒体机构
-- 政府部门
-- 高校、NGO等
+**原因**: conda环境未激活或依赖缺失
 
-**不可以是：**
-- 抽象概念（如"技术"、"创新"）
-- 情绪、观点、趋势
-- 泛指的群体（如"用户"、"消费者"）
-
-这是因为后续需要模拟各实体对舆论的反应和传播，抽象概念无法参与这种模拟。
-
----
-
-# 项目状态流转
-
-```
-created → ontology_generated → graph_building → graph_completed
-                                     ↓
-                                  failed
-```
-
----
-
-# 运行模拟
-
-准备完成后，进入模拟数据目录运行预设脚本：
-
+**解决**:
 ```bash
-# 激活conda环境
+# 确保在MiroFish环境中
 conda activate MiroFish
 
-# 进入模拟目录
-cd backend/uploads/simulations/sim_xxxx/
-
-# 运行单平台模拟
-python run_reddit_simulation.py --config simulation_config.json
-# 或
-python run_twitter_simulation.py --config simulation_config.json
-
-# 运行双平台并行模拟（推荐）
-python run_parallel_simulation.py --config simulation_config.json
+# 检查OASIS依赖
+pip install oasis-ai camel-ai
 ```
 
-### 脚本参数
+### Q4: 内存不足
 
-| 参数 | 说明 |
-|------|------|
-| `--config` | 配置文件路径（必填） |
-| `--twitter-only` | 只运行Twitter模拟（仅parallel脚本） |
-| `--reddit-only` | 只运行Reddit模拟（仅parallel脚本） |
+**原因**: 大型文档或大量实体
 
-### 输出文件
+**解决**:
+1. 减小chunk_size
+2. 限制entity_types数量
+3. 使用更小的LLM模型
+4. 增加系统内存
 
-模拟运行后会生成：
-- `twitter_simulation.db` - Twitter模拟数据库
-- `reddit_simulation.db` - Reddit模拟数据库
+### Q5: 文件上传失败
 
-可使用SQLite工具查看模拟结果（帖子、评论、点赞等）
+**原因**: 文件大小超过限制或格式不支持
+
+**解决**:
+- 检查`Config.MAX_CONTENT_LENGTH`(默认50MB)
+- 支持格式:PDF/MD/TXT
+- 确保文件编码为UTF-8
 
 ---
 
-# API调用重试机制
+## 性能优化建议
 
-**文件：** `app/utils/retry.py`
+1. **并行处理**:
+   - 人设生成并行数:`parallel_profile_count=5`
+   - Zep批量上传:`batch_size=3`
 
-为LLM等外部API调用提供自动重试功能，提高系统稳定性。
+2. **缓存策略**:
+   - 项目状态已持久化到文件
+   - 任务状态使用内存缓存
 
-## 重试策略
+3. **容错重试**:
+   - Zep API调用:3次重试
+   - LLM API调用:3次重试
 
-- **最大重试次数**：3次
-- **退避策略**：指数退避（1s → 2s → 4s）
-- **最大延迟**：30秒
-- **随机抖动**：避免请求堆积
-
-## 使用方式
-
-**装饰器方式：**
-```python
-from app.utils.retry import retry_with_backoff
-
-@retry_with_backoff(max_retries=3)
-def call_llm_api():
-    return client.chat.completions.create(...)
-```
-
-**客户端方式：**
-```python
-from app.utils.retry import RetryableAPIClient
-
-retry_client = RetryableAPIClient(max_retries=3)
-result = retry_client.call_with_retry(some_function, arg1, arg2)
-```
-
-**批量处理（单项失败不影响其他）：**
-```python
-results, failures = retry_client.call_batch_with_retry(
-    items=entities,
-    process_func=generate_profile,
-    continue_on_failure=True
-)
-```
-
-## 已应用重试机制的模块
-
-| 模块 | 说明 |
-|------|------|
-| `OasisProfileGenerator` | LLM生成Agent人设 |
-| `SimulationConfigGenerator` | LLM生成模拟配置 |
+4. **日志管理**:
+   - 日志文件自动轮转
+   - 控制台只显示INFO+
 
 ---
 
-# 依赖说明
+## 贡献指南
+
+### 代码规范
+
+1. 遵循PEP 8
+2. 使用类型注解
+3. 添加docstring
+4. 编写单元测试
+
+### 提交规范
 
 ```
-# Flask框架
-flask>=3.0.0
-flask-cors>=4.0.0
-
-# Zep Cloud SDK
-zep-cloud>=2.0.0
-
-# OpenAI SDK（LLM调用）
-openai>=1.0.0
-
-# PDF处理
-PyMuPDF>=1.24.0
-
-# 环境变量
-python-dotenv>=1.0.0
-
-# 数据验证
-pydantic>=2.0.0
-
-# OASIS社交媒体模拟
-oasis-ai>=0.1.0
-camel-ai>=0.2.0
+feat: 添加新功能
+fix: 修复bug
+docs: 更新文档
+refactor: 重构代码
+test: 添加测试
 ```
+
+---
+
+## 许可证
+
+MIT License
+
+---
+
+## 联系方式
+
+- 项目地址: [GitHub链接]
+- 问题反馈: [Issues链接]
+- 技术文档: 见本README
+
+---
+
+**最后更新**: 2025-12-02
+**版本**: v1.0.0
+
