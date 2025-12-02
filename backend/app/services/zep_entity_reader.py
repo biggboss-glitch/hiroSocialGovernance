@@ -3,7 +3,8 @@ Zep实体读取与过滤服务
 从Zep图谱中读取节点，筛选出符合预定义实体类型的节点
 """
 
-from typing import Dict, Any, List, Optional, Set
+import time
+from typing import Dict, Any, List, Optional, Set, Callable, TypeVar
 from dataclasses import dataclass, field
 
 from zep_cloud.client import Zep
@@ -12,6 +13,9 @@ from ..config import Config
 from ..utils.logger import get_logger
 
 logger = get_logger('mirofish.zep_entity_reader')
+
+# 用于泛型返回类型
+T = TypeVar('T')
 
 
 @dataclass
@@ -80,9 +84,48 @@ class ZepEntityReader:
         
         self.client = Zep(api_key=self.api_key)
     
+    def _call_with_retry(
+        self, 
+        func: Callable[[], T], 
+        operation_name: str,
+        max_retries: int = 3,
+        initial_delay: float = 2.0
+    ) -> T:
+        """
+        带重试机制的Zep API调用
+        
+        Args:
+            func: 要执行的函数（无参数的lambda或callable）
+            operation_name: 操作名称，用于日志
+            max_retries: 最大重试次数（默认3次，即最多尝试3次）
+            initial_delay: 初始延迟秒数
+            
+        Returns:
+            API调用结果
+        """
+        last_exception = None
+        delay = initial_delay
+        
+        for attempt in range(max_retries):
+            try:
+                return func()
+            except Exception as e:
+                last_exception = e
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        f"Zep {operation_name} 第 {attempt + 1} 次尝试失败: {str(e)[:100]}, "
+                        f"{delay:.1f}秒后重试..."
+                    )
+                    time.sleep(delay)
+                    delay *= 2  # 指数退避
+                else:
+                    logger.error(f"Zep {operation_name} 在 {max_retries} 次尝试后仍失败: {str(e)}")
+        
+        raise last_exception
+    
     def get_all_nodes(self, graph_id: str) -> List[Dict[str, Any]]:
         """
-        获取图谱的所有节点
+        获取图谱的所有节点（带重试机制）
         
         Args:
             graph_id: 图谱ID
@@ -92,7 +135,11 @@ class ZepEntityReader:
         """
         logger.info(f"获取图谱 {graph_id} 的所有节点...")
         
-        nodes = self.client.graph.node.get_by_graph_id(graph_id=graph_id)
+        # 使用重试机制调用Zep API
+        nodes = self._call_with_retry(
+            func=lambda: self.client.graph.node.get_by_graph_id(graph_id=graph_id),
+            operation_name=f"获取节点(graph={graph_id})"
+        )
         
         nodes_data = []
         for node in nodes:
@@ -109,7 +156,7 @@ class ZepEntityReader:
     
     def get_all_edges(self, graph_id: str) -> List[Dict[str, Any]]:
         """
-        获取图谱的所有边
+        获取图谱的所有边（带重试机制）
         
         Args:
             graph_id: 图谱ID
@@ -119,7 +166,11 @@ class ZepEntityReader:
         """
         logger.info(f"获取图谱 {graph_id} 的所有边...")
         
-        edges = self.client.graph.edge.get_by_graph_id(graph_id=graph_id)
+        # 使用重试机制调用Zep API
+        edges = self._call_with_retry(
+            func=lambda: self.client.graph.edge.get_by_graph_id(graph_id=graph_id),
+            operation_name=f"获取边(graph={graph_id})"
+        )
         
         edges_data = []
         for edge in edges:
@@ -137,7 +188,7 @@ class ZepEntityReader:
     
     def get_node_edges(self, node_uuid: str) -> List[Dict[str, Any]]:
         """
-        获取指定节点的所有相关边
+        获取指定节点的所有相关边（带重试机制）
         
         Args:
             node_uuid: 节点UUID
@@ -146,7 +197,11 @@ class ZepEntityReader:
             边列表
         """
         try:
-            edges = self.client.graph.node.get_entity_edges(node_uuid=node_uuid)
+            # 使用重试机制调用Zep API
+            edges = self._call_with_retry(
+                func=lambda: self.client.graph.node.get_entity_edges(node_uuid=node_uuid),
+                operation_name=f"获取节点边(node={node_uuid[:8]}...)"
+            )
             
             edges_data = []
             for edge in edges:
@@ -288,7 +343,7 @@ class ZepEntityReader:
         entity_uuid: str
     ) -> Optional[EntityNode]:
         """
-        获取单个实体及其完整上下文（边和关联节点）
+        获取单个实体及其完整上下文（边和关联节点，带重试机制）
         
         Args:
             graph_id: 图谱ID
@@ -298,8 +353,11 @@ class ZepEntityReader:
             EntityNode或None
         """
         try:
-            # 获取节点
-            node = self.client.graph.node.get(uuid_=entity_uuid)
+            # 使用重试机制获取节点
+            node = self._call_with_retry(
+                func=lambda: self.client.graph.node.get(uuid_=entity_uuid),
+                operation_name=f"获取节点详情(uuid={entity_uuid[:8]}...)"
+            )
             
             if not node:
                 return None

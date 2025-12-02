@@ -9,13 +9,118 @@ OASIS 双平台并行模拟预设脚本
 import argparse
 import asyncio
 import json
+import logging
 import os
 import random
 import sys
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 添加 backend 目录到路径
+# 脚本固定位于 backend/scripts/ 目录
+_scripts_dir = os.path.dirname(os.path.abspath(__file__))
+_backend_dir = os.path.abspath(os.path.join(_scripts_dir, '..'))
+_project_root = os.path.abspath(os.path.join(_backend_dir, '..'))
+sys.path.insert(0, _scripts_dir)
+sys.path.insert(0, _backend_dir)
+
+# 加载项目根目录的 .env 文件（包含 LLM_API_KEY 等配置）
+from dotenv import load_dotenv
+_env_file = os.path.join(_project_root, '.env')
+if os.path.exists(_env_file):
+    load_dotenv(_env_file)
+    print(f"已加载环境配置: {_env_file}")
+else:
+    # 尝试加载 backend/.env
+    _backend_env = os.path.join(_backend_dir, '.env')
+    if os.path.exists(_backend_env):
+        load_dotenv(_backend_env)
+        print(f"已加载环境配置: {_backend_env}")
+
+
+class UnicodeFormatter(logging.Formatter):
+    """
+    自定义格式化器，将 Unicode 转义序列（如 \\uXXXX）转换为可读字符
+    """
+    
+    # 匹配 \uXXXX 形式的 Unicode 转义序列
+    UNICODE_ESCAPE_PATTERN = None
+    
+    @classmethod
+    def _get_pattern(cls):
+        if cls.UNICODE_ESCAPE_PATTERN is None:
+            import re
+            cls.UNICODE_ESCAPE_PATTERN = re.compile(r'\\u([0-9a-fA-F]{4})')
+        return cls.UNICODE_ESCAPE_PATTERN
+    
+    def format(self, record):
+        # 先获取原始格式化结果
+        result = super().format(record)
+        # 使用正则表达式替换 Unicode 转义序列
+        pattern = self._get_pattern()
+        
+        def replace_unicode(match):
+            try:
+                return chr(int(match.group(1), 16))
+            except (ValueError, OverflowError):
+                return match.group(0)
+        
+        return pattern.sub(replace_unicode, result)
+
+
+def setup_oasis_logging(log_dir: str):
+    """
+    配置 OASIS 的日志，覆盖默认的带时间戳日志文件
+    
+    Args:
+        log_dir: 日志目录路径
+    """
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # 清理旧的日志文件
+    for f in os.listdir(log_dir):
+        old_log = os.path.join(log_dir, f)
+        if os.path.isfile(old_log) and f.endswith('.log'):
+            try:
+                os.remove(old_log)
+            except OSError:
+                pass
+    
+    # 创建自定义格式化器（支持 Unicode 解码）
+    formatter = UnicodeFormatter(
+        "%(levelname)s - %(asctime)s - %(name)s - %(message)s"
+    )
+    
+    # 重新配置 OASIS 使用的日志器，使用固定名称（不带时间戳）
+    loggers_config = {
+        "social.agent": os.path.join(log_dir, "social.agent.log"),
+        "social.twitter": os.path.join(log_dir, "social.twitter.log"),
+        "social.rec": os.path.join(log_dir, "social.rec.log"),
+        "oasis.env": os.path.join(log_dir, "oasis.env.log"),
+        "table": os.path.join(log_dir, "table.log"),
+    }
+    
+    for logger_name, log_file in loggers_config.items():
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(logging.DEBUG)
+        # 清除 OASIS 添加的现有处理器（带时间戳的日志文件）
+        logger.handlers.clear()
+        # 添加新的文件处理器（使用 UTF-8 编码，固定文件名）
+        file_handler = logging.FileHandler(log_file, encoding='utf-8', mode='w')
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+        # 防止日志向上传播（避免重复）
+        logger.propagate = False
+    
+    print(f"日志配置完成，日志目录: {log_dir}")
+
+
+def init_logging_for_simulation(simulation_dir: str):
+    """初始化模拟的日志配置"""
+    log_dir = os.path.join(simulation_dir, "log")
+    setup_oasis_logging(log_dir)
+
 
 from action_logger import ActionLogger
 
@@ -74,16 +179,33 @@ def create_model(config: Dict[str, Any]):
     """
     创建LLM模型
     
-    OASIS使用camel-ai的ModelFactory，配置方式：
-    - 标准OpenAI: 只需设置 OPENAI_API_KEY 环境变量
-    - 自定义API: 设置 OPENAI_API_KEY 和 OPENAI_API_BASE_URL 环境变量
-    """
-    llm_model = config.get("llm_model", "gpt-4o-mini")
-    llm_base_url = config.get("llm_base_url", "")
+    统一使用项目根目录 .env 文件中的配置（优先级最高）：
+    - LLM_API_KEY: API密钥
+    - LLM_BASE_URL: API基础URL
+    - LLM_MODEL_NAME: 模型名称
     
-    # 如果配置了base_url，设置环境变量
+    OASIS使用camel-ai的ModelFactory，需要设置 OPENAI_API_KEY 和 OPENAI_API_BASE_URL 环境变量
+    """
+    # 优先从 .env 读取配置
+    llm_api_key = os.environ.get("LLM_API_KEY", "")
+    llm_base_url = os.environ.get("LLM_BASE_URL", "")
+    llm_model = os.environ.get("LLM_MODEL_NAME", "")
+    
+    # 如果 .env 中没有，则使用 config 作为备用
+    if not llm_model:
+        llm_model = config.get("llm_model", "gpt-4o-mini")
+    
+    # 设置 camel-ai 所需的环境变量
+    if llm_api_key:
+        os.environ["OPENAI_API_KEY"] = llm_api_key
+    
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise ValueError("缺少 API Key 配置，请在项目根目录 .env 文件中设置 LLM_API_KEY")
+    
     if llm_base_url:
         os.environ["OPENAI_API_BASE_URL"] = llm_base_url
+    
+    print(f"LLM配置: model={llm_model}, base_url={llm_base_url[:40] if llm_base_url else '默认'}...")
     
     return ModelFactory.create(
         model_platform=ModelPlatformType.OPENAI,
@@ -452,6 +574,9 @@ async def main():
     
     config = load_config(args.config)
     simulation_dir = os.path.dirname(args.config) or "."
+    
+    # 初始化日志配置（清理旧日志文件，使用固定名称）
+    init_logging_for_simulation(simulation_dir)
     
     # 创建动作日志记录器
     action_log_path = os.path.join(simulation_dir, args.action_log)

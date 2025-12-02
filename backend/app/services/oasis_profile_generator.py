@@ -10,6 +10,7 @@ OASIS Agent Profile生成器
 
 import json
 import random
+import time
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -315,32 +316,54 @@ class OasisProfileGenerator:
         comprehensive_query = f"关于{entity_name}的所有信息、活动、事件、关系和背景"
         
         def search_edges():
-            """搜索边（事实/关系）"""
-            try:
-                return self.zep_client.graph.search(
-                    query=comprehensive_query,
-                    graph_id=self.graph_id,
-                    limit=30,
-                    scope="edges",
-                    reranker="rrf"
-                )
-            except Exception as e:
-                logger.debug(f"Zep边搜索失败: {e}")
-                return None
+            """搜索边（事实/关系）- 带重试机制"""
+            max_retries = 3
+            last_exception = None
+            delay = 2.0
+            
+            for attempt in range(max_retries):
+                try:
+                    return self.zep_client.graph.search(
+                        query=comprehensive_query,
+                        graph_id=self.graph_id,
+                        limit=30,
+                        scope="edges",
+                        reranker="rrf"
+                    )
+                except Exception as e:
+                    last_exception = e
+                    if attempt < max_retries - 1:
+                        logger.debug(f"Zep边搜索第 {attempt + 1} 次失败: {str(e)[:80]}, 重试中...")
+                        time.sleep(delay)
+                        delay *= 2
+                    else:
+                        logger.debug(f"Zep边搜索在 {max_retries} 次尝试后仍失败: {e}")
+            return None
         
         def search_nodes():
-            """搜索节点（实体摘要）"""
-            try:
-                return self.zep_client.graph.search(
-                    query=comprehensive_query,
-                    graph_id=self.graph_id,
-                    limit=20,
-                    scope="nodes",
-                    reranker="rrf"
-                )
-            except Exception as e:
-                logger.debug(f"Zep节点搜索失败: {e}")
-                return None
+            """搜索节点（实体摘要）- 带重试机制"""
+            max_retries = 3
+            last_exception = None
+            delay = 2.0
+            
+            for attempt in range(max_retries):
+                try:
+                    return self.zep_client.graph.search(
+                        query=comprehensive_query,
+                        graph_id=self.graph_id,
+                        limit=20,
+                        scope="nodes",
+                        reranker="rrf"
+                    )
+                except Exception as e:
+                    last_exception = e
+                    if attempt < max_retries - 1:
+                        logger.debug(f"Zep节点搜索第 {attempt + 1} 次失败: {str(e)[:80]}, 重试中...")
+                        time.sleep(delay)
+                        delay *= 2
+                    else:
+                        logger.debug(f"Zep节点搜索在 {max_retries} 次尝试后仍失败: {e}")
+            return None
         
         try:
             # 并行执行edges和nodes搜索
@@ -684,18 +707,20 @@ class OasisProfileGenerator:
    - 立场观点（对话题的态度、可能被激怒/感动的内容）
    - 独特特征（口头禅、特殊经历、个人爱好）
    - 个人记忆（人设的重要部分，要介绍这个个体与事件的关联，以及这个个体在事件中的已有动作与反应）
-3. age: 年龄数字
-4. gender: 性别（男/女）
-5. mbti: MBTI类型
-6. country: 国家
+3. age: 年龄数字（必须是整数）
+4. gender: 性别，必须是英文: "male" 或 "female"
+5. mbti: MBTI类型（如INTJ、ENFP等）
+6. country: 国家（使用中文，如"中国"）
 7. profession: 职业
 8. interested_topics: 感兴趣话题数组
 
 重要:
 - 所有字段值必须是字符串或数字，不要使用换行符
 - persona必须是一段连贯的文字描述
-- 使用中文
-- 内容要与实体信息保持一致"""
+- 使用中文（除了gender字段必须用英文male/female）
+- 内容要与实体信息保持一致
+- age必须是有效的整数，gender必须是"male"或"female"
+"""
 
     def _build_group_persona_prompt(
         self,
@@ -731,17 +756,18 @@ class OasisProfileGenerator:
    - 立场态度（对核心话题的官方立场、面对争议的处理方式）
    - 特殊说明（代表的群体画像、运营习惯）
    - 机构记忆（机构人设的重要部分，要介绍这个机构与事件的关联，以及这个机构在事件中的已有动作与反应）
-3. age: null（机构不适用）
-4. gender: null（机构不适用）
-5. mbti: 可选，用于描述账号风格，如ISTJ代表严谨保守
-6. country: 国家
+3. age: 固定填30（机构账号的虚拟年龄）
+4. gender: 固定填"other"（机构账号使用other表示非个人）
+5. mbti: MBTI类型，用于描述账号风格，如ISTJ代表严谨保守
+6. country: 国家（使用中文，如"中国"）
 7. profession: 机构职能描述
 8. interested_topics: 关注领域数组
 
 重要:
-- 所有字段值必须是字符串、数字或null
+- 所有字段值必须是字符串或数字，不允许null值
 - persona必须是一段连贯的文字描述，不要使用换行符
-- 使用中文
+- 使用中文（除了gender字段必须用英文"other"）
+- age必须是整数30，gender必须是字符串"other"
 - 机构账号发言要符合其身份定位"""
     
     def _generate_profile_rule_based(
@@ -784,6 +810,10 @@ class OasisProfileGenerator:
             return {
                 "bio": f"Official account for {entity_name}. News and updates.",
                 "persona": f"{entity_name} is a media entity that reports news and facilitates public discourse. The account shares timely updates and engages with the audience on current events.",
+                "age": 30,  # 机构虚拟年龄
+                "gender": "other",  # 机构使用other
+                "mbti": "ISTJ",  # 机构风格：严谨保守
+                "country": "中国",
                 "profession": "Media",
                 "interested_topics": ["General News", "Current Events", "Public Affairs"],
             }
@@ -792,6 +822,10 @@ class OasisProfileGenerator:
             return {
                 "bio": f"Official account of {entity_name}.",
                 "persona": f"{entity_name} is an institutional entity that communicates official positions, announcements, and engages with stakeholders on relevant matters.",
+                "age": 30,  # 机构虚拟年龄
+                "gender": "other",  # 机构使用other
+                "mbti": "ISTJ",  # 机构风格：严谨保守
+                "country": "中国",
                 "profession": entity_type,
                 "interested_topics": ["Public Policy", "Community", "Official Announcements"],
             }
@@ -1039,6 +1073,31 @@ class OasisProfileGenerator:
         
         logger.info(f"已保存 {len(profiles)} 个Twitter Profile到 {file_path} (OASIS CSV格式)")
     
+    def _normalize_gender(self, gender: Optional[str]) -> str:
+        """
+        标准化gender字段为OASIS要求的英文格式
+        
+        OASIS要求: male, female, other
+        """
+        if not gender:
+            return "other"
+        
+        gender_lower = gender.lower().strip()
+        
+        # 中文映射
+        gender_map = {
+            "男": "male",
+            "女": "female",
+            "机构": "other",
+            "其他": "other",
+            # 英文已有
+            "male": "male",
+            "female": "female",
+            "other": "other",
+        }
+        
+        return gender_map.get(gender_lower, "other")
+    
     def _save_reddit_json(self, profiles: List[OasisAgentProfile], file_path: str):
         """
         保存Reddit Profile为JSON格式
@@ -1048,26 +1107,30 @@ class OasisProfileGenerator:
         2. 详细格式: realname, username, bio, persona, age, gender, mbti, country, profession, interested_topics
         
         我们使用详细格式，与用户示例数据(36个简单人设.json)保持一致
+        
+        OASIS要求所有字段都必须存在：
+        - age: 整数
+        - gender: "male", "female", 或 "other"
+        - mbti: MBTI类型字符串
+        - country: 国家字符串
         """
         data = []
         for profile in profiles:
             # 使用详细格式（与用户示例兼容）
+            # 确保所有必需字段都有有效值
             item = {
                 "realname": profile.name,
                 "username": profile.user_name,
-                "bio": profile.bio[:150] if profile.bio else "",  # OASIS bio限制150字符
+                "bio": profile.bio[:150] if profile.bio else f"{profile.name}",
                 "persona": profile.persona or f"{profile.name} is a participant in social discussions.",
+                # OASIS必需字段 - 确保都有默认值
+                "age": profile.age if profile.age else 30,
+                "gender": self._normalize_gender(profile.gender),
+                "mbti": profile.mbti if profile.mbti else "ISTJ",
+                "country": profile.country if profile.country else "中国",
             }
             
-            # 添加人设详情字段
-            if profile.age:
-                item["age"] = profile.age
-            if profile.gender:
-                item["gender"] = profile.gender
-            if profile.mbti:
-                item["mbti"] = profile.mbti
-            if profile.country:
-                item["country"] = profile.country
+            # 可选字段
             if profile.profession:
                 item["profession"] = profile.profession
             if profile.interested_topics:
@@ -1078,7 +1141,7 @@ class OasisProfileGenerator:
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         
-        logger.info(f"已保存 {len(profiles)} 个Reddit Profile到 {file_path} (JSON详细格式)")
+        logger.info(f"已保存 {len(profiles)} 个Reddit Profile到 {file_path} (JSON详细格式，已标准化gender字段)")
     
     # 保留旧方法名作为别名，保持向后兼容
     def save_profiles_to_json(

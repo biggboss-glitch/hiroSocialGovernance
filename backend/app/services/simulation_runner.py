@@ -182,11 +182,19 @@ class SimulationRunner:
         '../../uploads/simulations'
     )
     
+    # 脚本目录
+    SCRIPTS_DIR = os.path.join(
+        os.path.dirname(__file__),
+        '../../scripts'
+    )
+    
     # 内存中的运行状态
     _run_states: Dict[str, SimulationRunState] = {}
     _processes: Dict[str, subprocess.Popen] = {}
     _action_queues: Dict[str, Queue] = {}
     _monitor_threads: Dict[str, threading.Thread] = {}
+    _stdout_files: Dict[str, Any] = {}  # 存储 stdout 文件句柄
+    _stderr_files: Dict[str, Any] = {}  # 存储 stderr 文件句柄
     
     @classmethod
     def get_run_state(cls, simulation_id: str) -> Optional[SimulationRunState]:
@@ -310,7 +318,7 @@ class SimulationRunner:
         
         cls._save_run_state(state)
         
-        # 确定运行哪个脚本
+        # 确定运行哪个脚本（脚本位于 backend/scripts/ 目录）
         if platform == "twitter":
             script_name = "run_twitter_simulation.py"
             state.twitter_running = True
@@ -322,7 +330,7 @@ class SimulationRunner:
             state.twitter_running = True
             state.reddit_running = True
         
-        script_path = os.path.join(sim_dir, script_name)
+        script_path = os.path.join(cls.SCRIPTS_DIR, script_name)
         
         if not os.path.exists(script_path):
             raise ValueError(f"脚本不存在: {script_path}")
@@ -333,23 +341,35 @@ class SimulationRunner:
         
         # 启动模拟进程
         try:
-            # 构建运行命令
+            # 构建运行命令，使用完整路径
+            action_log_path = os.path.join(sim_dir, "actions.jsonl")
+            
             cmd = [
                 sys.executable,  # Python解释器
                 script_path,
-                "--config", "simulation_config.json",
-                "--action-log", "actions.jsonl",  # 动作日志文件
+                "--config", config_path,  # 使用完整配置文件路径
+                "--action-log", action_log_path,  # 动作日志文件完整路径
             ]
             
-            # 设置工作目录为模拟目录
+            # 创建输出日志文件，避免 stdout/stderr 管道缓冲区满导致进程阻塞
+            stdout_log_path = os.path.join(sim_dir, "simulation_stdout.log")
+            stderr_log_path = os.path.join(sim_dir, "simulation_stderr.log")
+            stdout_file = open(stdout_log_path, 'w', encoding='utf-8')
+            stderr_file = open(stderr_log_path, 'w', encoding='utf-8')
+            
+            # 设置工作目录为模拟目录（数据库等文件会生成在此）
             process = subprocess.Popen(
                 cmd,
                 cwd=sim_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=stdout_file,
+                stderr=stderr_file,
                 text=True,
                 bufsize=1,
             )
+            
+            # 保存文件句柄以便后续关闭
+            cls._stdout_files[simulation_id] = stdout_file
+            cls._stderr_files[simulation_id] = stderr_file
             
             state.process_pid = process.pid
             state.runner_status = RunnerStatus.RUNNING
@@ -434,8 +454,16 @@ class SimulationRunner:
                 logger.info(f"模拟完成: {simulation_id}")
             else:
                 state.runner_status = RunnerStatus.FAILED
-                stderr = process.stderr.read() if process.stderr else ""
-                state.error = f"进程退出码: {exit_code}, 错误: {stderr[:500]}"
+                # 从 stderr 日志文件读取错误信息
+                stderr_log_path = os.path.join(sim_dir, "simulation_stderr.log")
+                stderr = ""
+                try:
+                    if os.path.exists(stderr_log_path):
+                        with open(stderr_log_path, 'r', encoding='utf-8') as f:
+                            stderr = f.read()
+                except Exception:
+                    pass
+                state.error = f"进程退出码: {exit_code}, 错误: {stderr[-1000:]}"  # 取最后1000字符
                 logger.error(f"模拟失败: {simulation_id}, error={state.error}")
             
             state.twitter_running = False
@@ -449,9 +477,23 @@ class SimulationRunner:
             cls._save_run_state(state)
         
         finally:
-            # 清理
+            # 清理进程资源
             cls._processes.pop(simulation_id, None)
             cls._action_queues.pop(simulation_id, None)
+            
+            # 关闭日志文件句柄
+            if simulation_id in cls._stdout_files:
+                try:
+                    cls._stdout_files[simulation_id].close()
+                except Exception:
+                    pass
+                cls._stdout_files.pop(simulation_id, None)
+            if simulation_id in cls._stderr_files:
+                try:
+                    cls._stderr_files[simulation_id].close()
+                except Exception:
+                    pass
+                cls._stderr_files.pop(simulation_id, None)
     
     @classmethod
     def stop_simulation(cls, simulation_id: str) -> SimulationRunState:

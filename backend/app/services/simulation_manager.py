@@ -127,12 +127,6 @@ class SimulationManager:
         '../../uploads/simulations'
     )
     
-    # 预设脚本目录
-    SCRIPTS_DIR = os.path.join(
-        os.path.dirname(__file__),
-        '../../scripts'
-    )
-    
     def __init__(self):
         # 确保目录存在
         os.makedirs(self.SIMULATION_DATA_DIR, exist_ok=True)
@@ -426,27 +420,8 @@ class SimulationManager:
                     total=3
                 )
             
-            # ========== 阶段4: 复制预设脚本 ==========
-            script_files = ["run_twitter_simulation.py", "run_reddit_simulation.py", 
-                           "run_parallel_simulation.py", "action_logger.py"]
-            
-            if progress_callback:
-                progress_callback(
-                    "copying_scripts", 0, 
-                    "开始准备脚本...",
-                    current=0,
-                    total=len(script_files)
-                )
-            
-            self._copy_preset_scripts(sim_dir)
-            
-            if progress_callback:
-                progress_callback(
-                    "copying_scripts", 100, 
-                    f"完成，共 {len(script_files)} 个脚本",
-                    current=len(script_files),
-                    total=len(script_files)
-                )
+            # 注意：运行脚本保留在 backend/scripts/ 目录，不再复制到模拟目录
+            # 启动模拟时，simulation_runner 会从 scripts/ 目录运行脚本
             
             # 更新状态
             state.status = SimulationStatus.READY
@@ -465,24 +440,6 @@ class SimulationManager:
             state.error = str(e)
             self._save_simulation_state(state)
             raise
-    
-    def _copy_preset_scripts(self, sim_dir: str):
-        """复制预设脚本到模拟目录"""
-        scripts = [
-            "run_twitter_simulation.py",
-            "run_reddit_simulation.py",
-            "run_parallel_simulation.py"
-        ]
-        
-        for script in scripts:
-            src = os.path.join(self.SCRIPTS_DIR, script)
-            dst = os.path.join(sim_dir, script)
-            
-            if os.path.exists(src):
-                shutil.copy2(src, dst)
-                logger.debug(f"复制脚本: {script}")
-            else:
-                logger.warning(f"预设脚本不存在: {src}")
     
     def get_simulation(self, simulation_id: str) -> Optional[SimulationState]:
         """获取模拟状态"""
@@ -531,21 +488,22 @@ class SimulationManager:
         """获取运行说明"""
         sim_dir = self._get_simulation_dir(simulation_id)
         config_path = os.path.join(sim_dir, "simulation_config.json")
+        scripts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../scripts'))
         
         return {
             "simulation_dir": sim_dir,
+            "scripts_dir": scripts_dir,
             "config_file": config_path,
             "commands": {
-                "twitter": f"python run_twitter_simulation.py --config simulation_config.json",
-                "reddit": f"python run_reddit_simulation.py --config simulation_config.json",
-                "parallel": f"python run_parallel_simulation.py --config simulation_config.json",
+                "twitter": f"python {scripts_dir}/run_twitter_simulation.py --config {config_path}",
+                "reddit": f"python {scripts_dir}/run_reddit_simulation.py --config {config_path}",
+                "parallel": f"python {scripts_dir}/run_parallel_simulation.py --config {config_path}",
             },
             "instructions": (
-                f"1. 进入模拟目录: cd {sim_dir}\n"
-                f"2. 激活conda环境: conda activate MiroFish\n"
-                f"3. 运行模拟:\n"
-                f"   - 单独运行Twitter: python run_twitter_simulation.py --config simulation_config.json\n"
-                f"   - 单独运行Reddit: python run_reddit_simulation.py --config simulation_config.json\n"
-                f"   - 并行运行双平台: python run_parallel_simulation.py --config simulation_config.json"
+                f"1. 激活conda环境: conda activate MiroFish\n"
+                f"2. 运行模拟 (脚本位于 {scripts_dir}):\n"
+                f"   - 单独运行Twitter: python {scripts_dir}/run_twitter_simulation.py --config {config_path}\n"
+                f"   - 单独运行Reddit: python {scripts_dir}/run_reddit_simulation.py --config {config_path}\n"
+                f"   - 并行运行双平台: python {scripts_dir}/run_parallel_simulation.py --config {config_path}"
             )
         }

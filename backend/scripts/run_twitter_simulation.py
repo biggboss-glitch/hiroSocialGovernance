@@ -9,6 +9,7 @@ OASIS Twitter模拟预设脚本
 import argparse
 import asyncio
 import json
+import logging
 import os
 import random
 import sys
@@ -16,7 +17,76 @@ from datetime import datetime
 from typing import Dict, Any, List
 
 # 添加项目路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_scripts_dir = os.path.dirname(os.path.abspath(__file__))
+_backend_dir = os.path.abspath(os.path.join(_scripts_dir, '..'))
+_project_root = os.path.abspath(os.path.join(_backend_dir, '..'))
+sys.path.insert(0, _scripts_dir)
+sys.path.insert(0, _backend_dir)
+
+# 加载项目根目录的 .env 文件（包含 LLM_API_KEY 等配置）
+from dotenv import load_dotenv
+_env_file = os.path.join(_project_root, '.env')
+if os.path.exists(_env_file):
+    load_dotenv(_env_file)
+else:
+    _backend_env = os.path.join(_backend_dir, '.env')
+    if os.path.exists(_backend_env):
+        load_dotenv(_backend_env)
+
+
+import re
+
+
+class UnicodeFormatter(logging.Formatter):
+    """自定义格式化器，将 Unicode 转义序列转换为可读字符"""
+    
+    UNICODE_ESCAPE_PATTERN = re.compile(r'\\u([0-9a-fA-F]{4})')
+    
+    def format(self, record):
+        result = super().format(record)
+        
+        def replace_unicode(match):
+            try:
+                return chr(int(match.group(1), 16))
+            except (ValueError, OverflowError):
+                return match.group(0)
+        
+        return self.UNICODE_ESCAPE_PATTERN.sub(replace_unicode, result)
+
+
+def setup_oasis_logging(log_dir: str):
+    """配置 OASIS 的日志，使用固定名称的日志文件"""
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # 清理旧的日志文件
+    for f in os.listdir(log_dir):
+        old_log = os.path.join(log_dir, f)
+        if os.path.isfile(old_log) and f.endswith('.log'):
+            try:
+                os.remove(old_log)
+            except OSError:
+                pass
+    
+    formatter = UnicodeFormatter("%(levelname)s - %(asctime)s - %(name)s - %(message)s")
+    
+    loggers_config = {
+        "social.agent": os.path.join(log_dir, "social.agent.log"),
+        "social.twitter": os.path.join(log_dir, "social.twitter.log"),
+        "social.rec": os.path.join(log_dir, "social.rec.log"),
+        "oasis.env": os.path.join(log_dir, "oasis.env.log"),
+        "table": os.path.join(log_dir, "table.log"),
+    }
+    
+    for logger_name, log_file in loggers_config.items():
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(logging.DEBUG)
+        logger.handlers.clear()
+        file_handler = logging.FileHandler(log_file, encoding='utf-8', mode='w')
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+        logger.propagate = False
+
 
 try:
     from camel.models import ModelFactory
@@ -75,20 +145,31 @@ class TwitterSimulationRunner:
         """
         创建LLM模型
         
-        OASIS使用camel-ai的ModelFactory，配置方式：
-        - 标准OpenAI: 只需设置 OPENAI_API_KEY 环境变量
-        - 自定义API: 设置 OPENAI_API_KEY 和 OPENAI_API_BASE_URL 环境变量
-        
-        配置文件中的 llm_model 对应 model_type
+        统一使用项目根目录 .env 文件中的配置（优先级最高）：
+        - LLM_API_KEY: API密钥
+        - LLM_BASE_URL: API基础URL
+        - LLM_MODEL_NAME: 模型名称
         """
-        import os
+        # 优先从 .env 读取配置
+        llm_api_key = os.environ.get("LLM_API_KEY", "")
+        llm_base_url = os.environ.get("LLM_BASE_URL", "")
+        llm_model = os.environ.get("LLM_MODEL_NAME", "")
         
-        llm_model = self.config.get("llm_model", "gpt-4o-mini")
-        llm_base_url = self.config.get("llm_base_url", "")
+        # 如果 .env 中没有，则使用 config 作为备用
+        if not llm_model:
+            llm_model = self.config.get("llm_model", "gpt-4o-mini")
         
-        # 如果配置了base_url，设置环境变量（OASIS通过环境变量读取）
+        # 设置 camel-ai 所需的环境变量
+        if llm_api_key:
+            os.environ["OPENAI_API_KEY"] = llm_api_key
+        
+        if not os.environ.get("OPENAI_API_KEY"):
+            raise ValueError("缺少 API Key 配置，请在项目根目录 .env 文件中设置 LLM_API_KEY")
+        
         if llm_base_url:
             os.environ["OPENAI_API_BASE_URL"] = llm_base_url
+        
+        print(f"LLM配置: model={llm_model}, base_url={llm_base_url[:40] if llm_base_url else '默认'}...")
         
         return ModelFactory.create(
             model_platform=ModelPlatformType.OPENAI,
@@ -303,6 +384,10 @@ async def main():
     if not os.path.exists(args.config):
         print(f"错误: 配置文件不存在: {args.config}")
         sys.exit(1)
+    
+    # 初始化日志配置（使用固定文件名，清理旧日志）
+    simulation_dir = os.path.dirname(args.config) or "."
+    setup_oasis_logging(os.path.join(simulation_dir, "log"))
     
     runner = TwitterSimulationRunner(args.config)
     await runner.run()

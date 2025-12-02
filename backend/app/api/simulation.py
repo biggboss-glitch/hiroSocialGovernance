@@ -221,6 +221,8 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
     1. state.json 存在且 status 为 "ready"
     2. 必要文件存在：reddit_profiles.json, twitter_profiles.csv, simulation_config.json
     
+    注意：运行脚本(run_*.py)保留在 backend/scripts/ 目录，不再复制到模拟目录
+    
     Args:
         simulation_id: 模拟ID
         
@@ -236,15 +238,12 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
     if not os.path.exists(simulation_dir):
         return False, {"reason": "模拟目录不存在"}
     
-    # 必要文件列表
+    # 必要文件列表（不包括脚本，脚本位于 backend/scripts/）
     required_files = [
         "state.json",
         "simulation_config.json",
         "reddit_profiles.json",
-        "twitter_profiles.csv",
-        "run_reddit_simulation.py",
-        "run_twitter_simulation.py",
-        "run_parallel_simulation.py"
+        "twitter_profiles.csv"
     ]
     
     # 检查文件是否存在
@@ -272,9 +271,13 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
             state_data = json.load(f)
         
         status = state_data.get("status", "")
+        config_generated = state_data.get("config_generated", False)
+        
+        # 详细日志
+        logger.debug(f"检测模拟准备状态: {simulation_id}, status={status}, config_generated={config_generated}")
         
         # 如果状态是ready或preparing（已有文件），认为准备完成
-        if status in ["ready", "preparing"] and state_data.get("config_generated"):
+        if status in ["ready", "preparing"] and config_generated:
             # 获取文件统计信息
             profiles_file = os.path.join(simulation_dir, "reddit_profiles.json")
             config_file = os.path.join(simulation_dir, "simulation_config.json")
@@ -298,21 +301,23 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
                 except Exception as e:
                     logger.warning(f"自动更新状态失败: {e}")
             
+            logger.info(f"模拟 {simulation_id} 检测结果: 已准备完成 (status={status}, config_generated={config_generated})")
             return True, {
                 "status": status,
                 "entities_count": state_data.get("entities_count", 0),
                 "profiles_count": profiles_count,
                 "entity_types": state_data.get("entity_types", []),
-                "config_generated": state_data.get("config_generated", False),
+                "config_generated": config_generated,
                 "created_at": state_data.get("created_at"),
                 "updated_at": state_data.get("updated_at"),
                 "existing_files": existing_files
             }
         else:
+            logger.warning(f"模拟 {simulation_id} 检测结果: 未准备完成 (status={status}, config_generated={config_generated})")
             return False, {
-                "reason": f"状态不是ready: {status}",
+                "reason": f"状态不是ready或config_generated为false: status={status}, config_generated={config_generated}",
                 "status": status,
-                "config_generated": state_data.get("config_generated", False)
+                "config_generated": config_generated
             }
             
     except Exception as e:
@@ -386,10 +391,13 @@ def prepare_simulation():
         
         # 检查是否强制重新生成
         force_regenerate = data.get('force_regenerate', False)
+        logger.info(f"开始处理 /prepare 请求: simulation_id={simulation_id}, force_regenerate={force_regenerate}")
         
         # 检查是否已经准备完成（避免重复生成）
         if not force_regenerate:
+            logger.debug(f"检查模拟 {simulation_id} 是否已准备完成...")
             is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
+            logger.debug(f"检查结果: is_prepared={is_prepared}, prepare_info={prepare_info}")
             if is_prepared:
                 logger.info(f"模拟 {simulation_id} 已准备完成，跳过重复生成")
                 return jsonify({
@@ -402,6 +410,8 @@ def prepare_simulation():
                         "prepare_info": prepare_info
                     }
                 })
+            else:
+                logger.info(f"模拟 {simulation_id} 未准备完成，将启动准备任务")
         
         # 从项目获取必要信息
         project = ProjectManager.get_project(state.project_id)
@@ -850,25 +860,27 @@ def download_simulation_config(simulation_id: str):
         }), 500
 
 
-@simulation_bp.route('/<simulation_id>/script/<script_name>/download', methods=['GET'])
-def download_simulation_script(simulation_id: str, script_name: str):
+@simulation_bp.route('/script/<script_name>/download', methods=['GET'])
+def download_simulation_script(script_name: str):
     """
-    下载模拟脚本文件
+    下载模拟运行脚本文件（通用脚本，位于 backend/scripts/）
     
     script_name可选值：
         - run_twitter_simulation.py
         - run_reddit_simulation.py
         - run_parallel_simulation.py
+        - action_logger.py
     """
     try:
-        manager = SimulationManager()
-        sim_dir = manager._get_simulation_dir(simulation_id)
+        # 脚本位于 backend/scripts/ 目录
+        scripts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../scripts'))
         
         # 验证脚本名称
         allowed_scripts = [
             "run_twitter_simulation.py",
             "run_reddit_simulation.py", 
-            "run_parallel_simulation.py"
+            "run_parallel_simulation.py",
+            "action_logger.py"
         ]
         
         if script_name not in allowed_scripts:
@@ -877,12 +889,12 @@ def download_simulation_script(simulation_id: str, script_name: str):
                 "error": f"未知脚本: {script_name}，可选: {allowed_scripts}"
             }), 400
         
-        script_path = os.path.join(sim_dir, script_name)
+        script_path = os.path.join(scripts_dir, script_name)
         
         if not os.path.exists(script_path):
             return jsonify({
                 "success": False,
-                "error": "脚本文件不存在，请先调用 /prepare 接口"
+                "error": f"脚本文件不存在: {script_name}"
             }), 404
         
         return send_file(
