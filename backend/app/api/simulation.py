@@ -276,8 +276,16 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
         # 详细日志
         logger.debug(f"检测模拟准备状态: {simulation_id}, status={status}, config_generated={config_generated}")
         
-        # 如果状态是ready或preparing（已有文件），认为准备完成
-        if status in ["ready", "preparing"] and config_generated:
+        # 如果 config_generated=True 且文件存在，认为准备完成
+        # 以下状态都说明准备工作已完成：
+        # - ready: 准备完成，可以运行
+        # - preparing: 如果 config_generated=True 说明已完成
+        # - running: 正在运行，说明准备早就完成了
+        # - completed: 运行完成，说明准备早就完成了
+        # - stopped: 已停止，说明准备早就完成了
+        # - failed: 运行失败（但准备是完成的）
+        prepared_statuses = ["ready", "preparing", "running", "completed", "stopped", "failed"]
+        if status in prepared_statuses and config_generated:
             # 获取文件统计信息
             profiles_file = os.path.join(simulation_dir, "reddit_profiles.json")
             config_file = os.path.join(simulation_dir, "simulation_config.json")
@@ -315,7 +323,7 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
         else:
             logger.warning(f"模拟 {simulation_id} 检测结果: 未准备完成 (status={status}, config_generated={config_generated})")
             return False, {
-                "reason": f"状态不是ready或config_generated为false: status={status}, config_generated={config_generated}",
+                "reason": f"状态不在已准备列表中或config_generated为false: status={status}, config_generated={config_generated}",
                 "status": status,
                 "config_generated": config_generated
             }
@@ -1040,11 +1048,33 @@ def start_simulation():
                 "error": f"模拟不存在: {simulation_id}"
             }), 404
         
+        # 智能处理状态：如果准备工作已完成，允许重新启动
         if state.status != SimulationStatus.READY:
-            return jsonify({
-                "success": False,
-                "error": f"模拟未准备好，当前状态: {state.status.value}，请先调用 /prepare 接口"
-            }), 400
+            # 检查准备工作是否已完成
+            is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
+            
+            if is_prepared:
+                # 准备工作已完成，检查是否有正在运行的进程
+                if state.status == SimulationStatus.RUNNING:
+                    # 检查模拟进程是否真的在运行
+                    run_state = SimulationRunner.get_run_state(simulation_id)
+                    if run_state and run_state.runner_status.value == "running":
+                        # 进程确实在运行
+                        return jsonify({
+                            "success": False,
+                            "error": f"模拟正在运行中，请先调用 /stop 接口停止"
+                        }), 400
+                
+                # 进程不存在或已结束，重置状态为 ready
+                logger.info(f"模拟 {simulation_id} 准备工作已完成，重置状态为 ready（原状态: {state.status.value}）")
+                state.status = SimulationStatus.READY
+                manager._save_simulation_state(state)
+            else:
+                # 准备工作未完成
+                return jsonify({
+                    "success": False,
+                    "error": f"模拟未准备好，当前状态: {state.status.value}，请先调用 /prepare 接口"
+                }), 400
         
         # 启动模拟
         run_state = SimulationRunner.start_simulation(simulation_id, platform)
