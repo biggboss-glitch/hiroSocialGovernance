@@ -324,17 +324,30 @@ class SimulationManager:
                         item_name=msg
                     )
             
+            # 设置实时保存的文件路径（优先使用 Reddit JSON 格式）
+            realtime_output_path = None
+            realtime_platform = "reddit"
+            if state.enable_reddit:
+                realtime_output_path = os.path.join(sim_dir, "reddit_profiles.json")
+                realtime_platform = "reddit"
+            elif state.enable_twitter:
+                realtime_output_path = os.path.join(sim_dir, "twitter_profiles.csv")
+                realtime_platform = "twitter"
+            
             profiles = generator.generate_profiles_from_entities(
                 entities=filtered.entities,
                 use_llm=use_llm_for_profiles,
                 progress_callback=profile_progress,
                 graph_id=state.graph_id,  # 传入graph_id用于Zep检索
-                parallel_count=parallel_profile_count  # 并行生成数量
+                parallel_count=parallel_profile_count,  # 并行生成数量
+                realtime_output_path=realtime_output_path,  # 实时保存路径
+                output_platform=realtime_platform  # 输出格式
             )
             
             state.profiles_count = len(profiles)
             
             # 保存Profile文件（注意：Twitter使用CSV格式，Reddit使用JSON格式）
+            # Reddit 已经在生成过程中实时保存了，这里再保存一次确保完整性
             if progress_callback:
                 progress_callback(
                     "generating_profiles", 95, 
