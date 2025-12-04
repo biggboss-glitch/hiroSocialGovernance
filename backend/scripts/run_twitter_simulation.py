@@ -54,6 +54,20 @@ class UnicodeFormatter(logging.Formatter):
         return self.UNICODE_ESCAPE_PATTERN.sub(replace_unicode, result)
 
 
+class MaxTokensWarningFilter(logging.Filter):
+    """过滤掉 camel-ai 关于 max_tokens 的警告（我们故意不设置 max_tokens，让模型自行决定）"""
+    
+    def filter(self, record):
+        # 过滤掉包含 max_tokens 警告的日志
+        if "max_tokens" in record.getMessage() and "Invalid or missing" in record.getMessage():
+            return False
+        return True
+
+
+# 在模块加载时立即添加过滤器，确保在 camel 代码执行前生效
+logging.getLogger().addFilter(MaxTokensWarningFilter())
+
+
 def setup_oasis_logging(log_dir: str):
     """配置 OASIS 的日志，使用固定名称的日志文件"""
     os.makedirs(log_dir, exist_ok=True)
@@ -296,6 +310,7 @@ class TwitterSimulationRunner:
             agent_graph=agent_graph,
             platform=oasis.DefaultPlatformType.TWITTER,
             database_path=db_path,
+            semaphore=30,  # 限制最大并发 LLM 请求数，防止 API 过载
         )
         
         await env.reset()
