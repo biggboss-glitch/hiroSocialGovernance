@@ -469,6 +469,11 @@ async def run_twitter_simulation(
     event_config = config.get("event_config", {})
     initial_posts = event_config.get("initial_posts", [])
     
+    # 记录 round 0 开始（初始事件阶段）
+    if action_logger:
+        action_logger.log_round_start(0, 0)  # round 0, simulated_hour 0
+    
+    initial_action_count = 0
     if initial_posts:
         initial_actions = {}
         for post in initial_posts:
@@ -490,12 +495,17 @@ async def run_twitter_simulation(
                         action_args={"content": content[:100] + "..." if len(content) > 100 else content}
                     )
                     total_actions += 1
+                    initial_action_count += 1
             except Exception:
                 pass
         
         if initial_actions:
             await env.step(initial_actions)
             log_info(f"已发布 {len(initial_actions)} 条初始帖子")
+    
+    # 记录 round 0 结束
+    if action_logger:
+        action_logger.log_round_end(0, initial_action_count)
     
     # 主模拟循环
     time_config = config.get("time_config", {})
@@ -521,11 +531,15 @@ async def run_twitter_simulation(
             env, config, simulated_hour, round_num
         )
         
-        if not active_agents:
-            continue
-        
+        # 无论是否有活跃agent，都记录round开始
         if action_logger:
             action_logger.log_round_start(round_num + 1, simulated_hour)
+        
+        if not active_agents:
+            # 没有活跃agent时也记录round结束（actions_count=0）
+            if action_logger:
+                action_logger.log_round_end(round_num + 1, 0)
+            continue
         
         actions = {agent: LLMAction() for _, agent in active_agents}
         await env.step(actions)
@@ -632,6 +646,11 @@ async def run_reddit_simulation(
     event_config = config.get("event_config", {})
     initial_posts = event_config.get("initial_posts", [])
     
+    # 记录 round 0 开始（初始事件阶段）
+    if action_logger:
+        action_logger.log_round_start(0, 0)  # round 0, simulated_hour 0
+    
+    initial_action_count = 0
     if initial_posts:
         initial_actions = {}
         for post in initial_posts:
@@ -661,12 +680,17 @@ async def run_reddit_simulation(
                         action_args={"content": content[:100] + "..." if len(content) > 100 else content}
                     )
                     total_actions += 1
+                    initial_action_count += 1
             except Exception:
                 pass
         
         if initial_actions:
             await env.step(initial_actions)
             log_info(f"已发布 {len(initial_actions)} 条初始帖子")
+    
+    # 记录 round 0 结束
+    if action_logger:
+        action_logger.log_round_end(0, initial_action_count)
     
     # 主模拟循环
     time_config = config.get("time_config", {})
@@ -692,11 +716,15 @@ async def run_reddit_simulation(
             env, config, simulated_hour, round_num
         )
         
-        if not active_agents:
-            continue
-        
+        # 无论是否有活跃agent，都记录round开始
         if action_logger:
             action_logger.log_round_start(round_num + 1, simulated_hour)
+        
+        if not active_agents:
+            # 没有活跃agent时也记录round结束（actions_count=0）
+            if action_logger:
+                action_logger.log_round_end(round_num + 1, 0)
+            continue
         
         actions = {agent: LLMAction() for _, agent in active_agents}
         await env.step(actions)
