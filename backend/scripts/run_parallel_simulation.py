@@ -251,12 +251,10 @@ def fetch_new_actions_from_db(
             except json.JSONDecodeError:
                 action_args = {}
             
-            # 精简 action_args，只保留关键字段
+            # 精简 action_args，只保留关键字段（保留完整内容，不截断）
             simplified_args = {}
             if 'content' in action_args:
-                content = action_args['content']
-                # 截断过长的内容
-                simplified_args['content'] = content[:200] + '...' if len(content) > 200 else content
+                simplified_args['content'] = action_args['content']
             if 'post_id' in action_args:
                 simplified_args['post_id'] = action_args['post_id']
             if 'comment_id' in action_args:
@@ -492,7 +490,7 @@ async def run_twitter_simulation(
                         agent_id=agent_id,
                         agent_name=agent_names.get(agent_id, f"Agent_{agent_id}"),
                         action_type="CREATE_POST",
-                        action_args={"content": content[:100] + "..." if len(content) > 100 else content}
+                        action_args={"content": content}
                     )
                     total_actions += 1
                     initial_action_count += 1
@@ -677,7 +675,7 @@ async def run_reddit_simulation(
                         agent_id=agent_id,
                         agent_name=agent_names.get(agent_id, f"Agent_{agent_id}"),
                         action_type="CREATE_POST",
-                        action_args={"content": content[:100] + "..." if len(content) > 100 else content}
+                        action_args={"content": content}
                     )
                     total_actions += 1
                     initial_action_count += 1

@@ -63,9 +63,6 @@ class AgentActivity:
     def _describe_create_post(self) -> str:
         content = self.action_args.get("content", "")
         if content:
-            # 截取内容，避免过长
-            if len(content) > 300:
-                content = content[:300] + "..."
             return f"发布了一条帖子：「{content}」"
         return "发布了一条帖子"
     
@@ -86,7 +83,7 @@ class AgentActivity:
         content = self.action_args.get("content", "")
         if quoted_id:
             if content:
-                return f"引用帖子#{quoted_id}并评论：「{content[:100]}{'...' if len(content) > 100 else ''}」"
+                return f"引用帖子#{quoted_id}并评论：「{content}」"
             return f"引用了帖子#{quoted_id}"
         return "引用了一条帖子"
     
@@ -98,8 +95,6 @@ class AgentActivity:
         content = self.action_args.get("content", "")
         post_id = self.action_args.get("post_id", "")
         if content:
-            if len(content) > 200:
-                content = content[:200] + "..."
             base = f"评论道：「{content}」"
             if post_id:
                 base = f"在帖子#{post_id}下{base}"
