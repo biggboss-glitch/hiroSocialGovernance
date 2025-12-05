@@ -1114,7 +1114,8 @@ def start_simulation():
     请求（JSON）：
         {
             "simulation_id": "sim_xxxx",  // 必填，模拟ID
-            "platform": "parallel"         // 可选: twitter / reddit / parallel (默认)
+            "platform": "parallel",        // 可选: twitter / reddit / parallel (默认)
+            "max_rounds": 100              // 可选: 最大模拟轮数，用于截断过长的模拟
         }
     
     返回：
@@ -1141,6 +1142,22 @@ def start_simulation():
             }), 400
         
         platform = data.get('platform', 'parallel')
+        max_rounds = data.get('max_rounds')  # 可选：最大模拟轮数
+        
+        # 验证 max_rounds 参数
+        if max_rounds is not None:
+            try:
+                max_rounds = int(max_rounds)
+                if max_rounds <= 0:
+                    return jsonify({
+                        "success": False,
+                        "error": "max_rounds 必须是正整数"
+                    }), 400
+            except (ValueError, TypeError):
+                return jsonify({
+                    "success": False,
+                    "error": "max_rounds 必须是有效的整数"
+                }), 400
         
         if platform not in ['twitter', 'reddit', 'parallel']:
             return jsonify({
@@ -1187,15 +1204,19 @@ def start_simulation():
                 }), 400
         
         # 启动模拟
-        run_state = SimulationRunner.start_simulation(simulation_id, platform)
+        run_state = SimulationRunner.start_simulation(simulation_id, platform, max_rounds)
         
         # 更新模拟状态
         state.status = SimulationStatus.RUNNING
         manager._save_simulation_state(state)
         
+        response_data = run_state.to_dict()
+        if max_rounds:
+            response_data['max_rounds_applied'] = max_rounds
+        
         return jsonify({
             "success": True,
-            "data": run_state.to_dict()
+            "data": response_data
         })
         
     except ValueError as e:

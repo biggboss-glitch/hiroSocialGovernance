@@ -15,6 +15,11 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
     
+    # 设置JSON编码：确保中文直接显示（而不是 \uXXXX 格式）
+    # Flask >= 2.3 使用 app.json.ensure_ascii，旧版本使用 JSON_AS_ASCII 配置
+    if hasattr(app, 'json') and hasattr(app.json, 'ensure_ascii'):
+        app.json.ensure_ascii = False
+    
     # 设置日志
     logger = setup_logger('mirofish')
     

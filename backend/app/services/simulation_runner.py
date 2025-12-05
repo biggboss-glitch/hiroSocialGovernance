@@ -280,7 +280,8 @@ class SimulationRunner:
     def start_simulation(
         cls,
         simulation_id: str,
-        platform: str = "parallel"  # twitter / reddit / parallel
+        platform: str = "parallel",  # twitter / reddit / parallel
+        max_rounds: int = None  # 最大模拟轮数（可选，用于截断过长的模拟）
     ) -> SimulationRunState:
         """
         启动模拟
@@ -288,6 +289,7 @@ class SimulationRunner:
         Args:
             simulation_id: 模拟ID
             platform: 运行平台 (twitter/reddit/parallel)
+            max_rounds: 最大模拟轮数（可选，用于截断过长的模拟）
             
         Returns:
             SimulationRunState
@@ -312,6 +314,13 @@ class SimulationRunner:
         total_hours = time_config.get("total_simulation_hours", 72)
         minutes_per_round = time_config.get("minutes_per_round", 30)
         total_rounds = int(total_hours * 60 / minutes_per_round)
+        
+        # 如果指定了最大轮数，则截断
+        if max_rounds is not None and max_rounds > 0:
+            original_rounds = total_rounds
+            total_rounds = min(total_rounds, max_rounds)
+            if total_rounds < original_rounds:
+                logger.info(f"轮数已截断: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
         
         state = SimulationRunState(
             simulation_id=simulation_id,
@@ -357,6 +366,10 @@ class SimulationRunner:
                 script_path,
                 "--config", config_path,  # 使用完整配置文件路径
             ]
+            
+            # 如果指定了最大轮数，添加到命令行参数
+            if max_rounds is not None and max_rounds > 0:
+                cmd.extend(["--max-rounds", str(max_rounds)])
             
             # 创建主日志文件，避免 stdout/stderr 管道缓冲区满导致进程阻塞
             main_log_path = os.path.join(sim_dir, "simulation.log")

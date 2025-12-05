@@ -554,7 +554,8 @@ backend/
 ```json
 {
   "simulation_id": "sim_10b494550540",
-  "platform": "parallel"
+  "platform": "parallel",
+  "max_rounds": 100
 }
 ```
 
@@ -562,6 +563,7 @@ backend/
 |------|------|------|--------|------|
 | simulation_id | String | 是 | - | 模拟ID |
 | platform | String | 否 | parallel | 运行平台: twitter/reddit/parallel |
+| max_rounds | Integer | 否 | - | 最大模拟轮数，用于截断过长的模拟。如果配置中的轮数超过此值，将被截断 |
 
 **返回示例**:
 ```json
@@ -573,10 +575,14 @@ backend/
     "process_pid": 12345,
     "twitter_running": true,
     "reddit_running": true,
-    "started_at": "2025-12-02T11:00:00"
+    "started_at": "2025-12-02T11:00:00",
+    "total_rounds": 100,
+    "max_rounds_applied": 100
   }
 }
 ```
+
+> **说明**: `max_rounds_applied` 字段仅在指定了 `max_rounds` 参数时返回，表示实际应用的最大轮数限制。
 
 ---
 
@@ -1502,12 +1508,13 @@ curl -X POST http://localhost:5001/api/simulation/prepare/status \
 
 # 等待status=completed
 
-# Step 7: 启动模拟
+# Step 7: 启动模拟（可选指定max_rounds限制轮数）
 curl -X POST http://localhost:5001/api/simulation/start \
   -H "Content-Type: application/json" \
   -d '{
     "simulation_id": "sim_xxx",
-    "platform": "parallel"
+    "platform": "parallel",
+    "max_rounds": 50
   }'
 
 # Step 8: 实时查询运行状态
