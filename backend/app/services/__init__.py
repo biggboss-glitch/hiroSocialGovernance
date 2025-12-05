@@ -23,6 +23,11 @@ from .simulation_runner import (
     AgentAction,
     RoundSummary
 )
+from .zep_graph_memory_updater import (
+    ZepGraphMemoryUpdater,
+    ZepGraphMemoryManager,
+    AgentActivity
+)
 
 __all__ = [
     'OntologyGenerator', 
@@ -47,5 +52,8 @@ __all__ = [
     'RunnerStatus',
     'AgentAction',
     'RoundSummary',
+    'ZepGraphMemoryUpdater',
+    'ZepGraphMemoryManager',
+    'AgentActivity',
 ]
 

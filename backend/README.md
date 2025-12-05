@@ -27,6 +27,7 @@
 3. **Agent人设生成**: 基于图谱实体,使用 LLM 生成详细的社交媒体用户人设
 4. **模拟配置智能生成**: 使用 LLM 根据需求自动生成模拟参数(时间、活跃度、事件等)
 5. **双平台模拟**: 支持 Twitter 和 Reddit 双平台并行舆论模拟(基于 OASIS 框架)
+6. **图谱记忆动态更新**: 可选功能,将模拟中Agent的活动实时更新到Zep图谱,让图谱"记住"模拟过程
 
 ---
 
@@ -69,7 +70,7 @@
 
 3. **模拟运行流程**:
    ```
-   启动模拟 → 运行OASIS脚本 → 实时监控 → 记录动作 → 状态查询
+   启动模拟 → 运行OASIS脚本 → 实时监控 → 记录动作 → (可选)更新Zep图谱记忆 → 状态查询
    ```
 
 ---
@@ -150,7 +151,8 @@ backend/
     │   ├── oasis_profile_generator.py     # 人设生成
     │   ├── simulation_config_generator.py # 配置生成
     │   ├── simulation_manager.py          # 模拟管理
-    │   └── simulation_runner.py           # 模拟运行
+    │   ├── simulation_runner.py           # 模拟运行
+    │   └── zep_graph_memory_updater.py    # 图谱记忆动态更新
     └── utils/                 # 工具类
         ├── __init__.py
         ├── file_parser.py     # 文件解析
@@ -207,11 +209,13 @@ backend/
 2. 启动 OASIS 模拟进程(subprocess)
 3. 监控进程运行状态
 4. 解析动作日志(actions.jsonl)
-5. 实时更新运行状态
-6. 支持停止/暂停/恢复
+5. (可选)将Agent活动实时更新到Zep图谱
+6. 实时更新运行状态
+7. 支持停止/暂停/恢复
 
 **核心服务**:
 - `SimulationRunner`: 模拟运行器
+- `ZepGraphMemoryUpdater`: 图谱记忆动态更新器
 
 ---
 
@@ -555,7 +559,8 @@ backend/
 {
   "simulation_id": "sim_10b494550540",
   "platform": "parallel",
-  "max_rounds": 100
+  "max_rounds": 100,
+  "enable_graph_memory_update": false
 }
 ```
 
@@ -563,7 +568,8 @@ backend/
 |------|------|------|--------|------|
 | simulation_id | String | 是 | - | 模拟ID |
 | platform | String | 否 | parallel | 运行平台: twitter/reddit/parallel |
-| max_rounds | Integer | 否 | - | 最大模拟轮数，用于截断过长的模拟。如果配置中的轮数超过此值，将被截断 |
+| max_rounds | Integer | 否 | - | 最大模拟轮数，用于截断过长的模拟 |
+| enable_graph_memory_update | Boolean | 否 | false | 是否将Agent活动动态更新到Zep图谱 |
 
 **返回示例**:
 ```json
@@ -577,12 +583,25 @@ backend/
     "reddit_running": true,
     "started_at": "2025-12-02T11:00:00",
     "total_rounds": 100,
-    "max_rounds_applied": 100
+    "max_rounds_applied": 100,
+    "graph_memory_update_enabled": true,
+    "graph_id": "mirofish_abc123"
   }
 }
 ```
 
-> **说明**: `max_rounds_applied` 字段仅在指定了 `max_rounds` 参数时返回，表示实际应用的最大轮数限制。
+> **说明**: 
+> - `max_rounds_applied` 字段仅在指定了 `max_rounds` 参数时返回
+> - `graph_memory_update_enabled` 和 `graph_id` 字段在启用图谱记忆更新时返回
+
+**图谱记忆更新功能说明**:
+
+启用 `enable_graph_memory_update` 后:
+- 模拟中所有Agent的活动(发帖、评论、点赞、转发等)会实时更新到Zep图谱
+- 活动会被转换为自然语言描述,例如:`[Twitter模拟 第15轮] 张三: 发布了一条帖子：「...」`
+- 采用批量更新机制(默认10条或30秒),减少API调用次数
+- Zep会自动从文本中提取实体和关系,丰富图谱知识
+- 需要项目已构建有效的图谱(graph_id)
 
 ---
 
@@ -1255,6 +1274,126 @@ def cleanup_all_simulations(cls):
 
 ---
 
+### 8. ZepGraphMemoryUpdater (图谱记忆更新器)
+
+**文件**: `app/services/zep_graph_memory_updater.py`
+
+**功能**: 将模拟中的Agent活动动态更新到Zep图谱
+
+**核心类**:
+
+```python
+class AgentActivity:
+    """Agent活动记录"""
+    platform: str           # twitter / reddit
+    agent_id: int
+    agent_name: str
+    action_type: str        # CREATE_POST, LIKE_POST, etc.
+    action_args: Dict
+    round_num: int
+    timestamp: str
+    
+    def to_episode_text(self) -> str:
+        """
+        将活动转换为自然语言描述
+        
+        示例输出:
+        - "[Twitter模拟 第15轮] 张三: 发布了一条帖子：「官方声明：...」"
+        - "[Reddit模拟 第3轮] 李四: 在帖子#5下评论道：「我认为...」"
+        - "[Twitter模拟 第10轮] 王五: 引用帖子#3并评论：「同意！」"
+        """
+```
+
+```python
+class ZepGraphMemoryUpdater:
+    """
+    图谱记忆更新器
+    
+    特性:
+    - 批量更新(BATCH_SIZE=10条或MAX_WAIT_TIME=30秒)
+    - 后台线程异步处理,不阻塞主模拟流程
+    - 带重试的API调用(MAX_RETRIES=3)
+    - 自动跳过DO_NOTHING类型的活动
+    """
+    
+    def start(self):
+        """启动后台工作线程"""
+    
+    def stop(self):
+        """停止并发送剩余活动"""
+    
+    def add_activity(self, activity: AgentActivity):
+        """添加活动到队列"""
+    
+    def add_activity_from_dict(self, data: Dict, platform: str):
+        """从动作日志字典添加活动"""
+    
+    def get_stats(self) -> Dict:
+        """获取统计信息(total_activities, total_sent, failed_count等)"""
+```
+
+```python
+class ZepGraphMemoryManager:
+    """
+    管理多个模拟的更新器实例
+    """
+    
+    @classmethod
+    def create_updater(cls, simulation_id: str, graph_id: str) -> ZepGraphMemoryUpdater:
+        """为模拟创建并启动更新器"""
+    
+    @classmethod
+    def get_updater(cls, simulation_id: str) -> Optional[ZepGraphMemoryUpdater]:
+        """获取模拟的更新器"""
+    
+    @classmethod
+    def stop_updater(cls, simulation_id: str):
+        """停止并移除模拟的更新器"""
+    
+    @classmethod
+    def stop_all(cls):
+        """停止所有更新器(服务器关闭时调用)"""
+```
+
+**活动类型转换**:
+
+| action_type | 转换后的描述 |
+|-------------|-------------|
+| CREATE_POST | 发布了一条帖子：「{content}」 |
+| LIKE_POST | 点赞了帖子#{post_id} |
+| DISLIKE_POST | 踩了帖子#{post_id} |
+| REPOST | 转发了帖子#{post_id} |
+| QUOTE_POST | 引用帖子#{quoted_id}并评论：「{content}」 |
+| FOLLOW | 关注了用户#{user_id} |
+| CREATE_COMMENT | 在帖子#{post_id}下评论道：「{content}」 |
+| LIKE_COMMENT | 点赞了评论#{comment_id} |
+| SEARCH_POSTS | 搜索了「{query}」 |
+| MUTE | 屏蔽了用户#{user_id} |
+
+**使用示例**:
+
+```python
+# 在启动模拟时启用图谱记忆更新
+POST /api/simulation/start
+{
+    "simulation_id": "sim_xxx",
+    "enable_graph_memory_update": true
+}
+```
+
+启用后,模拟中的活动会被转换为类似以下格式的文本并发送到Zep:
+
+```
+[Twitter模拟 第0轮] 上级: 发布了一条帖子：「官方声明：经复核并结合司法判决，校方决定撤销对肖某某的处分。学校向当事人致以正式歉意...」
+[Twitter模拟 第0轮] 全国顶尖新闻传播学院的大学: 发布了一条帖子：「武汉大学官方发布：学校已决定撤销此前对当事人的处分...」
+[Twitter模拟 第15轮] 全国考生: 引用帖子#5并评论
+[Reddit模拟 第3轮] 教师代表: 在帖子#2下评论道：「此事暴露出高校在程序正义上的问题...」
+```
+
+Zep会自动从这些文本中提取实体(如人名、机构名)和关系,丰富图谱知识。
+
+---
+
 ## 工具类
 
 ### 1. FileParser (文件解析器)
@@ -1508,13 +1647,14 @@ curl -X POST http://localhost:5001/api/simulation/prepare/status \
 
 # 等待status=completed
 
-# Step 7: 启动模拟（可选指定max_rounds限制轮数）
+# Step 7: 启动模拟（可选参数：max_rounds限制轮数，enable_graph_memory_update启用图谱记忆更新）
 curl -X POST http://localhost:5001/api/simulation/start \
   -H "Content-Type: application/json" \
   -d '{
     "simulation_id": "sim_xxx",
     "platform": "parallel",
-    "max_rounds": 50
+    "max_rounds": 50,
+    "enable_graph_memory_update": true
   }'
 
 # Step 8: 实时查询运行状态
@@ -1689,6 +1829,6 @@ MIT License
 
 ---
 
-**最后更新**: 2025-12-02
-**版本**: v1.0.0
+**最后更新**: 2025-12-05
+**版本**: v1.1.0
 

@@ -1113,10 +1113,17 @@ def start_simulation():
     
     请求（JSON）：
         {
-            "simulation_id": "sim_xxxx",  // 必填，模拟ID
-            "platform": "parallel",        // 可选: twitter / reddit / parallel (默认)
-            "max_rounds": 100              // 可选: 最大模拟轮数，用于截断过长的模拟
+            "simulation_id": "sim_xxxx",          // 必填，模拟ID
+            "platform": "parallel",                // 可选: twitter / reddit / parallel (默认)
+            "max_rounds": 100,                     // 可选: 最大模拟轮数，用于截断过长的模拟
+            "enable_graph_memory_update": false    // 可选: 是否将Agent活动动态更新到Zep图谱记忆
         }
+    
+    关于 enable_graph_memory_update：
+        - 启用后，模拟中所有Agent的活动（发帖、评论、点赞等）都会实时更新到Zep图谱
+        - 这可以让图谱"记住"模拟过程，用于后续分析或AI对话
+        - 需要模拟关联的项目有有效的 graph_id
+        - 采用批量更新机制，减少API调用次数
     
     返回：
         {
@@ -1127,7 +1134,8 @@ def start_simulation():
                 "process_pid": 12345,
                 "twitter_running": true,
                 "reddit_running": true,
-                "started_at": "2025-12-01T10:00:00"
+                "started_at": "2025-12-01T10:00:00",
+                "graph_memory_update_enabled": true  // 是否启用了图谱记忆更新
             }
         }
     """
@@ -1143,6 +1151,7 @@ def start_simulation():
         
         platform = data.get('platform', 'parallel')
         max_rounds = data.get('max_rounds')  # 可选：最大模拟轮数
+        enable_graph_memory_update = data.get('enable_graph_memory_update', False)  # 可选：是否启用图谱记忆更新
         
         # 验证 max_rounds 参数
         if max_rounds is not None:
@@ -1203,8 +1212,33 @@ def start_simulation():
                     "error": f"模拟未准备好，当前状态: {state.status.value}，请先调用 /prepare 接口"
                 }), 400
         
+        # 获取图谱ID（用于图谱记忆更新）
+        graph_id = None
+        if enable_graph_memory_update:
+            # 从模拟状态或项目中获取 graph_id
+            graph_id = state.graph_id
+            if not graph_id:
+                # 尝试从项目中获取
+                project = ProjectManager.get_project(state.project_id)
+                if project:
+                    graph_id = project.graph_id
+            
+            if not graph_id:
+                return jsonify({
+                    "success": False,
+                    "error": "启用图谱记忆更新需要有效的 graph_id，请确保项目已构建图谱"
+                }), 400
+            
+            logger.info(f"启用图谱记忆更新: simulation_id={simulation_id}, graph_id={graph_id}")
+        
         # 启动模拟
-        run_state = SimulationRunner.start_simulation(simulation_id, platform, max_rounds)
+        run_state = SimulationRunner.start_simulation(
+            simulation_id=simulation_id,
+            platform=platform,
+            max_rounds=max_rounds,
+            enable_graph_memory_update=enable_graph_memory_update,
+            graph_id=graph_id
+        )
         
         # 更新模拟状态
         state.status = SimulationStatus.RUNNING
@@ -1213,6 +1247,9 @@ def start_simulation():
         response_data = run_state.to_dict()
         if max_rounds:
             response_data['max_rounds_applied'] = max_rounds
+        response_data['graph_memory_update_enabled'] = enable_graph_memory_update
+        if enable_graph_memory_update:
+            response_data['graph_id'] = graph_id
         
         return jsonify({
             "success": True,
