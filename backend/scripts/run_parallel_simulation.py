@@ -39,8 +39,6 @@ import warnings
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 
-# 抑制 multiprocessing resource_tracker 的警告（来自第三方库如 transformers）
-warnings.filterwarnings("ignore", message=".*resource_tracker.*")
 
 # 全局变量：用于信号处理
 _shutdown_event = None
