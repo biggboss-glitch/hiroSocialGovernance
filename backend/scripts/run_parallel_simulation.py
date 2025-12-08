@@ -615,7 +615,7 @@ def fetch_new_actions_from_db(
     agent_names: Dict[int, str]
 ) -> Tuple[List[Dict[str, Any]], int]:
     """
-    从数据库中获取新的动作记录
+    从数据库中获取新的动作记录，并补充完整的上下文信息
     
     Args:
         db_path: 数据库文件路径
@@ -624,7 +624,7 @@ def fetch_new_actions_from_db(
         
     Returns:
         (actions_list, new_last_rowid)
-        - actions_list: 动作列表，每个元素包含 agent_id, agent_name, action_type, action_args
+        - actions_list: 动作列表，每个元素包含 agent_id, agent_name, action_type, action_args（含上下文信息）
         - new_last_rowid: 新的最大 rowid 值
     """
     actions = []
@@ -684,6 +684,9 @@ def fetch_new_actions_from_db(
             # 转换动作类型名称
             action_type = ACTION_TYPE_MAP.get(action, action.upper())
             
+            # 补充上下文信息（帖子内容、用户名等）
+            _enrich_action_context(cursor, action_type, simplified_args, agent_names)
+            
             actions.append({
                 'agent_id': user_id,
                 'agent_name': agent_names.get(user_id, f'Agent_{user_id}'),
@@ -696,6 +699,241 @@ def fetch_new_actions_from_db(
         print(f"读取数据库动作失败: {e}")
     
     return actions, new_last_rowid
+
+
+def _enrich_action_context(
+    cursor,
+    action_type: str,
+    action_args: Dict[str, Any],
+    agent_names: Dict[int, str]
+) -> None:
+    """
+    为动作补充上下文信息（帖子内容、用户名等）
+    
+    Args:
+        cursor: 数据库游标
+        action_type: 动作类型
+        action_args: 动作参数（会被修改）
+        agent_names: agent_id -> agent_name 映射
+    """
+    try:
+        # 点赞/踩帖子：补充帖子内容和作者
+        if action_type in ('LIKE_POST', 'DISLIKE_POST'):
+            post_id = action_args.get('post_id')
+            if post_id:
+                post_info = _get_post_info(cursor, post_id, agent_names)
+                if post_info:
+                    action_args['post_content'] = post_info.get('content', '')
+                    action_args['post_author_name'] = post_info.get('author_name', '')
+        
+        # 转发帖子：补充原帖内容和作者
+        elif action_type == 'REPOST':
+            new_post_id = action_args.get('new_post_id')
+            if new_post_id:
+                # 转发帖子的 original_post_id 指向原帖
+                cursor.execute("""
+                    SELECT original_post_id FROM post WHERE post_id = ?
+                """, (new_post_id,))
+                row = cursor.fetchone()
+                if row and row[0]:
+                    original_post_id = row[0]
+                    original_info = _get_post_info(cursor, original_post_id, agent_names)
+                    if original_info:
+                        action_args['original_content'] = original_info.get('content', '')
+                        action_args['original_author_name'] = original_info.get('author_name', '')
+        
+        # 引用帖子：补充原帖内容、作者和引用评论
+        elif action_type == 'QUOTE_POST':
+            quoted_id = action_args.get('quoted_id')
+            new_post_id = action_args.get('new_post_id')
+            
+            if quoted_id:
+                original_info = _get_post_info(cursor, quoted_id, agent_names)
+                if original_info:
+                    action_args['original_content'] = original_info.get('content', '')
+                    action_args['original_author_name'] = original_info.get('author_name', '')
+            
+            # 获取引用帖子的评论内容（quote_content）
+            if new_post_id:
+                cursor.execute("""
+                    SELECT quote_content FROM post WHERE post_id = ?
+                """, (new_post_id,))
+                row = cursor.fetchone()
+                if row and row[0]:
+                    action_args['quote_content'] = row[0]
+        
+        # 关注用户：补充被关注用户的名称
+        elif action_type == 'FOLLOW':
+            follow_id = action_args.get('follow_id')
+            if follow_id:
+                # 从 follow 表获取 followee_id
+                cursor.execute("""
+                    SELECT followee_id FROM follow WHERE follow_id = ?
+                """, (follow_id,))
+                row = cursor.fetchone()
+                if row:
+                    followee_id = row[0]
+                    target_name = _get_user_name(cursor, followee_id, agent_names)
+                    if target_name:
+                        action_args['target_user_name'] = target_name
+        
+        # 屏蔽用户：补充被屏蔽用户的名称
+        elif action_type == 'MUTE':
+            # 从 action_args 中获取 user_id 或 target_id
+            target_id = action_args.get('user_id') or action_args.get('target_id')
+            if target_id:
+                target_name = _get_user_name(cursor, target_id, agent_names)
+                if target_name:
+                    action_args['target_user_name'] = target_name
+        
+        # 点赞/踩评论：补充评论内容和作者
+        elif action_type in ('LIKE_COMMENT', 'DISLIKE_COMMENT'):
+            comment_id = action_args.get('comment_id')
+            if comment_id:
+                comment_info = _get_comment_info(cursor, comment_id, agent_names)
+                if comment_info:
+                    action_args['comment_content'] = comment_info.get('content', '')
+                    action_args['comment_author_name'] = comment_info.get('author_name', '')
+        
+        # 发表评论：补充所评论的帖子信息
+        elif action_type == 'CREATE_COMMENT':
+            post_id = action_args.get('post_id')
+            if post_id:
+                post_info = _get_post_info(cursor, post_id, agent_names)
+                if post_info:
+                    action_args['post_content'] = post_info.get('content', '')
+                    action_args['post_author_name'] = post_info.get('author_name', '')
+    
+    except Exception as e:
+        # 补充上下文失败不影响主流程
+        print(f"补充动作上下文失败: {e}")
+
+
+def _get_post_info(
+    cursor,
+    post_id: int,
+    agent_names: Dict[int, str]
+) -> Optional[Dict[str, str]]:
+    """
+    获取帖子信息
+    
+    Args:
+        cursor: 数据库游标
+        post_id: 帖子ID
+        agent_names: agent_id -> agent_name 映射
+        
+    Returns:
+        包含 content 和 author_name 的字典，或 None
+    """
+    try:
+        cursor.execute("""
+            SELECT p.content, p.user_id, u.agent_id
+            FROM post p
+            LEFT JOIN user u ON p.user_id = u.user_id
+            WHERE p.post_id = ?
+        """, (post_id,))
+        row = cursor.fetchone()
+        if row:
+            content = row[0] or ''
+            user_id = row[1]
+            agent_id = row[2]
+            
+            # 优先使用 agent_names 中的名称
+            author_name = ''
+            if agent_id is not None and agent_id in agent_names:
+                author_name = agent_names[agent_id]
+            elif user_id:
+                # 从 user 表获取名称
+                cursor.execute("SELECT name, user_name FROM user WHERE user_id = ?", (user_id,))
+                user_row = cursor.fetchone()
+                if user_row:
+                    author_name = user_row[0] or user_row[1] or ''
+            
+            return {'content': content, 'author_name': author_name}
+    except Exception:
+        pass
+    return None
+
+
+def _get_user_name(
+    cursor,
+    user_id: int,
+    agent_names: Dict[int, str]
+) -> Optional[str]:
+    """
+    获取用户名称
+    
+    Args:
+        cursor: 数据库游标
+        user_id: 用户ID
+        agent_names: agent_id -> agent_name 映射
+        
+    Returns:
+        用户名称，或 None
+    """
+    try:
+        cursor.execute("""
+            SELECT agent_id, name, user_name FROM user WHERE user_id = ?
+        """, (user_id,))
+        row = cursor.fetchone()
+        if row:
+            agent_id = row[0]
+            name = row[1]
+            user_name = row[2]
+            
+            # 优先使用 agent_names 中的名称
+            if agent_id is not None and agent_id in agent_names:
+                return agent_names[agent_id]
+            return name or user_name or ''
+    except Exception:
+        pass
+    return None
+
+
+def _get_comment_info(
+    cursor,
+    comment_id: int,
+    agent_names: Dict[int, str]
+) -> Optional[Dict[str, str]]:
+    """
+    获取评论信息
+    
+    Args:
+        cursor: 数据库游标
+        comment_id: 评论ID
+        agent_names: agent_id -> agent_name 映射
+        
+    Returns:
+        包含 content 和 author_name 的字典，或 None
+    """
+    try:
+        cursor.execute("""
+            SELECT c.content, c.user_id, u.agent_id
+            FROM comment c
+            LEFT JOIN user u ON c.user_id = u.user_id
+            WHERE c.comment_id = ?
+        """, (comment_id,))
+        row = cursor.fetchone()
+        if row:
+            content = row[0] or ''
+            user_id = row[1]
+            agent_id = row[2]
+            
+            # 优先使用 agent_names 中的名称
+            author_name = ''
+            if agent_id is not None and agent_id in agent_names:
+                author_name = agent_names[agent_id]
+            elif user_id:
+                # 从 user 表获取名称
+                cursor.execute("SELECT name, user_name FROM user WHERE user_id = ?", (user_id,))
+                user_row = cursor.fetchone()
+                if user_row:
+                    author_name = user_row[0] or user_row[1] or ''
+            
+            return {'content': content, 'author_name': author_name}
+    except Exception:
+        pass
+    return None
 
 
 def create_model(config: Dict[str, Any], use_boost: bool = False):
