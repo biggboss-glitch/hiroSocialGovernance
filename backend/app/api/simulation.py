@@ -19,6 +19,29 @@ from ..models.project import ProjectManager
 logger = get_logger('mirofish.api.simulation')
 
 
+# Interview prompt 优化前缀
+# 添加此前缀可以避免Agent调用工具，直接用文本回复
+INTERVIEW_PROMPT_PREFIX = "结合你的人设、所有的过往记忆与行动，不调用任何工具直接用文本回复我："
+
+
+def optimize_interview_prompt(prompt: str) -> str:
+    """
+    优化Interview提问，添加前缀避免Agent调用工具
+    
+    Args:
+        prompt: 原始提问
+        
+    Returns:
+        优化后的提问
+    """
+    if not prompt:
+        return prompt
+    # 避免重复添加前缀
+    if prompt.startswith(INTERVIEW_PROMPT_PREFIX):
+        return prompt
+    return f"{INTERVIEW_PROMPT_PREFIX}{prompt}"
+
+
 # ============== 实体读取接口 ==============
 
 @simulation_bp.route('/entities/<graph_id>', methods=['GET'])
@@ -1819,14 +1842,17 @@ def interview_agent():
                 "error": "模拟环境未运行或已关闭。请确保模拟已完成并进入等待命令模式。"
             }), 400
         
+        # 优化prompt，添加前缀避免Agent调用工具
+        optimized_prompt = optimize_interview_prompt(prompt)
+        
         result = SimulationRunner.interview_agent(
             simulation_id=simulation_id,
             agent_id=agent_id,
-            prompt=prompt,
+            prompt=optimized_prompt,
             platform=platform,
             timeout=timeout
         )
-        
+
         return jsonify({
             "success": result.get("success", False),
             "data": result
@@ -1951,9 +1977,16 @@ def interview_agents_batch():
                 "error": "模拟环境未运行或已关闭。请确保模拟已完成并进入等待命令模式。"
             }), 400
 
+        # 优化每个采访项的prompt，添加前缀避免Agent调用工具
+        optimized_interviews = []
+        for interview in interviews:
+            optimized_interview = interview.copy()
+            optimized_interview['prompt'] = optimize_interview_prompt(interview.get('prompt', ''))
+            optimized_interviews.append(optimized_interview)
+
         result = SimulationRunner.interview_agents_batch(
             simulation_id=simulation_id,
-            interviews=interviews,
+            interviews=optimized_interviews,
             platform=platform,
             timeout=timeout
         )
@@ -2051,9 +2084,12 @@ def interview_all_agents():
                 "error": "模拟环境未运行或已关闭。请确保模拟已完成并进入等待命令模式。"
             }), 400
 
+        # 优化prompt，添加前缀避免Agent调用工具
+        optimized_prompt = optimize_interview_prompt(prompt)
+
         result = SimulationRunner.interview_all_agents(
             simulation_id=simulation_id,
-            prompt=prompt,
+            prompt=optimized_prompt,
             platform=platform,
             timeout=timeout
         )
@@ -2094,8 +2130,9 @@ def get_interview_history():
     请求（JSON）：
         {
             "simulation_id": "sim_xxxx",  // 必填，模拟ID
-            "platform": "reddit",          // 可选，平台类型（reddit/twitter），默认reddit
-            "agent_id": 0,                 // 可选，过滤Agent ID
+            "platform": "reddit",          // 可选，平台类型（reddit/twitter）
+                                           // 不指定则返回两个平台的所有历史
+            "agent_id": 0,                 // 可选，只获取该Agent的采访历史
             "limit": 100                   // 可选，返回数量，默认100
         }
 
@@ -2121,7 +2158,7 @@ def get_interview_history():
         data = request.get_json() or {}
         
         simulation_id = data.get('simulation_id')
-        platform = data.get('platform', 'reddit')
+        platform = data.get('platform')  # 不指定则返回两个平台的历史
         agent_id = data.get('agent_id')
         limit = data.get('limit', 100)
         

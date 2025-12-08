@@ -672,6 +672,12 @@ Flask后端                    模拟脚本
 > **注意**: 所有Interview接口的参数都通过请求体(JSON)传递，包括simulation_id。
 > 
 > **双平台模式说明**: 当不指定`platform`参数时，双平台模拟会同时采访两个平台并返回整合结果。
+>
+> **Prompt自动优化**: 系统会自动在用户提供的prompt前添加说明前缀，避免Agent调用工具：
+> ```
+> 原始prompt: "武汉大学发布撤销处分通告后你有什么看法"
+> 优化后: "结合你的人设、所有的过往记忆与行动，不调用任何工具直接用文本回复我：武汉大学发布撤销处分通告后你有什么看法"
+> ```
 
 #### 1. 采访单个Agent
 
@@ -860,11 +866,11 @@ Flask后端                    模拟脚本
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
 | simulation_id | String | 是 | - | 模拟ID |
-| platform | String | 否 | reddit | 平台类型（reddit/twitter） |
-| agent_id | Integer | 否 | - | 过滤Agent ID |
+| platform | String | 否 | null | 平台类型（reddit/twitter），不指定则返回两个平台的所有历史 |
+| agent_id | Integer | 否 | - | 只获取该Agent的采访历史 |
 | limit | Integer | 否 | 100 | 返回数量限制 |
 
-**返回示例**:
+**返回示例（不指定platform，返回双平台历史）**:
 ```json
 {
   "success": true,
@@ -875,7 +881,14 @@ Flask后端                    模拟脚本
         "agent_id": 0,
         "response": "我认为...",
         "prompt": "你对这件事有什么看法？",
-        "timestamp": "2025-12-08T10:00:00",
+        "timestamp": "2025-12-08T10:00:02",
+        "platform": "twitter"
+      },
+      {
+        "agent_id": 0,
+        "response": "从Reddit角度来看...",
+        "prompt": "你对这件事有什么看法？",
+        "timestamp": "2025-12-08T10:00:01",
         "platform": "reddit"
       },
       ...
