@@ -73,6 +73,11 @@
    启动模拟 → 运行OASIS脚本 → 实时监控 → 记录动作 → (可选)更新Zep图谱记忆 → 状态查询
    ```
 
+4. **Interview采访流程**:
+   ```
+   模拟完成 → 环境进入等待模式 → 发送Interview命令 → Agent回答 → 获取结果 → (可选)关闭环境
+   ```
+
 ---
 
 ## 技术栈
@@ -152,6 +157,7 @@ backend/
     │   ├── simulation_config_generator.py # 配置生成
     │   ├── simulation_manager.py          # 模拟管理
     │   ├── simulation_runner.py           # 模拟运行
+    │   ├── simulation_ipc.py              # 模拟IPC通信（Interview功能）
     │   └── zep_graph_memory_updater.py    # 图谱记忆动态更新
     └── utils/                 # 工具类
         ├── __init__.py
@@ -211,11 +217,42 @@ backend/
 4. 解析动作日志(actions.jsonl)
 5. (可选)将Agent活动实时更新到Zep图谱
 6. 实时更新运行状态
-7. 支持停止/暂停/恢复
+7. 模拟完成后进入等待命令模式
+8. 支持停止/暂停/恢复
 
 **核心服务**:
 - `SimulationRunner`: 模拟运行器
 - `ZepGraphMemoryUpdater`: 图谱记忆动态更新器
+
+### 4. Agent采访(Interview)模块
+
+**功能**: 在模拟完成后对Agent进行采访
+
+**特点**:
+- **模拟状态持久化**: 模拟完成后环境不立即关闭，进入等待命令模式
+- **IPC通信机制**: 通过文件系统在Flask后端和模拟脚本之间通信
+- **单个采访**: 对指定Agent提问并获取回答
+- **批量采访**: 同时对多个Agent提不同问题
+- **全局采访**: 使用相同问题采访所有Agent
+- **采访历史**: 从数据库读取所有Interview记录
+
+**核心服务**:
+- `SimulationIPCClient`: IPC客户端（Flask端使用）
+- `SimulationIPCServer`: IPC服务器（模拟脚本端使用）
+
+**工作原理**:
+```
+Flask后端                    模拟脚本
+    │                           │
+    │ 写入命令文件               │
+    │ ─────────────────────────→│
+    │                           │ 轮询命令目录
+    │                           │ 执行Interview
+    │                           │ 写入响应文件
+    │←───────────────────────── │
+    │ 读取响应文件               │
+    │                           │
+```
 
 ---
 
@@ -629,6 +666,290 @@ backend/
 ```
 
 ---
+
+### Interview 采访接口
+
+> **注意**: 所有Interview接口的参数都通过请求体(JSON)传递，包括simulation_id。
+> 
+> **双平台模式说明**: 当不指定`platform`参数时，双平台模拟会同时采访两个平台并返回整合结果。
+
+#### 1. 采访单个Agent
+
+**接口**: `POST /api/simulation/interview`
+
+**请求参数**:
+```json
+{
+  "simulation_id": "sim_xxxx",
+  "agent_id": 0,
+  "prompt": "你对这件事有什么看法？",
+  "platform": "reddit",
+  "timeout": 60
+}
+```
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| simulation_id | String | 是 | - | 模拟ID |
+| agent_id | Integer | 是 | - | Agent ID |
+| prompt | String | 是 | - | 采访问题 |
+| platform | String | 否 | null | 指定平台(twitter/reddit)，不指定则双平台同时采访 |
+| timeout | Integer | 否 | 60 | 超时时间（秒） |
+
+**返回示例（指定单平台）**:
+```json
+{
+  "success": true,
+  "data": {
+    "success": true,
+    "agent_id": 0,
+    "prompt": "你对这件事有什么看法？",
+    "result": {
+      "agent_id": 0,
+      "response": "我认为这件事反映了...",
+      "platform": "reddit",
+      "timestamp": "2025-12-08T10:00:00"
+    },
+    "timestamp": "2025-12-08T10:00:01"
+  }
+}
+```
+
+**返回示例（不指定platform，双平台模式）**:
+```json
+{
+  "success": true,
+  "data": {
+    "success": true,
+    "agent_id": 0,
+    "prompt": "你对这件事有什么看法？",
+    "result": {
+      "agent_id": 0,
+      "prompt": "你对这件事有什么看法？",
+      "platforms": {
+        "twitter": {
+          "agent_id": 0,
+          "response": "从Twitter视角来看...",
+          "platform": "twitter",
+          "timestamp": "2025-12-08T10:00:00"
+        },
+        "reddit": {
+          "agent_id": 0,
+          "response": "作为Reddit用户，我认为...",
+          "platform": "reddit",
+          "timestamp": "2025-12-08T10:00:00"
+        }
+      }
+    },
+    "timestamp": "2025-12-08T10:00:01"
+  }
+}
+```
+
+**注意**: 此功能需要模拟环境处于运行状态（完成模拟循环后进入等待命令模式）
+
+---
+
+#### 2. 批量采访多个Agent
+
+**接口**: `POST /api/simulation/interview/batch`
+
+**请求参数**:
+```json
+{
+  "simulation_id": "sim_xxxx",
+  "interviews": [
+    {"agent_id": 0, "prompt": "你对A有什么看法？", "platform": "twitter"},
+    {"agent_id": 1, "prompt": "你对B有什么看法？", "platform": "reddit"},
+    {"agent_id": 2, "prompt": "你对C有什么看法？"}
+  ],
+  "platform": "reddit",
+  "timeout": 120
+}
+```
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| simulation_id | String | 是 | - | 模拟ID |
+| interviews | Array | 是 | - | 采访列表，每项包含agent_id、prompt和可选的platform |
+| platform | String | 否 | null | 默认平台(被每项的platform覆盖)，不指定则双平台同时采访 |
+| timeout | Integer | 否 | 120 | 超时时间（秒） |
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "success": true,
+    "interviews_count": 3,
+    "result": {
+      "interviews_count": 6,
+      "results": {
+        "twitter_0": {"agent_id": 0, "response": "...", "platform": "twitter"},
+        "reddit_1": {"agent_id": 1, "response": "...", "platform": "reddit"},
+        "twitter_2": {"agent_id": 2, "response": "...", "platform": "twitter"},
+        "reddit_2": {"agent_id": 2, "response": "...", "platform": "reddit"}
+      }
+    },
+    "timestamp": "2025-12-08T10:00:01"
+  }
+}
+```
+
+---
+
+#### 3. 全局采访（采访所有Agent）
+
+**接口**: `POST /api/simulation/interview/all`
+
+**请求参数**:
+```json
+{
+  "simulation_id": "sim_xxxx",
+  "prompt": "你对这件事整体有什么看法？",
+  "platform": "reddit",
+  "timeout": 180
+}
+```
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| simulation_id | String | 是 | - | 模拟ID |
+| prompt | String | 是 | - | 采访问题（所有Agent使用相同问题） |
+| platform | String | 否 | null | 指定平台(twitter/reddit)，不指定则双平台同时采访 |
+| timeout | Integer | 否 | 180 | 超时时间（秒） |
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "success": true,
+    "interviews_count": 50,
+    "result": {
+      "interviews_count": 100,
+      "results": {
+        "twitter_0": {"agent_id": 0, "response": "...", "platform": "twitter"},
+        "reddit_0": {"agent_id": 0, "response": "...", "platform": "reddit"},
+        "twitter_1": {"agent_id": 1, "response": "...", "platform": "twitter"},
+        "reddit_1": {"agent_id": 1, "response": "...", "platform": "reddit"},
+        ...
+      }
+    },
+    "timestamp": "2025-12-08T10:00:01"
+  }
+}
+```
+
+---
+
+#### 4. 获取Interview历史
+
+**接口**: `POST /api/simulation/interview/history`
+
+**请求参数**:
+```json
+{
+  "simulation_id": "sim_xxxx",
+  "platform": "reddit",
+  "agent_id": 0,
+  "limit": 100
+}
+```
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| simulation_id | String | 是 | - | 模拟ID |
+| platform | String | 否 | reddit | 平台类型（reddit/twitter） |
+| agent_id | Integer | 否 | - | 过滤Agent ID |
+| limit | Integer | 否 | 100 | 返回数量限制 |
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "count": 10,
+    "history": [
+      {
+        "agent_id": 0,
+        "response": "我认为...",
+        "prompt": "你对这件事有什么看法？",
+        "timestamp": "2025-12-08T10:00:00",
+        "platform": "reddit"
+      },
+      ...
+    ]
+  }
+}
+```
+
+---
+
+#### 5. 获取模拟环境状态
+
+**接口**: `POST /api/simulation/env-status`
+
+**请求参数**:
+```json
+{
+  "simulation_id": "sim_xxxx"
+}
+```
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| simulation_id | String | 是 | - | 模拟ID |
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "simulation_id": "sim_xxxx",
+    "env_alive": true,
+    "twitter_available": true,
+    "reddit_available": true,
+    "message": "环境正在运行，可以接收Interview命令"
+  }
+}
+```
+
+---
+
+#### 6. 关闭模拟环境
+
+**接口**: `POST /api/simulation/close-env`
+
+**请求参数**:
+```json
+{
+  "simulation_id": "sim_10b494550540",
+  "timeout": 30
+}
+```
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| simulation_id | String | 是 | - | 模拟ID |
+| timeout | Integer | 否 | 30 | 超时时间（秒） |
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "success": true,
+    "message": "环境关闭命令已发送",
+    "result": {"message": "环境即将关闭"},
+    "timestamp": "2025-12-08T10:00:01"
+  }
+}
+```
+
+**注意**: 此接口与 `/stop` 不同：
+- `/stop`: 强制终止模拟进程
+- `/close-env`: 优雅地关闭环境，让模拟进程正常退出
 
 #### 6. 获取运行状态
 
@@ -1395,6 +1716,92 @@ POST /api/simulation/start
 
 ---
 
+### 9. SimulationIPCClient/Server (IPC通信模块)
+
+**文件**: `app/services/simulation_ipc.py`
+
+**功能**: 实现Flask后端与模拟脚本之间的进程间通信
+
+**核心类**:
+
+```python
+class SimulationIPCClient:
+    """IPC客户端（Flask端使用）"""
+    
+    def send_interview(agent_id: int, prompt: str, timeout: float) -> IPCResponse:
+        """发送单个Agent采访命令"""
+    
+    def send_batch_interview(interviews: List[Dict], timeout: float) -> IPCResponse:
+        """发送批量采访命令"""
+    
+    def send_close_env(timeout: float) -> IPCResponse:
+        """发送关闭环境命令"""
+    
+    def check_env_alive() -> bool:
+        """检查模拟环境是否存活"""
+```
+
+```python
+class SimulationIPCServer:
+    """IPC服务器（模拟脚本端使用）"""
+    
+    def poll_commands() -> Optional[IPCCommand]:
+        """轮询获取待处理命令"""
+    
+    def send_response(response: IPCResponse):
+        """发送响应"""
+```
+
+**命令类型**:
+
+| 命令类型 | 说明 |
+|----------|------|
+| interview | 单个Agent采访 |
+| batch_interview | 批量采访 |
+| close_env | 关闭环境 |
+
+**文件结构**:
+
+```
+uploads/simulations/sim_xxx/
+├── ipc_commands/           # 命令文件目录
+│   └── {command_id}.json   # 待处理命令
+├── ipc_responses/          # 响应文件目录
+│   └── {command_id}.json   # 命令响应
+└── env_status.json         # 环境状态文件
+```
+
+**使用示例**:
+
+```python
+# Flask端发送Interview命令
+from app.services import SimulationRunner
+
+# 单个采访
+result = SimulationRunner.interview_agent(
+    simulation_id="sim_xxx",
+    agent_id=0,
+    prompt="你对这件事有什么看法？"
+)
+
+# 批量采访
+result = SimulationRunner.interview_agents_batch(
+    simulation_id="sim_xxx",
+    interviews=[
+        {"agent_id": 0, "prompt": "问题A"},
+        {"agent_id": 1, "prompt": "问题B"}
+    ]
+)
+
+# 全局采访
+result = SimulationRunner.interview_all_agents(
+    simulation_id="sim_xxx",
+    prompt="你认为事件会如何发展？"
+)
+```
+
+---
+
 ## 工具类
 
 ### 1. FileParser (文件解析器)
@@ -1661,7 +2068,35 @@ curl -X POST http://localhost:5001/api/simulation/start \
 # Step 8: 实时查询运行状态
 curl http://localhost:5001/api/simulation/{sim_xxx}/run-status
 
-# Step 9: 停止模拟
+# Step 9: 检查环境状态（模拟完成后环境会进入等待命令模式）
+curl http://localhost:5001/api/simulation/{sim_xxx}/env-status
+
+# Step 10: 采访单个Agent
+curl -X POST http://localhost:5001/api/simulation/{sim_xxx}/interview \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": 0,
+    "prompt": "你对这件事有什么看法？"
+  }'
+
+# Step 11: 全局采访（采访所有Agent）
+curl -X POST http://localhost:5001/api/simulation/{sim_xxx}/interview/all \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "你认为事件的后续发展会如何？"
+  }'
+
+# Step 12: 获取Interview历史
+curl http://localhost:5001/api/simulation/{sim_xxx}/interview/history
+
+# Step 13: 关闭模拟环境（优雅退出）
+curl -X POST http://localhost:5001/api/simulation/close-env \
+  -H "Content-Type: application/json" \
+  -d '{
+    "simulation_id": "sim_xxx"
+  }'
+
+# 或者强制停止模拟
 curl -X POST http://localhost:5001/api/simulation/stop \
   -H "Content-Type: application/json" \
   -d '{
@@ -1830,6 +2265,31 @@ MIT License
 
 ---
 
-**最后更新**: 2025-12-05
-**版本**: v1.1.0
+**最后更新**: 2025-12-08
+**版本**: v1.2.0
+
+### 更新日志
+
+**v1.2.0 (2025-12-08)**:
+- 新增 Interview 采访功能
+  - 支持单个Agent采访
+  - 支持批量采访多个Agent
+  - 支持全局采访（所有Agent使用相同问题）
+  - 支持获取Interview历史记录
+- 新增模拟状态持久化
+  - 模拟完成后环境不立即关闭，进入等待命令模式
+  - 支持优雅关闭环境命令
+- 新增 IPC 通信机制
+  - Flask后端与模拟脚本之间的进程间通信
+  - 基于文件系统的命令/响应模式
+
+**v1.1.0 (2025-12-05)**:
+- 新增图谱记忆动态更新功能
+- 支持 max_rounds 参数限制模拟轮数
+
+**v1.0.0**:
+- 初始版本发布
+- 支持知识图谱构建
+- 支持Agent人设生成
+- 支持双平台模拟
 

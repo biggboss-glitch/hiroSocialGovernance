@@ -28,6 +28,14 @@ from .zep_graph_memory_updater import (
     ZepGraphMemoryManager,
     AgentActivity
 )
+from .simulation_ipc import (
+    SimulationIPCClient,
+    SimulationIPCServer,
+    IPCCommand,
+    IPCResponse,
+    CommandType,
+    CommandStatus
+)
 
 __all__ = [
     'OntologyGenerator', 
@@ -55,5 +63,11 @@ __all__ = [
     'ZepGraphMemoryUpdater',
     'ZepGraphMemoryManager',
     'AgentActivity',
+    'SimulationIPCClient',
+    'SimulationIPCServer',
+    'IPCCommand',
+    'IPCResponse',
+    'CommandType',
+    'CommandStatus',
 ]
 
