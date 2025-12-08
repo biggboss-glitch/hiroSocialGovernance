@@ -4,6 +4,17 @@ MiroFish Backend 启动入口
 
 import os
 import sys
+import warnings
+
+# 抑制 multiprocessing resource_tracker 的警告（来自第三方库如 transformers）
+# 这个警告是无害的，只是在进程被终止时资源没有被正确清理
+warnings.filterwarnings("ignore", message=".*resource_tracker.*")
+warnings.filterwarnings("ignore", category=UserWarning, module=".*multiprocessing.*")
+
+# 额外：通过环境变量告诉 Python 不要跟踪 multiprocessing 资源
+# 这可以从根本上避免警告
+import os
+os.environ.setdefault('PYTHONWARNINGS', 'ignore::UserWarning')
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

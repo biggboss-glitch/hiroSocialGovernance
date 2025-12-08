@@ -854,6 +854,9 @@ class SimulationRunner:
         
         return result
     
+    # 防止重复清理的标志
+    _cleanup_done = False
+    
     @classmethod
     def cleanup_all_simulations(cls):
         """
@@ -861,12 +864,23 @@ class SimulationRunner:
         
         在服务器关闭时调用，确保所有子进程被终止
         """
+        # 防止重复清理
+        if cls._cleanup_done:
+            return
+        cls._cleanup_done = True
+        
+        # 检查是否有内容需要清理（避免空进程的进程打印无用日志）
+        has_processes = bool(cls._processes)
+        has_updaters = bool(cls._graph_memory_enabled)
+        
+        if not has_processes and not has_updaters:
+            return  # 没有需要清理的内容，静默返回
+        
         logger.info("正在清理所有模拟进程...")
         
-        # 首先停止所有图谱记忆更新器
+        # 首先停止所有图谱记忆更新器（stop_all 内部会打印日志）
         try:
             ZepGraphMemoryManager.stop_all()
-            logger.info("已停止所有图谱记忆更新器")
         except Exception as e:
             logger.error(f"停止图谱记忆更新器失败: {e}")
         cls._graph_memory_enabled.clear()
@@ -899,7 +913,7 @@ class SimulationRunner:
                         except Exception:
                             process.kill()
                     
-                    # 更新状态
+                    # 更新 run_state.json
                     state = cls.get_run_state(simulation_id)
                     if state:
                         state.runner_status = RunnerStatus.STOPPED
@@ -908,6 +922,24 @@ class SimulationRunner:
                         state.completed_at = datetime.now().isoformat()
                         state.error = "服务器关闭，模拟被终止"
                         cls._save_run_state(state)
+                    
+                    # 同时更新 state.json，将状态设为 stopped
+                    try:
+                        sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
+                        state_file = os.path.join(sim_dir, "state.json")
+                        logger.info(f"尝试更新 state.json: {state_file}")
+                        if os.path.exists(state_file):
+                            with open(state_file, 'r', encoding='utf-8') as f:
+                                state_data = json.load(f)
+                            state_data['status'] = 'stopped'
+                            state_data['updated_at'] = datetime.now().isoformat()
+                            with open(state_file, 'w', encoding='utf-8') as f:
+                                json.dump(state_data, f, indent=2, ensure_ascii=False)
+                            logger.info(f"已更新 state.json 状态为 stopped: {simulation_id}")
+                        else:
+                            logger.warning(f"state.json 不存在: {state_file}")
+                    except Exception as state_err:
+                        logger.warning(f"更新 state.json 失败: {simulation_id}, error={state_err}")
                         
             except Exception as e:
                 logger.error(f"清理进程失败: {simulation_id}, error={e}")
@@ -947,13 +979,26 @@ class SimulationRunner:
         if _cleanup_registered:
             return
         
+        # Flask debug 模式下，只在 reloader 子进程中注册清理（实际运行应用的进程）
+        # WERKZEUG_RUN_MAIN=true 表示是 reloader 子进程
+        # 如果不是 debug 模式，则没有这个环境变量，也需要注册
+        is_reloader_process = os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
+        is_debug_mode = os.environ.get('FLASK_DEBUG') == '1' or os.environ.get('WERKZEUG_RUN_MAIN') is not None
+        
+        # 在 debug 模式下，只在 reloader 子进程中注册；非 debug 模式下始终注册
+        if is_debug_mode and not is_reloader_process:
+            _cleanup_registered = True  # 标记已注册，防止子进程再次尝试
+            return
+        
         # 保存原有的信号处理器
         original_sigint = signal.getsignal(signal.SIGINT)
         original_sigterm = signal.getsignal(signal.SIGTERM)
         
         def cleanup_handler(signum=None, frame=None):
             """信号处理器：先清理模拟进程，再调用原处理器"""
-            logger.info(f"收到信号 {signum}，开始清理...")
+            # 只有在有进程需要清理时才打印日志
+            if cls._processes or cls._graph_memory_enabled:
+                logger.info(f"收到信号 {signum}，开始清理...")
             cls.cleanup_all_simulations()
             
             # 调用原有的信号处理器，让 Flask 正常退出

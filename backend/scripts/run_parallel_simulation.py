@@ -29,12 +29,22 @@ import argparse
 import asyncio
 import json
 import logging
+import multiprocessing
 import os
 import random
+import signal
 import sqlite3
 import sys
+import warnings
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
+
+# 抑制 multiprocessing resource_tracker 的警告（来自第三方库如 transformers）
+warnings.filterwarnings("ignore", message=".*resource_tracker.*")
+
+# 全局变量：用于信号处理
+_shutdown_event = None
+_cleanup_done = False
 
 # 添加 backend 目录到路径
 # 脚本固定位于 backend/scripts/ 目录
@@ -1181,6 +1191,12 @@ async def run_twitter_simulation(
     start_time = datetime.now()
     
     for round_num in range(total_rounds):
+        # 检查是否收到退出信号
+        if _shutdown_event and _shutdown_event.is_set():
+            if main_logger:
+                main_logger.info(f"收到退出信号，在第 {round_num + 1} 轮停止模拟")
+            break
+        
         simulated_minutes = round_num * minutes_per_round
         simulated_hour = (simulated_minutes // 60) % 24
         simulated_day = simulated_minutes // (60 * 24) + 1
@@ -1374,6 +1390,12 @@ async def run_reddit_simulation(
     start_time = datetime.now()
     
     for round_num in range(total_rounds):
+        # 检查是否收到退出信号
+        if _shutdown_event and _shutdown_event.is_set():
+            if main_logger:
+                main_logger.info(f"收到退出信号，在第 {round_num + 1} 轮停止模拟")
+            break
+        
         simulated_minutes = round_num * minutes_per_round
         simulated_hour = (simulated_minutes // 60) % 24
         simulated_day = simulated_minutes // (60 * 24) + 1
@@ -1465,6 +1487,10 @@ async def main():
     
     args = parser.parse_args()
     
+    # 在 main 函数开始时创建 shutdown 事件，确保整个程序都能响应退出信号
+    global _shutdown_event
+    _shutdown_event = asyncio.Event()
+    
     if not os.path.exists(args.config):
         print(f"错误: 配置文件不存在: {args.config}")
         sys.exit(1)
@@ -1549,15 +1575,22 @@ async def main():
         )
         ipc_handler.update_status("alive")
         
-        # 等待命令循环
+        # 等待命令循环（使用全局 _shutdown_event）
         try:
-            while True:
+            while not _shutdown_event.is_set():
                 should_continue = await ipc_handler.process_commands()
                 if not should_continue:
                     break
-                await asyncio.sleep(0.5)  # 轮询间隔
+                # 使用 wait_for 替代 sleep，这样可以响应 shutdown_event
+                try:
+                    await asyncio.wait_for(_shutdown_event.wait(), timeout=0.5)
+                    break  # 收到退出信号
+                except asyncio.TimeoutError:
+                    pass  # 超时继续循环
         except KeyboardInterrupt:
             print("\n收到中断信号")
+        except asyncio.CancelledError:
+            print("\n任务被取消")
         except Exception as e:
             print(f"\n命令处理出错: {e}")
         
@@ -1582,5 +1615,50 @@ async def main():
     log_manager.info("=" * 60)
 
 
+def setup_signal_handlers(loop=None):
+    """
+    设置信号处理器，确保收到 SIGTERM/SIGINT 时能够正确退出
+    
+    持久化模拟场景：模拟完成后不退出，等待 interview 命令
+    当收到终止信号时，需要：
+    1. 通知 asyncio 循环退出等待
+    2. 让程序有机会正常清理资源（关闭数据库、环境等）
+    3. 然后才退出
+    """
+    def signal_handler(signum, frame):
+        global _cleanup_done
+        sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
+        print(f"\n收到 {sig_name} 信号，正在退出...")
+        
+        if not _cleanup_done:
+            _cleanup_done = True
+            # 设置事件通知 asyncio 循环退出（让循环有机会清理资源）
+            if _shutdown_event:
+                _shutdown_event.set()
+        
+        # 不要直接 sys.exit()，让 asyncio 循环正常退出并清理资源
+        # 如果是重复收到信号，才强制退出
+        else:
+            print("强制退出...")
+            sys.exit(1)
+    
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    setup_signal_handlers()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n程序被中断")
+    except SystemExit:
+        pass
+    finally:
+        # 清理 multiprocessing 资源跟踪器（防止退出时的警告）
+        try:
+            from multiprocessing import resource_tracker
+            resource_tracker._resource_tracker._stop()
+        except Exception:
+            pass
+        print("模拟进程已退出")

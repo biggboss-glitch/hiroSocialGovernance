@@ -19,10 +19,15 @@ import json
 import logging
 import os
 import random
+import signal
 import sys
 import sqlite3
 from datetime import datetime
 from typing import Dict, Any, List, Optional
+
+# 全局变量：用于信号处理
+_shutdown_event = None
+_cleanup_done = False
 
 # 添加项目路径
 _scripts_dir = os.path.dirname(os.path.abspath(__file__))
@@ -671,15 +676,21 @@ class TwitterSimulationRunner:
             
             self.ipc_handler.update_status("alive")
             
-            # 等待命令循环
+            # 等待命令循环（使用全局 _shutdown_event）
             try:
-                while True:
+                while not _shutdown_event.is_set():
                     should_continue = await self.ipc_handler.process_commands()
                     if not should_continue:
                         break
-                    await asyncio.sleep(0.5)  # 轮询间隔
+                    try:
+                        await asyncio.wait_for(_shutdown_event.wait(), timeout=0.5)
+                        break  # 收到退出信号
+                    except asyncio.TimeoutError:
+                        pass
             except KeyboardInterrupt:
                 print("\n收到中断信号")
+            except asyncio.CancelledError:
+                print("\n任务被取消")
             except Exception as e:
                 print(f"\n命令处理出错: {e}")
             
@@ -716,6 +727,10 @@ async def main():
     
     args = parser.parse_args()
     
+    # 在 main 函数开始时创建 shutdown 事件
+    global _shutdown_event
+    _shutdown_event = asyncio.Event()
+    
     if not os.path.exists(args.config):
         print(f"错误: 配置文件不存在: {args.config}")
         sys.exit(1)
@@ -731,5 +746,35 @@ async def main():
     await runner.run(max_rounds=args.max_rounds)
 
 
+def setup_signal_handlers():
+    """
+    设置信号处理器，确保收到 SIGTERM/SIGINT 时能够正确退出
+    让程序有机会正常清理资源（关闭数据库、环境等）
+    """
+    def signal_handler(signum, frame):
+        global _cleanup_done
+        sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
+        print(f"\n收到 {sig_name} 信号，正在退出...")
+        if not _cleanup_done:
+            _cleanup_done = True
+            if _shutdown_event:
+                _shutdown_event.set()
+        else:
+            # 重复收到信号才强制退出
+            print("强制退出...")
+            sys.exit(1)
+    
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    setup_signal_handlers()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n程序被中断")
+    except SystemExit:
+        pass
+    finally:
+        print("模拟进程已退出")

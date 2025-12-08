@@ -506,16 +506,25 @@ class ZepGraphMemoryManager:
                 del cls._updaters[simulation_id]
                 logger.info(f"已停止图谱记忆更新器: simulation_id={simulation_id}")
     
+    # 防止 stop_all 重复调用的标志
+    _stop_all_done = False
+    
     @classmethod
     def stop_all(cls):
         """停止所有更新器"""
+        # 防止重复调用
+        if cls._stop_all_done:
+            return
+        cls._stop_all_done = True
+        
         with cls._lock:
-            for simulation_id, updater in list(cls._updaters.items()):
-                try:
-                    updater.stop()
-                except Exception as e:
-                    logger.error(f"停止更新器失败: simulation_id={simulation_id}, error={e}")
-            cls._updaters.clear()
+            if cls._updaters:
+                for simulation_id, updater in list(cls._updaters.items()):
+                    try:
+                        updater.stop()
+                    except Exception as e:
+                        logger.error(f"停止更新器失败: simulation_id={simulation_id}, error={e}")
+                cls._updaters.clear()
             logger.info("已停止所有图谱记忆更新器")
     
     @classmethod
