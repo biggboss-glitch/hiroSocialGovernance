@@ -31,27 +31,6 @@ def main():
     port = int(os.environ.get('FLASK_PORT', 5001))
     debug = Config.DEBUG
     
-    # 只在 reloader 子进程中打印启动信息（避免 debug 模式下打印两次）
-    # WERKZEUG_RUN_MAIN=true 表示当前是 reloader 启动的子进程
-    is_reloader_process = os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
-    if not debug or is_reloader_process:
-        print(f"""
-╔══════════════════════════════════════════════════╗
-║           MiroFish Backend Server                ║
-╠══════════════════════════════════════════════════╣
-║  Running on: http://{host}:{port}                ║
-║  Debug mode: {debug}                             ║
-║                                                  ║
-║  API Endpoints:                                  ║
-║    POST /api/graph/ontology/generate  - 生成本体  ║
-║    POST /api/graph/build              - 构建图谱  ║
-║    GET  /api/graph/task/<task_id>     - 查询任务  ║
-║    GET  /api/graph/tasks              - 列出任务  ║
-║    GET  /api/graph/data/<graph_id>    - 获取图数据║
-║    DELETE /api/graph/delete/<graph_id>- 删除图谱  ║
-╚══════════════════════════════════════════════════╝
-        """)
-    
     # 启动服务
     app.run(host=host, port=port, debug=debug, threaded=True)
 
