@@ -25,7 +25,8 @@ from .zep_tools import (
     ZepToolsService, 
     SearchResult, 
     InsightForgeResult, 
-    PanoramaResult
+    PanoramaResult,
+    InterviewResult
 )
 
 logger = get_logger('mirofish.report_agent')
@@ -244,6 +245,36 @@ class ReportAgent:
                     "limit": "返回结果数量（可选，默认10）"
                 },
                 "priority": "low"
+            },
+            "interview_agents": {
+                "name": "interview_agents",
+                "description": """【深度采访 - 多视角观点采集】
+采访模拟中的Agent角色，获取来自不同视角的深度观点。这是获取模拟结果中各方声音的最佳方式！
+
+功能流程：
+1. 自动读取人设文件，了解所有模拟Agent
+2. 智能选择与采访主题最相关的Agent（如学生、媒体、官方等）
+3. 模拟采访每个选中的Agent，获取符合其人设的回答
+4. 整合所有采访结果，提供多视角分析
+
+【使用场景】
+- 需要从不同角色视角了解事件看法（学生怎么看？媒体怎么看？官方怎么说？）
+- 需要收集多方意见和立场
+- 需要获取模拟Agent的直接引言和观点
+- 想让报告更生动，包含"采访实录"
+
+【返回内容】
+- 被采访Agent的身份信息
+- 各Agent的采访回答（符合其人设的原创内容）
+- 关键引言（可直接引用）
+- 采访摘要和观点对比
+
+【重要】这是获取模拟Agent"真实声音"的唯一方式！""",
+                "parameters": {
+                    "interview_topic": "采访主题或需求描述（如：'了解学生对宿舍甲醛事件的看法'）",
+                    "max_agents": "最多采访的Agent数量（可选，默认5）"
+                },
+                "priority": "high"
             }
         }
     
@@ -299,6 +330,20 @@ class ReportAgent:
                     graph_id=self.graph_id,
                     query=query,
                     limit=limit
+                )
+                return result.to_text()
+            
+            elif tool_name == "interview_agents":
+                # 深度采访 - 采访模拟Agent获取多视角观点
+                interview_topic = parameters.get("interview_topic", parameters.get("query", ""))
+                max_agents = parameters.get("max_agents", 5)
+                if isinstance(max_agents, str):
+                    max_agents = int(max_agents)
+                result = self.zep_tools.interview_agents(
+                    simulation_id=self.simulation_id,
+                    interview_requirement=interview_topic,
+                    simulation_requirement=self.simulation_requirement,
+                    max_agents=max_agents
                 )
                 return result.to_text()
             
