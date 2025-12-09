@@ -24,3 +24,8 @@ werkzeug>=3.0.0
 oasis-ai>=0.1.0
 camel-ai>=0.2.0
 
+# LangChain框架（用于Report Agent）
+langchain>=0.2.0
+langchain-core>=0.2.0
+langchain-openai>=0.1.0
+

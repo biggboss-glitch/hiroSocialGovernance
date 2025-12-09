@@ -28,6 +28,8 @@
 4. **模拟配置智能生成**: 使用 LLM 根据需求自动生成模拟参数(时间、活跃度、事件等)
 5. **双平台模拟**: 支持 Twitter 和 Reddit 双平台并行舆论模拟(基于 OASIS 框架)
 6. **图谱记忆动态更新**: 可选功能,将模拟中Agent的活动实时更新到Zep图谱,让图谱"记住"模拟过程
+7. **智能报告生成**: 使用 LangChain + Zep 实现 ReACT 模式的模拟分析报告自动生成
+8. **Report Agent对话**: 报告生成后可与Report Agent对话,自主调用检索工具回答问题
 
 ---
 
@@ -42,10 +44,11 @@
 │  │  API层         │  │  服务层      │  │  模型层         │ │
 │  │  - graph.py    │→ │  - 本体生成  │→ │  - Project      │ │
 │  │  - simulation  │  │  - 图谱构建  │  │  - Task         │ │
-│  └────────────────┘  │  - 实体读取  │  └─────────────────┘ │
-│                      │  - 人设生成  │                        │
+│  │  - report.py   │  │  - 实体读取  │  │  - Report       │ │
+│  └────────────────┘  │  - 人设生成  │  └─────────────────┘ │
 │                      │  - 配置生成  │                        │
 │                      │  - 模拟运行  │                        │
+│                      │  - 报告生成  │                        │
 │                      └──────────────┘                        │
 ├─────────────────────────────────────────────────────────────┤
 │  外部服务集成                                                │
@@ -78,6 +81,16 @@
    模拟完成 → 环境进入等待模式 → 发送Interview命令 → Agent回答 → 获取结果 → (可选)关闭环境
    ```
 
+5. **报告生成流程**:
+   ```
+   模拟完成 → 调用Report API → ReACT规划大纲 → 逐章节生成(多次工具调用) → 生成Markdown报告 → 解锁Interview功能
+   ```
+
+6. **Report Agent对话流程**:
+   ```
+   用户提问 → Agent分析 → 调用Zep检索工具 → 整合信息 → 返回回答
+   ```
+
 ---
 
 ## 技术栈
@@ -89,6 +102,7 @@
 ### AI & 知识图谱
 - **Zep Cloud SDK 2.0+**: 知识图谱构建与管理
 - **OpenAI SDK 1.0+**: LLM 调用(支持 OpenAI 兼容接口)
+- **LangChain 0.2+**: Report Agent框架(ReACT模式)
 - **OASIS-AI**: 社交媒体模拟框架
 - **CAMEL-AI**: Agent 行为模拟
 
@@ -117,6 +131,10 @@ backend/
 │   │       ├── project.json    # 项目元数据
 │   │       ├── files/          # 上传的文件
 │   │       └── extracted_text.txt  # 提取的文本
+│   ├── reports/                # 报告数据
+│   │   └── report_xxx/
+│   │       ├── report_xxx.json # 报告元数据
+│   │       └── report_xxx.md   # Markdown报告
 │   └── simulations/            # 模拟数据
 │       └── sim_xxx/
 │           ├── state.json      # 模拟状态
@@ -142,7 +160,8 @@ backend/
     ├── api/                   # API路由
     │   ├── __init__.py
     │   ├── graph.py           # 图谱相关接口
-    │   └── simulation.py      # 模拟相关接口
+    │   ├── simulation.py      # 模拟相关接口
+    │   └── report.py          # 报告相关接口
     ├── models/                # 数据模型
     │   ├── __init__.py
     │   ├── project.py         # 项目模型
@@ -153,12 +172,14 @@ backend/
     │   ├── graph_builder.py               # 图谱构建
     │   ├── text_processor.py              # 文本处理
     │   ├── zep_entity_reader.py           # 实体读取
+    │   ├── zep_tools.py                   # Zep检索工具服务
     │   ├── oasis_profile_generator.py     # 人设生成
     │   ├── simulation_config_generator.py # 配置生成
     │   ├── simulation_manager.py          # 模拟管理
     │   ├── simulation_runner.py           # 模拟运行
     │   ├── simulation_ipc.py              # 模拟IPC通信（Interview功能）
-    │   └── zep_graph_memory_updater.py    # 图谱记忆动态更新
+    │   ├── zep_graph_memory_updater.py    # 图谱记忆动态更新
+    │   └── report_agent.py                # 报告生成Agent（ReACT模式）
     └── utils/                 # 工具类
         ├── __init__.py
         ├── file_parser.py     # 文件解析
@@ -239,6 +260,55 @@ backend/
 **核心服务**:
 - `SimulationIPCClient`: IPC客户端（Flask端使用）
 - `SimulationIPCServer`: IPC服务器（模拟脚本端使用）
+
+### 5. Report Agent模块（报告生成）
+
+**功能**: 模拟完成后自动生成分析报告，支持与用户对话
+
+**特点**:
+- **ReACT模式**: Reasoning + Acting，多轮思考与工具调用
+- **大纲规划**: LLM分析模拟需求，自动规划报告目录结构
+- **分段生成**: 逐章节生成，每章节可多次调用Zep检索工具
+- **Markdown输出**: 生成专业的Markdown格式报告
+- **对话功能**: 报告完成后可与Report Agent对话，自主调用工具回答问题
+
+**工具（MCP封装）**:
+- `search_graph`: 图谱语义搜索
+- `get_graph_statistics`: 获取图谱统计信息
+- `get_entity_summary`: 获取实体关系摘要
+- `get_simulation_context`: 获取模拟上下文
+- `get_entities_by_type`: 按类型获取实体
+
+**核心服务**:
+- `ZepToolsService`: Zep检索工具封装
+- `ReportAgent`: 报告生成Agent（ReACT模式）
+- `ReportManager`: 报告持久化管理
+
+**工作原理**:
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Report Agent (ReACT)                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  1. 规划阶段                                                 │
+│     ┌─────────────────────────────────────────────────┐     │
+│     │ LLM分析模拟需求 → 获取图谱上下文 → 生成报告大纲  │     │
+│     └─────────────────────────────────────────────────┘     │
+│                                                              │
+│  2. 生成阶段 (每章节)                                        │
+│     ┌─────────────────────────────────────────────────┐     │
+│     │  Thought → Action → Observation → ... → Final   │     │
+│     │    ↓         ↓          ↓                       │     │
+│     │  分析需求  调用工具   分析结果      生成内容     │     │
+│     └─────────────────────────────────────────────────┘     │
+│                                                              │
+│  3. 输出阶段                                                 │
+│     ┌─────────────────────────────────────────────────┐     │
+│     │ 组装章节 → 生成Markdown → 保存JSON/MD文件       │     │
+│     └─────────────────────────────────────────────────┘     │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
 
 **工作原理**:
 ```
@@ -964,6 +1034,245 @@ Flask后端                    模拟脚本
 - `/stop`: 强制终止模拟进程
 - `/close-env`: 优雅地关闭环境，让模拟进程正常退出
 
+---
+
+### Report 报告接口
+
+> **说明**: 报告生成完成后才能解锁Interview功能。Report Agent使用ReACT模式，可以在对话中自主调用Zep检索工具。
+
+#### 1. 生成报告
+
+**接口**: `POST /api/report/generate`
+
+**请求参数**:
+```json
+{
+  "simulation_id": "sim_xxxx",
+  "force_regenerate": false
+}
+```
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| simulation_id | String | 是 | - | 模拟ID |
+| force_regenerate | Boolean | 否 | false | 强制重新生成 |
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "simulation_id": "sim_xxxx",
+    "task_id": "task_xxxx",
+    "status": "generating",
+    "message": "报告生成任务已启动",
+    "already_generated": false
+  }
+}
+```
+
+**如果报告已存在**:
+```json
+{
+  "success": true,
+  "data": {
+    "simulation_id": "sim_xxxx",
+    "report_id": "report_xxxx",
+    "status": "completed",
+    "message": "报告已存在",
+    "already_generated": true
+  }
+}
+```
+
+---
+
+#### 2. 查询生成进度
+
+**接口**: `POST /api/report/generate/status`
+
+**请求参数**:
+```json
+{
+  "task_id": "task_xxxx",
+  "simulation_id": "sim_xxxx"
+}
+```
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "task_id": "task_xxxx",
+    "status": "processing",
+    "progress": 45,
+    "message": "[generating] 正在生成章节: 关键发现 (3/5)"
+  }
+}
+```
+
+---
+
+#### 3. 获取报告
+
+**接口**: `GET /api/report/{report_id}`
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "report_id": "report_xxxx",
+    "simulation_id": "sim_xxxx",
+    "graph_id": "mirofish_xxxx",
+    "simulation_requirement": "模拟武汉大学撤销处分后的舆情走向",
+    "status": "completed",
+    "outline": {
+      "title": "武汉大学撤销处分事件舆情分析报告",
+      "summary": "基于模拟结果的全面舆情分析",
+      "sections": [
+        {"title": "执行摘要", "content": "..."},
+        {"title": "模拟背景", "content": "..."},
+        {"title": "关键发现", "content": "..."},
+        {"title": "舆情分析", "content": "..."},
+        {"title": "建议与展望", "content": "..."}
+      ]
+    },
+    "markdown_content": "# 武汉大学撤销处分事件舆情分析报告\n\n...",
+    "created_at": "2025-12-09T10:00:00",
+    "completed_at": "2025-12-09T10:05:00"
+  }
+}
+```
+
+---
+
+#### 4. 根据模拟ID获取报告
+
+**接口**: `GET /api/report/by-simulation/{simulation_id}`
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {...},
+  "has_report": true
+}
+```
+
+---
+
+#### 5. 下载报告
+
+**接口**: `GET /api/report/{report_id}/download`
+
+**返回**: Markdown文件下载
+
+---
+
+#### 6. 与Report Agent对话
+
+**接口**: `POST /api/report/chat`
+
+**请求参数**:
+```json
+{
+  "simulation_id": "sim_xxxx",
+  "message": "请详细解释一下舆情的主要趋势",
+  "chat_history": [
+    {"role": "user", "content": "报告提到了哪些关键人物？"},
+    {"role": "assistant", "content": "根据分析，关键人物包括..."}
+  ]
+}
+```
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| simulation_id | String | 是 | - | 模拟ID |
+| message | String | 是 | - | 用户消息 |
+| chat_history | Array | 否 | [] | 对话历史（用于上下文） |
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "response": "根据模拟数据分析，舆情的主要趋势表现为...\n\n1. **初期阶段**：...\n2. **发酵阶段**：...\n3. **高峰阶段**：...",
+    "tool_calls": [
+      {"name": "search_graph", "parameters": {"query": "舆情趋势"}},
+      {"name": "get_graph_statistics", "parameters": {}}
+    ],
+    "sources": []
+  }
+}
+```
+
+---
+
+#### 7. 检查报告状态
+
+**接口**: `GET /api/report/check/{simulation_id}`
+
+**用途**: 判断是否解锁Interview功能
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "simulation_id": "sim_xxxx",
+    "has_report": true,
+    "report_status": "completed",
+    "report_id": "report_xxxx",
+    "interview_unlocked": true
+  }
+}
+```
+
+---
+
+#### 8. 列出所有报告
+
+**接口**: `GET /api/report/list?simulation_id=sim_xxxx&limit=50`
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "data": [...],
+  "count": 5
+}
+```
+
+---
+
+#### 9. 删除报告
+
+**接口**: `DELETE /api/report/{report_id}`
+
+---
+
+#### 10. 工具调试接口
+
+**图谱搜索**: `POST /api/report/tools/search`
+```json
+{
+  "graph_id": "mirofish_xxxx",
+  "query": "舆情走向",
+  "limit": 10
+}
+```
+
+**图谱统计**: `POST /api/report/tools/statistics`
+```json
+{
+  "graph_id": "mirofish_xxxx"
+}
+```
+
+---
+
 #### 6. 获取运行状态
 
 **接口**: `GET /api/simulation/{simulation_id}/run-status`
@@ -1192,7 +1501,50 @@ created_at: str              # 创建时间
 
 ---
 
-### 6. SimulationParameters (模拟参数)
+### 6. Report (报告模型)
+
+**文件**: `app/services/report_agent.py`
+
+**字段**:
+```python
+report_id: str                  # 报告ID (report_xxx)
+simulation_id: str              # 模拟ID
+graph_id: str                   # 图谱ID
+simulation_requirement: str     # 模拟需求
+status: ReportStatus            # 状态
+outline: ReportOutline          # 报告大纲
+markdown_content: str           # Markdown内容
+created_at: str                 # 创建时间
+completed_at: str               # 完成时间
+error: str                      # 错误信息
+```
+
+**状态枚举**:
+```python
+PENDING = "pending"             # 等待中
+PLANNING = "planning"           # 规划大纲中
+GENERATING = "generating"       # 生成内容中
+COMPLETED = "completed"         # 已完成
+FAILED = "failed"               # 失败
+```
+
+**ReportOutline字段**:
+```python
+title: str                      # 报告标题
+summary: str                    # 报告摘要
+sections: List[ReportSection]   # 章节列表
+```
+
+**ReportSection字段**:
+```python
+title: str                      # 章节标题
+content: str                    # 章节内容
+subsections: List[ReportSection] # 子章节
+```
+
+---
+
+### 7. SimulationParameters (模拟参数)
 
 **文件**: `app/services/simulation_config_generator.py`
 
@@ -1815,6 +2167,270 @@ result = SimulationRunner.interview_all_agents(
 
 ---
 
+### 10. ZepToolsService (Zep检索工具服务)
+
+**文件**: `app/services/zep_tools.py`
+
+**功能**: 封装多种Zep图谱检索工具，供Report Agent调用
+
+**核心方法**:
+
+```python
+def search_graph(
+    graph_id: str, 
+    query: str, 
+    limit: int = 10
+) -> SearchResult:
+    """
+    图谱语义搜索
+    
+    使用混合搜索（语义+BM25）查找相关信息
+    返回: facts列表、edges列表、nodes列表
+    """
+
+def get_all_nodes(graph_id: str) -> List[NodeInfo]:
+    """获取图谱所有节点"""
+
+def get_all_edges(graph_id: str) -> List[EdgeInfo]:
+    """获取图谱所有边"""
+
+def get_node_detail(node_uuid: str) -> Optional[NodeInfo]:
+    """获取单个节点详情"""
+
+def get_node_edges(node_uuid: str) -> List[EdgeInfo]:
+    """获取节点相关的边"""
+
+def get_entities_by_type(
+    graph_id: str, 
+    entity_type: str
+) -> List[NodeInfo]:
+    """按类型获取实体"""
+
+def get_entity_summary(
+    graph_id: str, 
+    entity_name: str
+) -> Dict[str, Any]:
+    """获取实体关系摘要"""
+
+def get_graph_statistics(graph_id: str) -> Dict[str, Any]:
+    """
+    获取图谱统计信息
+    
+    返回:
+    - total_nodes: 节点总数
+    - total_edges: 边总数
+    - entity_types: 实体类型分布
+    - relation_types: 关系类型分布
+    """
+
+def get_simulation_context(
+    graph_id: str,
+    simulation_requirement: str,
+    limit: int = 30
+) -> Dict[str, Any]:
+    """
+    获取模拟相关上下文
+    
+    综合搜索与模拟需求相关的所有信息
+    """
+```
+
+**容错机制**:
+- 所有API调用带3次重试
+- 指数退避策略
+- 搜索失败返回空结果而非抛出异常
+
+---
+
+### 11. ReportAgent (报告生成Agent)
+
+**文件**: `app/services/report_agent.py`
+
+**功能**: 使用ReACT模式生成模拟分析报告
+
+**核心类**:
+
+```python
+class ReportAgent:
+    """
+    Report Agent - 模拟报告生成Agent
+    
+    采用ReACT（Reasoning + Acting）模式：
+    1. 规划阶段：分析模拟需求，规划报告目录结构
+    2. 生成阶段：逐章节生成内容，每章节可多次调用工具获取信息
+    3. 对话阶段：支持与用户对话，自主调用检索工具
+    """
+    
+    # 配置
+    MAX_TOOL_CALLS_PER_SECTION = 5  # 每章节最大工具调用次数
+    MAX_REFLECTION_ROUNDS = 2       # 最大反思轮数
+```
+
+**核心方法**:
+
+```python
+def plan_outline(
+    progress_callback: Optional[Callable] = None
+) -> ReportOutline:
+    """
+    规划报告大纲
+    
+    步骤:
+    1. 获取模拟上下文（图谱统计、相关事实）
+    2. 使用LLM分析并生成大纲结构
+    3. 返回包含章节列表的大纲对象
+    """
+
+def _generate_section_react(
+    section: ReportSection,
+    outline: ReportOutline,
+    previous_sections: List[str],
+    progress_callback: Optional[Callable] = None
+) -> str:
+    """
+    使用ReACT模式生成单个章节
+    
+    ReACT循环:
+    1. Thought（思考）- 分析需要什么信息
+    2. Action（行动）- 调用工具获取信息
+    3. Observation（观察）- 分析工具返回结果
+    4. 重复直到信息足够或达到最大次数
+    5. Final Answer（最终回答）- 生成章节内容
+    """
+
+def generate_report(
+    progress_callback: Optional[Callable] = None
+) -> Report:
+    """
+    生成完整报告
+    
+    步骤:
+    1. 规划大纲
+    2. 逐章节生成（ReACT模式）
+    3. 组装Markdown报告
+    4. 保存报告文件
+    """
+
+def chat(
+    message: str,
+    chat_history: List[Dict[str, str]] = None
+) -> Dict[str, Any]:
+    """
+    与Report Agent对话
+    
+    在对话中Agent可以自主调用检索工具来回答问题
+    
+    Returns:
+        {
+            "response": "Agent回复",
+            "tool_calls": [调用的工具列表],
+            "sources": [信息来源]
+        }
+    """
+```
+
+**工具调用格式**:
+
+Agent使用以下格式调用工具：
+
+```
+<tool_call>
+{"name": "search_graph", "parameters": {"query": "舆情走向", "limit": 10}}
+</tool_call>
+```
+
+或者：
+
+```
+[TOOL_CALL] search_graph(query="舆情走向", limit="10")
+```
+
+**报告大纲结构示例**:
+
+```json
+{
+  "title": "武汉大学撤销处分事件舆情分析报告",
+  "summary": "基于模拟结果的全面舆情分析",
+  "sections": [
+    {
+      "title": "执行摘要",
+      "description": "简要总结模拟结果和关键发现"
+    },
+    {
+      "title": "模拟背景",
+      "description": "描述模拟的初始条件和场景设定"
+    },
+    {
+      "title": "关键发现",
+      "description": "分析模拟中的重要发现和趋势"
+    },
+    {
+      "title": "舆情分析",
+      "description": "分析舆论走向、情绪变化、关键意见领袖"
+    },
+    {
+      "title": "影响评估",
+      "description": "评估事件的影响范围和程度"
+    },
+    {
+      "title": "建议与展望",
+      "description": "基于分析结果提出建议"
+    }
+  ]
+}
+```
+
+---
+
+### 12. ReportManager (报告管理器)
+
+**文件**: `app/services/report_agent.py`
+
+**功能**: 报告的持久化存储和检索
+
+**核心方法**:
+
+```python
+@classmethod
+def save_report(cls, report: Report) -> None:
+    """
+    保存报告
+    
+    同时保存:
+    - JSON文件（报告元数据）
+    - Markdown文件（报告内容）
+    """
+
+@classmethod
+def get_report(cls, report_id: str) -> Optional[Report]:
+    """获取报告"""
+
+@classmethod
+def get_report_by_simulation(cls, simulation_id: str) -> Optional[Report]:
+    """根据模拟ID获取报告"""
+
+@classmethod
+def list_reports(
+    cls, 
+    simulation_id: Optional[str] = None, 
+    limit: int = 50
+) -> List[Report]:
+    """列出报告"""
+
+@classmethod
+def delete_report(cls, report_id: str) -> bool:
+    """删除报告"""
+```
+
+**存储结构**:
+```
+uploads/reports/
+├── report_abc123.json    # 报告元数据
+└── report_abc123.md      # Markdown报告
+```
+
+---
+
 ## 工具类
 
 ### 1. FileParser (文件解析器)
@@ -1962,6 +2578,11 @@ ZEP_API_KEY=z_xxx
 
 # OASIS模拟配置
 OASIS_DEFAULT_MAX_ROUNDS=10
+
+# Report Agent配置（可选）
+REPORT_AGENT_MAX_TOOL_CALLS=5
+REPORT_AGENT_MAX_REFLECTION_ROUNDS=2
+REPORT_AGENT_TEMPERATURE=0.5
 ```
 
 ### 配置项说明
@@ -1977,6 +2598,9 @@ OASIS_DEFAULT_MAX_ROUNDS=10
 | LLM_MODEL_NAME | String | gpt-4o-mini | LLM模型名称 |
 | ZEP_API_KEY | String | - | Zep API密钥(必填) |
 | OASIS_DEFAULT_MAX_ROUNDS | Integer | 10 | 默认模拟轮数 |
+| REPORT_AGENT_MAX_TOOL_CALLS | Integer | 5 | 每章节最大工具调用次数 |
+| REPORT_AGENT_MAX_REFLECTION_ROUNDS | Integer | 2 | 最大反思轮数 |
+| REPORT_AGENT_TEMPERATURE | Float | 0.5 | 报告生成温度参数 |
 
 ---
 
@@ -2102,7 +2726,40 @@ curl -X POST http://localhost:5001/api/simulation/{sim_xxx}/interview/all \
 # Step 12: 获取Interview历史
 curl http://localhost:5001/api/simulation/{sim_xxx}/interview/history
 
-# Step 13: 关闭模拟环境（优雅退出）
+# Step 13: 生成模拟分析报告
+curl -X POST http://localhost:5001/api/report/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "simulation_id": "sim_xxx"
+  }'
+
+# 返回: task_id
+
+# Step 14: 查询报告生成进度
+curl -X POST http://localhost:5001/api/report/generate/status \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task_id": "task_xxx",
+    "simulation_id": "sim_xxx"
+  }'
+
+# 等待status=completed
+
+# Step 15: 获取报告
+curl http://localhost:5001/api/report/by-simulation/sim_xxx
+
+# Step 16: 与Report Agent对话
+curl -X POST http://localhost:5001/api/report/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "simulation_id": "sim_xxx",
+    "message": "请解释一下舆情的主要趋势"
+  }'
+
+# Step 17: 下载Markdown报告
+curl -O http://localhost:5001/api/report/{report_id}/download
+
+# Step 18: 关闭模拟环境（优雅退出）
 curl -X POST http://localhost:5001/api/simulation/close-env \
   -H "Content-Type: application/json" \
   -d '{
@@ -2278,10 +2935,30 @@ MIT License
 
 ---
 
-**最后更新**: 2025-12-08
-**版本**: v1.2.0
+**最后更新**: 2025-12-09
+**版本**: v1.3.0
 
 ### 更新日志
+
+**v1.3.0 (2025-12-09)**:
+- 新增 Report Agent 模拟报告生成功能
+  - 使用 LangChain + Zep 实现 ReACT 模式
+  - 自动规划报告大纲，分段生成内容
+  - 每章节可多次调用Zep检索工具获取信息
+  - 生成专业的Markdown格式报告
+- 新增 Report Agent 对话功能
+  - 报告完成后可与Agent对话
+  - Agent自主调用检索工具回答问题
+- 新增 Zep 检索工具服务
+  - 封装图谱搜索、节点读取、边查询等工具
+  - 支持语义搜索、统计分析、上下文获取
+- 新增报告管理接口
+  - 报告生成、查询、下载、删除
+  - 报告状态检查（解锁Interview功能）
+- 依赖更新
+  - 新增 langchain>=0.2.0
+  - 新增 langchain-core>=0.2.0
+  - 新增 langchain-openai>=0.1.0
 
 **v1.2.0 (2025-12-08)**:
 - 新增 Interview 采访功能
