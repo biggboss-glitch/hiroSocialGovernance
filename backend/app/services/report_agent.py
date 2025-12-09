@@ -21,7 +21,12 @@ from enum import Enum
 from ..config import Config
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
-from .zep_tools import ZepToolsService, SearchResult
+from .zep_tools import (
+    ZepToolsService, 
+    SearchResult, 
+    InsightForgeResult, 
+    PanoramaResult
+)
 
 logger = get_logger('mirofish.report_agent')
 
@@ -120,18 +125,22 @@ class ReportAgent:
     2. 生成阶段：逐章节生成内容，每章节可多次调用工具获取信息
     3. 反思阶段：检查内容完整性和准确性
     
-    工具（MCP封装）：
-    - search_graph: 图谱语义搜索
-    - get_graph_statistics: 获取图谱统计
-    - get_entity_summary: 获取实体摘要
-    - get_simulation_context: 获取模拟上下文
+    【核心检索工具 - 优化后】
+    - insight_forge: 深度洞察检索（最强大，自动分解问题，多维度检索）
+    - panorama_search: 广度搜索（获取全貌，包括历史/过期内容）
+    - quick_search: 简单搜索（快速检索）
+    
+    【重要】Report Agent必须优先调用工具获取模拟数据，而非使用自身知识！
     """
     
-    # 最大工具调用次数（每个章节）
-    MAX_TOOL_CALLS_PER_SECTION = 5
+    # 最大工具调用次数（每个章节）- 增加上限以鼓励更多检索
+    MAX_TOOL_CALLS_PER_SECTION = 10
     
     # 最大反思轮数
     MAX_REFLECTION_ROUNDS = 2
+    
+    # 对话中的最大工具调用次数
+    MAX_TOOL_CALLS_PER_CHAT = 8
     
     def __init__(
         self, 
@@ -164,51 +173,88 @@ class ReportAgent:
         logger.info(f"ReportAgent 初始化完成: graph_id={graph_id}, simulation_id={simulation_id}")
     
     def _define_tools(self) -> Dict[str, Dict[str, Any]]:
-        """定义可用工具"""
+        """
+        定义可用工具
+        
+        【重要】这三个工具是专门为从模拟图谱中检索信息设计的，
+        必须优先使用这些工具获取数据，而不是使用LLM自身的知识！
+        """
         return {
-            "search_graph": {
-                "name": "search_graph",
-                "description": "在知识图谱中搜索相关信息。输入搜索查询，返回与查询相关的事实和关系。",
+            "insight_forge": {
+                "name": "insight_forge",
+                "description": """【深度洞察检索 - 最强大的检索工具】
+这是我们最强大的检索函数，专为深度分析设计。它会：
+1. 自动将你的问题分解为多个子问题
+2. 从多个维度检索模拟图谱中的信息
+3. 整合语义搜索、实体分析、关系链追踪的结果
+4. 返回最全面、最深度的检索内容
+
+【使用场景】
+- 需要深入分析某个话题
+- 需要了解事件的多个方面
+- 需要获取支撑报告章节的丰富素材
+
+【返回内容】
+- 相关事实原文（可直接引用）
+- 核心实体洞察
+- 关系链分析""",
+                "parameters": {
+                    "query": "你想深入分析的问题或话题",
+                    "report_context": "当前报告章节的上下文（可选，有助于生成更精准的子问题）"
+                },
+                "priority": "high"
+            },
+            "panorama_search": {
+                "name": "panorama_search",
+                "description": """【广度搜索 - 获取全貌视图】
+这个工具用于获取模拟结果的完整全貌，特别适合了解事件演变过程。它会：
+1. 获取所有相关节点和关系
+2. 区分当前有效的事实和历史/过期的事实
+3. 帮助你了解舆情是如何演变的
+
+【使用场景】
+- 需要了解事件的完整发展脉络
+- 需要对比不同阶段的舆情变化
+- 需要获取全面的实体和关系信息
+
+【返回内容】
+- 当前有效事实（模拟最新结果）
+- 历史/过期事实（演变记录）
+- 所有涉及的实体""",
+                "parameters": {
+                    "query": "搜索查询，用于相关性排序",
+                    "include_expired": "是否包含过期/历史内容（默认True）"
+                },
+                "priority": "medium"
+            },
+            "quick_search": {
+                "name": "quick_search",
+                "description": """【简单搜索 - 快速检索】
+轻量级的快速检索工具，适合简单、直接的信息查询。
+
+【使用场景】
+- 需要快速查找某个具体信息
+- 需要验证某个事实
+- 简单的信息检索
+
+【返回内容】
+- 与查询最相关的事实列表""",
                 "parameters": {
                     "query": "搜索查询字符串",
                     "limit": "返回结果数量（可选，默认10）"
-                }
-            },
-            "get_graph_statistics": {
-                "name": "get_graph_statistics",
-                "description": "获取知识图谱的统计信息，包括节点数量、边数量、实体类型分布等。",
-                "parameters": {}
-            },
-            "get_entity_summary": {
-                "name": "get_entity_summary",
-                "description": "获取指定实体的详细信息和关系摘要。",
-                "parameters": {
-                    "entity_name": "实体名称"
-                }
-            },
-            "get_simulation_context": {
-                "name": "get_simulation_context",
-                "description": "获取与模拟需求相关的上下文信息，包括相关事实、实体列表等。",
-                "parameters": {
-                    "query": "额外的查询条件（可选）"
-                }
-            },
-            "get_entities_by_type": {
-                "name": "get_entities_by_type",
-                "description": "按类型获取实体列表，如获取所有Student类型或PublicFigure类型的实体。",
-                "parameters": {
-                    "entity_type": "实体类型名称"
-                }
+                },
+                "priority": "low"
             }
         }
     
-    def _execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> str:
+    def _execute_tool(self, tool_name: str, parameters: Dict[str, Any], report_context: str = "") -> str:
         """
         执行工具调用
         
         Args:
             tool_name: 工具名称
             parameters: 工具参数
+            report_context: 报告上下文（用于InsightForge）
             
         Returns:
             工具执行结果（文本格式）
@@ -216,15 +262,52 @@ class ReportAgent:
         logger.info(f"执行工具: {tool_name}, 参数: {parameters}")
         
         try:
-            if tool_name == "search_graph":
+            # ========== 核心检索工具（优化后） ==========
+            
+            if tool_name == "insight_forge":
+                # 深度洞察检索 - 最强大的工具
+                query = parameters.get("query", "")
+                ctx = parameters.get("report_context", "") or report_context
+                result = self.zep_tools.insight_forge(
+                    graph_id=self.graph_id,
+                    query=query,
+                    simulation_requirement=self.simulation_requirement,
+                    report_context=ctx
+                )
+                return result.to_text()
+            
+            elif tool_name == "panorama_search":
+                # 广度搜索 - 获取全貌
+                query = parameters.get("query", "")
+                include_expired = parameters.get("include_expired", True)
+                if isinstance(include_expired, str):
+                    include_expired = include_expired.lower() in ['true', '1', 'yes']
+                result = self.zep_tools.panorama_search(
+                    graph_id=self.graph_id,
+                    query=query,
+                    include_expired=include_expired
+                )
+                return result.to_text()
+            
+            elif tool_name == "quick_search":
+                # 简单搜索 - 快速检索
                 query = parameters.get("query", "")
                 limit = parameters.get("limit", 10)
-                result = self.zep_tools.search_graph(
+                if isinstance(limit, str):
+                    limit = int(limit)
+                result = self.zep_tools.quick_search(
                     graph_id=self.graph_id,
                     query=query,
                     limit=limit
                 )
                 return result.to_text()
+            
+            # ========== 向后兼容的旧工具（内部重定向到新工具） ==========
+            
+            elif tool_name == "search_graph":
+                # 重定向到 quick_search
+                logger.info("search_graph 已重定向到 quick_search")
+                return self._execute_tool("quick_search", parameters, report_context)
             
             elif tool_name == "get_graph_statistics":
                 result = self.zep_tools.get_graph_statistics(self.graph_id)
@@ -239,12 +322,10 @@ class ReportAgent:
                 return json.dumps(result, ensure_ascii=False, indent=2)
             
             elif tool_name == "get_simulation_context":
+                # 重定向到 insight_forge，因为它更强大
+                logger.info("get_simulation_context 已重定向到 insight_forge")
                 query = parameters.get("query", self.simulation_requirement)
-                result = self.zep_tools.get_simulation_context(
-                    graph_id=self.graph_id,
-                    simulation_requirement=query
-                )
-                return json.dumps(result, ensure_ascii=False, indent=2)
+                return self._execute_tool("insight_forge", {"query": query}, report_context)
             
             elif tool_name == "get_entities_by_type":
                 entity_type = parameters.get("entity_type", "")
@@ -256,7 +337,7 @@ class ReportAgent:
                 return json.dumps(result, ensure_ascii=False, indent=2)
             
             else:
-                return f"未知工具: {tool_name}"
+                return f"未知工具: {tool_name}。请使用以下工具之一: insight_forge, panorama_search, quick_search"
                 
         except Exception as e:
             logger.error(f"工具执行失败: {tool_name}, 错误: {str(e)}")
@@ -473,7 +554,7 @@ class ReportAgent:
         """
         logger.info(f"ReACT生成章节: {section.title}")
         
-        # 构建系统prompt
+        # 构建系统prompt - 优化后强调工具使用和引用原文
         system_prompt = f"""你是一个专业的舆情分析报告撰写专家，正在撰写报告的一个章节。
 
 报告标题: {outline.title}
@@ -482,53 +563,103 @@ class ReportAgent:
 
 当前要撰写的章节: {section.title}
 
-你可以使用以下工具来获取信息，每次最多调用{self.MAX_TOOL_CALLS_PER_SECTION}次：
+═══════════════════════════════════════════════════════════════
+【最重要的规则 - 必须遵守】
+═══════════════════════════════════════════════════════════════
+
+1. 【必须调用工具获取数据】
+   - 你正在撰写的是基于模拟结果的分析报告
+   - 所有内容必须来自模拟图谱中的真实数据
+   - 禁止使用你自己的知识来编写报告内容
+   - 每个章节至少调用1-3次工具获取相关信息
+
+2. 【必须引用模拟结果原文】
+   - 检索到的事实原文是最有价值的内容
+   - 在报告中使用引用格式展示这些原文，例如：
+     > "原文内容..."
+   - 这些原文证明了模拟的真实效果
+
+3. 【尊重模拟结果】
+   - 报告内容必须反映模拟中实际发生的情况
+   - 不要添加模拟中不存在的信息
+   - 如果某方面信息不足，如实说明
+
+═══════════════════════════════════════════════════════════════
+【可用检索工具】（建议每章节调用2-5次）
+═══════════════════════════════════════════════════════════════
 
 {self._get_tools_description()}
 
-请按照以下ReACT格式进行思考和行动：
+【工具使用建议】
+- insight_forge: 用于深度分析，会自动分解问题并多维度检索
+- panorama_search: 用于了解全貌和演变过程
+- quick_search: 用于快速验证某个具体信息
 
-Thought: [分析当前需要什么信息来撰写这个章节]
-Action: [如果需要信息，调用工具]
-<tool_call>
-{{"name": "工具名称", "parameters": {{"参数名": "参数值"}}}}
-</tool_call>
+═══════════════════════════════════════════════════════════════
+【ReACT工作流程】
+═══════════════════════════════════════════════════════════════
 
-当收集到足够信息后，输出：
-Final Answer:
-[章节的完整Markdown内容]
+1. Thought: [分析需要什么信息，规划检索策略]
+2. Action: [调用工具获取信息]
+   <tool_call>
+   {{"name": "工具名称", "parameters": {{"参数名": "参数值"}}}}
+   </tool_call>
+3. Observation: [分析工具返回的结果]
+4. 重复步骤1-3，直到收集到足够信息（建议2-5轮）
+5. Final Answer: [基于检索结果撰写章节内容]
 
-注意：
-1. 内容要专业、客观、有深度
-2. 引用具体的数据和事实
-3. 保持与其他章节的逻辑连贯性
-4. 使用适当的Markdown格式（列表、强调等）
-5. 不要重复前面章节已经详细描述的内容"""
+═══════════════════════════════════════════════════════════════
+【章节内容要求】
+═══════════════════════════════════════════════════════════════
 
-        # 构建用户prompt
+1. 内容必须基于工具检索到的模拟数据
+2. 大量引用原文来展示模拟效果
+3. 使用Markdown格式：
+   - 使用 > 引用重要原文
+   - 使用 **粗体** 强调关键信息
+   - 使用列表组织要点
+4. 保持与其他章节的逻辑连贯性
+5. 不要重复前面章节已详细描述的内容"""
+
+        # 构建用户prompt - 强调必须调用工具
         previous_content = "\n\n".join(previous_sections) if previous_sections else "（这是第一个章节）"
-        user_prompt = f"""已完成的章节内容：
+        user_prompt = f"""已完成的章节内容（参考以保持连贯性）：
 {previous_content[:2000]}
 
-现在请撰写章节: {section.title}
+═══════════════════════════════════════════════════════════════
+【当前任务】撰写章节: {section.title}
+═══════════════════════════════════════════════════════════════
 
-首先思考需要什么信息，然后调用工具获取，最后生成内容。"""
+【重要提醒】
+1. 开始前必须先调用工具获取模拟数据！
+2. 推荐先使用 insight_forge 进行深度检索
+3. 如需了解全貌可使用 panorama_search
+4. 报告内容必须来自检索结果，不要使用自己的知识
+
+请开始：
+1. 首先思考（Thought）这个章节需要什么信息
+2. 然后调用工具（Action）获取模拟数据
+3. 收集足够信息后输出 Final Answer"""
 
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ]
         
-        # ReACT循环
+        # ReACT循环 - 优化后增加工具调用次数
         tool_calls_count = 0
-        max_iterations = self.MAX_TOOL_CALLS_PER_SECTION + 2
+        max_iterations = self.MAX_TOOL_CALLS_PER_SECTION + 3  # 增加迭代次数
+        min_tool_calls = 2  # 最少工具调用次数
+        
+        # 报告上下文，用于InsightForge的子问题生成
+        report_context = f"章节标题: {section.title}\n模拟需求: {self.simulation_requirement}"
         
         for iteration in range(max_iterations):
             if progress_callback:
                 progress_callback(
                     "generating", 
                     int((iteration / max_iterations) * 100),
-                    f"思考与行动中 ({tool_calls_count}/{self.MAX_TOOL_CALLS_PER_SECTION})"
+                    f"深度检索与撰写中 ({tool_calls_count}/{self.MAX_TOOL_CALLS_PER_SECTION})"
                 )
             
             # 调用LLM
@@ -542,21 +673,55 @@ Final Answer:
             
             # 检查是否有最终答案
             if "Final Answer:" in response:
+                # 如果工具调用次数不足，提醒需要更多检索
+                if tool_calls_count < min_tool_calls:
+                    messages.append({"role": "assistant", "content": response})
+                    messages.append({
+                        "role": "user", 
+                        "content": f"""【注意】你只调用了{tool_calls_count}次工具，信息可能不够充分。
+
+请再调用1-2次工具来获取更多模拟数据，然后再输出 Final Answer。
+建议：
+- 使用 insight_forge 深度检索更多细节
+- 使用 panorama_search 了解事件全貌
+
+记住：报告内容必须来自模拟结果，而不是你的知识！"""
+                    })
+                    continue
+                
                 # 提取最终答案
                 final_answer = response.split("Final Answer:")[-1].strip()
-                logger.info(f"章节 {section.title} 生成完成")
+                logger.info(f"章节 {section.title} 生成完成（工具调用: {tool_calls_count}次）")
                 return final_answer
             
             # 解析工具调用
             tool_calls = self._parse_tool_calls(response)
             
             if not tool_calls:
-                # 没有工具调用也没有最终答案，提示生成最终答案
+                # 没有工具调用也没有最终答案
                 messages.append({"role": "assistant", "content": response})
-                messages.append({
-                    "role": "user", 
-                    "content": "请基于已有信息，输出 Final Answer: 并生成章节内容。"
-                })
+                
+                if tool_calls_count < min_tool_calls:
+                    # 还没有足够的工具调用，强烈提示需要调用工具
+                    messages.append({
+                        "role": "user", 
+                        "content": f"""【重要】你还没有调用足够的工具来获取模拟数据！
+
+当前只调用了 {tool_calls_count} 次工具，至少需要 {min_tool_calls} 次。
+
+请立即调用工具获取信息：
+<tool_call>
+{{"name": "insight_forge", "parameters": {{"query": "{section.title}相关的模拟结果和分析"}}}}
+</tool_call>
+
+【记住】报告内容必须100%来自模拟结果，不能使用你自己的知识！"""
+                    })
+                else:
+                    # 已有足够调用，可以生成最终答案
+                    messages.append({
+                        "role": "user", 
+                        "content": "你已经获取了足够的模拟数据。请基于检索到的信息，输出 Final Answer: 并撰写章节内容。\n\n【重要】内容必须大量引用检索到的原文，使用 > 格式引用。"
+                    })
                 continue
             
             # 执行工具调用
@@ -565,15 +730,29 @@ Final Answer:
                 if tool_calls_count >= self.MAX_TOOL_CALLS_PER_SECTION:
                     break
                 
-                result = self._execute_tool(call["name"], call.get("parameters", {}))
-                tool_results.append(f"工具 {call['name']} 返回:\n{result}")
+                result = self._execute_tool(
+                    call["name"], 
+                    call.get("parameters", {}),
+                    report_context=report_context
+                )
+                tool_results.append(f"═══ 工具 {call['name']} 返回 ═══\n{result}")
                 tool_calls_count += 1
             
             # 将结果添加到消息
             messages.append({"role": "assistant", "content": response})
             messages.append({
                 "role": "user",
-                "content": f"Observation:\n" + "\n\n".join(tool_results) + "\n\n请继续思考或输出 Final Answer:"
+                "content": f"""Observation（检索结果）:
+
+{"".join(tool_results)}
+
+═══════════════════════════════════════════════════════════════
+【下一步行动】
+- 如果信息充分：输出 Final Answer 并撰写章节内容（必须引用上述原文）
+- 如果需要更多信息：继续调用工具检索
+
+已调用工具 {tool_calls_count}/{self.MAX_TOOL_CALLS_PER_SECTION} 次
+═══════════════════════════════════════════════════════════════"""
             })
         
         # 达到最大迭代次数，强制生成内容
@@ -833,23 +1012,52 @@ Final Answer:
         
         system_prompt = f"""你是一个专业的舆情分析助手，负责回答关于模拟分析报告的问题。
 
+═══════════════════════════════════════════════════════════════
+【背景信息】
+═══════════════════════════════════════════════════════════════
 模拟需求: {self.simulation_requirement}
 图谱ID: {self.graph_id}
 
-你可以使用以下工具来获取信息：
+═══════════════════════════════════════════════════════════════
+【最重要的规则 - 必须遵守】
+═══════════════════════════════════════════════════════════════
+
+1. 【必须调用工具获取数据】
+   - 你的回答必须基于模拟图谱中的真实数据
+   - 禁止使用你自己的知识来回答问题
+   - 每次回答前至少调用1次工具获取相关信息
+
+2. 【必须引用模拟结果原文】
+   - 检索到的事实原文是最有价值的内容
+   - 在回答中使用引用格式展示这些原文，例如：
+     > "原文内容..."
+   - 原文引用证明了答案的可靠性
+
+3. 【尊重模拟结果】
+   - 回答必须反映模拟中实际发生的情况
+   - 不要添加模拟中不存在的信息
+   - 如果某方面信息不足，如实说明
+
+═══════════════════════════════════════════════════════════════
+【可用检索工具】
+═══════════════════════════════════════════════════════════════
 
 {self._get_tools_description()}
 
-工具调用格式：
+【工具调用格式】
 <tool_call>
 {{"name": "工具名称", "parameters": {{"参数名": "参数值"}}}}
 </tool_call>
 
-回答要求：
-1. 基于事实和数据回答
-2. 引用具体信息来源
-3. 如果不确定，说明信息限制
-4. 保持专业和客观"""
+═══════════════════════════════════════════════════════════════
+【回答要求】
+═══════════════════════════════════════════════════════════════
+
+1. 先调用工具获取模拟数据，再回答问题
+2. 大量引用检索到的原文
+3. 使用 > 格式引用重要内容
+4. 如果信息不足，如实说明限制
+5. 保持专业和客观"""
 
         # 构建消息
         messages = [{"role": "system", "content": system_prompt}]
@@ -858,11 +1066,18 @@ Final Answer:
         for h in chat_history[-10:]:  # 限制历史长度
             messages.append(h)
         
-        messages.append({"role": "user", "content": message})
+        # 添加用户消息，强调需要先检索
+        messages.append({
+            "role": "user", 
+            "content": f"""{message}
+
+【提醒】请先调用工具获取模拟数据，再回答问题。推荐使用 insight_forge 进行深度检索。"""
+        })
         
-        # ReACT循环
+        # ReACT循环 - 增加迭代次数以支持更多工具调用
         tool_calls_made = []
-        max_iterations = 3
+        max_iterations = self.MAX_TOOL_CALLS_PER_CHAT
+        min_tool_calls = 1  # 最少工具调用次数
         
         for iteration in range(max_iterations):
             response = self.llm.chat(
@@ -875,33 +1090,54 @@ Final Answer:
             tool_calls = self._parse_tool_calls(response)
             
             if not tool_calls:
-                # 没有工具调用，返回响应
-                # 清理响应中的工具调用标记
+                # 没有工具调用
+                if len(tool_calls_made) < min_tool_calls and iteration < 2:
+                    # 还没有调用过工具，强烈提示需要先检索
+                    messages.append({"role": "assistant", "content": response})
+                    messages.append({
+                        "role": "user", 
+                        "content": f"""【重要】你还没有调用工具获取模拟数据！
+
+请先调用工具检索相关信息：
+<tool_call>
+{{"name": "insight_forge", "parameters": {{"query": "{message[:100]}"}}}}
+</tool_call>
+
+【记住】回答必须基于模拟结果，不能使用你自己的知识！"""
+                    })
+                    continue
+                
+                # 已有工具调用，清理响应并返回
                 clean_response = re.sub(r'<tool_call>.*?</tool_call>', '', response, flags=re.DOTALL)
                 clean_response = re.sub(r'\[TOOL_CALL\].*?\)', '', clean_response)
                 
                 return {
                     "response": clean_response.strip(),
                     "tool_calls": tool_calls_made,
-                    "sources": []
+                    "sources": [tc.get("parameters", {}).get("query", "") for tc in tool_calls_made]
                 }
             
             # 执行工具调用
             tool_results = []
             for call in tool_calls:
+                if len(tool_calls_made) >= self.MAX_TOOL_CALLS_PER_CHAT:
+                    break
                 result = self._execute_tool(call["name"], call.get("parameters", {}))
                 tool_results.append({
                     "tool": call["name"],
-                    "result": result[:1000]  # 限制长度
+                    "result": result[:2000]  # 增加结果长度限制
                 })
                 tool_calls_made.append(call)
             
             # 将结果添加到消息
             messages.append({"role": "assistant", "content": response})
-            observation = "工具调用结果:\n" + "\n\n".join([
-                f"[{r['tool']}]: {r['result']}" for r in tool_results
+            observation = "═══ 检索结果 ═══\n" + "\n\n".join([
+                f"【{r['tool']}】\n{r['result']}" for r in tool_results
             ])
-            messages.append({"role": "user", "content": observation + "\n\n请基于以上信息回答问题。"})
+            messages.append({
+                "role": "user", 
+                "content": observation + "\n\n请基于以上模拟数据回答问题。\n【重要】请在回答中引用检索到的原文，使用 > 格式。"
+            })
         
         # 达到最大迭代，获取最终响应
         final_response = self.llm.chat(
@@ -910,10 +1146,14 @@ Final Answer:
             max_tokens=2048
         )
         
+        # 清理响应
+        clean_response = re.sub(r'<tool_call>.*?</tool_call>', '', final_response, flags=re.DOTALL)
+        clean_response = re.sub(r'\[TOOL_CALL\].*?\)', '', clean_response)
+        
         return {
-            "response": final_response,
+            "response": clean_response.strip(),
             "tool_calls": tool_calls_made,
-            "sources": []
+            "sources": [tc.get("parameters", {}).get("query", "") for tc in tool_calls_made]
         }
 
 
