@@ -48,7 +48,7 @@
             <!-- 节点/边详情面板 -->
             <div v-if="selectedItem" class="detail-panel">
               <div class="detail-panel-header">
-                <span class="detail-title">{{ selectedItem.type === 'node' ? '节点详情' : '关系详情' }}</span>
+                <span class="detail-title">{{ selectedItem.type === 'node' ? 'Node Details' : 'Relationship' }}</span>
                 <span v-if="selectedItem.type === 'node'" class="detail-badge" :style="{ background: selectedItem.color }">
                   {{ selectedItem.entityType }}
                 </span>
@@ -59,7 +59,7 @@
               <div v-if="selectedItem.type === 'node'" class="detail-content">
                 <div class="detail-row">
                   <span class="detail-label">Name:</span>
-                  <span class="detail-value">{{ selectedItem.data.name }}</span>
+                  <span class="detail-value highlight">{{ selectedItem.data.name }}</span>
                 </div>
                 <div class="detail-row">
                   <span class="detail-label">UUID:</span>
@@ -69,10 +69,25 @@
                   <span class="detail-label">Created:</span>
                   <span class="detail-value">{{ formatDate(selectedItem.data.created_at) }}</span>
                 </div>
+                
+                <!-- Properties / Attributes -->
+                <div class="detail-section" v-if="selectedItem.data.attributes && Object.keys(selectedItem.data.attributes).length > 0">
+                  <span class="detail-label">Properties:</span>
+                  <div class="properties-list">
+                    <div v-for="(value, key) in selectedItem.data.attributes" :key="key" class="property-item">
+                      <span class="property-key">{{ key }}:</span>
+                      <span class="property-value">{{ value }}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Summary -->
                 <div class="detail-section" v-if="selectedItem.data.summary">
                   <span class="detail-label">Summary:</span>
                   <p class="detail-summary">{{ selectedItem.data.summary }}</p>
                 </div>
+                
+                <!-- Labels -->
                 <div class="detail-row" v-if="selectedItem.data.labels?.length">
                   <span class="detail-label">Labels:</span>
                   <div class="detail-labels">
@@ -83,13 +98,17 @@
               
               <!-- 边详情 -->
               <div v-else class="detail-content">
+                <!-- 关系展示 -->
                 <div class="edge-relation">
-                  <span class="edge-source">{{ selectedItem.data.source_name }}</span>
+                  <span class="edge-source">{{ selectedItem.data.source_name || selectedItem.data.source_node_name }}</span>
                   <span class="edge-arrow">→</span>
-                  <span class="edge-type">{{ selectedItem.data.name || selectedItem.data.fact_type }}</span>
+                  <span class="edge-type">{{ selectedItem.data.name || selectedItem.data.fact_type || 'RELATED_TO' }}</span>
                   <span class="edge-arrow">→</span>
-                  <span class="edge-target">{{ selectedItem.data.target_name }}</span>
+                  <span class="edge-target">{{ selectedItem.data.target_name || selectedItem.data.target_node_name }}</span>
                 </div>
+                
+                <div class="detail-subtitle">Relationship</div>
+                
                 <div class="detail-row">
                   <span class="detail-label">UUID:</span>
                   <span class="detail-value uuid">{{ selectedItem.data.uuid }}</span>
@@ -98,10 +117,25 @@
                   <span class="detail-label">Label:</span>
                   <span class="detail-value">{{ selectedItem.data.name || selectedItem.data.fact_type || 'RELATED_TO' }}</span>
                 </div>
+                <div class="detail-row" v-if="selectedItem.data.fact_type">
+                  <span class="detail-label">Type:</span>
+                  <span class="detail-value">{{ selectedItem.data.fact_type }}</span>
+                </div>
+                
+                <!-- Fact -->
                 <div class="detail-section" v-if="selectedItem.data.fact">
                   <span class="detail-label">Fact:</span>
                   <p class="detail-summary">{{ selectedItem.data.fact }}</p>
                 </div>
+                
+                <!-- Episodes -->
+                <div class="detail-section" v-if="selectedItem.data.episodes?.length">
+                  <span class="detail-label">Episodes:</span>
+                  <div class="episodes-list">
+                    <span v-for="ep in selectedItem.data.episodes" :key="ep" class="episode-tag">{{ ep }}</span>
+                  </div>
+                </div>
+                
                 <div class="detail-row" v-if="selectedItem.data.created_at">
                   <span class="detail-label">Created:</span>
                   <span class="detail-value">{{ formatDate(selectedItem.data.created_at) }}</span>
@@ -109,6 +143,14 @@
                 <div class="detail-row" v-if="selectedItem.data.valid_at">
                   <span class="detail-label">Valid From:</span>
                   <span class="detail-value">{{ formatDate(selectedItem.data.valid_at) }}</span>
+                </div>
+                <div class="detail-row" v-if="selectedItem.data.invalid_at">
+                  <span class="detail-label">Invalid At:</span>
+                  <span class="detail-value">{{ formatDate(selectedItem.data.invalid_at) }}</span>
+                </div>
+                <div class="detail-row" v-if="selectedItem.data.expired_at">
+                  <span class="detail-label">Expired At:</span>
+                  <span class="detail-value">{{ formatDate(selectedItem.data.expired_at) }}</span>
                 </div>
               </div>
             </div>
@@ -1475,6 +1517,68 @@ onUnmounted(() => {
   font-size: 0.75rem;
   background: #FF6B35;
   color: #fff;
+}
+
+.detail-value.highlight {
+  font-weight: 600;
+  color: #000;
+}
+
+.detail-subtitle {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #333;
+  margin: 16px 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #E0E0E0;
+}
+
+/* Properties 属性列表 */
+.properties-list {
+  margin-top: 8px;
+  padding: 10px;
+  background: #F9F9F9;
+  border: 1px solid #E0E0E0;
+}
+
+.property-item {
+  display: flex;
+  margin-bottom: 6px;
+  font-size: 0.85rem;
+}
+
+.property-item:last-child {
+  margin-bottom: 0;
+}
+
+.property-key {
+  color: #666;
+  margin-right: 8px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.property-value {
+  color: #333;
+  word-break: break-word;
+}
+
+/* Episodes 列表 */
+.episodes-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.episode-tag {
+  display: block;
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  font-family: 'JetBrains Mono', monospace;
+  background: #F0F0F0;
+  border: 1px solid #E0E0E0;
+  color: #666;
+  word-break: break-all;
 }
 
 .error-icon {

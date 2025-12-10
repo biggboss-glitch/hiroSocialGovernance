@@ -418,36 +418,71 @@ class GraphBuilderService:
     
     def get_graph_data(self, graph_id: str) -> Dict[str, Any]:
         """
-        获取完整图谱数据
+        获取完整图谱数据（包含详细信息）
         
         Args:
             graph_id: 图谱ID
             
         Returns:
-            包含nodes和edges的字典
+            包含nodes和edges的字典，包括时间信息、属性等详细数据
         """
         nodes = self.client.graph.node.get_by_graph_id(graph_id=graph_id)
         edges = self.client.graph.edge.get_by_graph_id(graph_id=graph_id)
         
+        # 创建节点映射用于获取节点名称
+        node_map = {}
+        for node in nodes:
+            node_map[node.uuid_] = node.name or ""
+        
         nodes_data = []
         for node in nodes:
+            # 获取创建时间
+            created_at = getattr(node, 'created_at', None)
+            if created_at:
+                created_at = str(created_at)
+            
             nodes_data.append({
                 "uuid": node.uuid_,
                 "name": node.name,
                 "labels": node.labels or [],
                 "summary": node.summary or "",
                 "attributes": node.attributes or {},
+                "created_at": created_at,
             })
         
         edges_data = []
         for edge in edges:
+            # 获取时间信息
+            created_at = getattr(edge, 'created_at', None)
+            valid_at = getattr(edge, 'valid_at', None)
+            invalid_at = getattr(edge, 'invalid_at', None)
+            expired_at = getattr(edge, 'expired_at', None)
+            
+            # 获取 episodes
+            episodes = getattr(edge, 'episodes', None) or getattr(edge, 'episode_ids', None)
+            if episodes and not isinstance(episodes, list):
+                episodes = [str(episodes)]
+            elif episodes:
+                episodes = [str(e) for e in episodes]
+            
+            # 获取 fact_type
+            fact_type = getattr(edge, 'fact_type', None) or edge.name or ""
+            
             edges_data.append({
                 "uuid": edge.uuid_,
                 "name": edge.name or "",
                 "fact": edge.fact or "",
+                "fact_type": fact_type,
                 "source_node_uuid": edge.source_node_uuid,
                 "target_node_uuid": edge.target_node_uuid,
+                "source_node_name": node_map.get(edge.source_node_uuid, ""),
+                "target_node_name": node_map.get(edge.target_node_uuid, ""),
                 "attributes": edge.attributes or {},
+                "created_at": str(created_at) if created_at else None,
+                "valid_at": str(valid_at) if valid_at else None,
+                "invalid_at": str(invalid_at) if invalid_at else None,
+                "expired_at": str(expired_at) if expired_at else None,
+                "episodes": episodes or [],
             })
         
         return {
