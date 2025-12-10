@@ -206,7 +206,6 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { generateOntology } from '../api/graph'
 
 const router = useRouter()
 
@@ -285,31 +284,20 @@ const scrollToBottom = () => {
   })
 }
 
-// 开始模拟
-const startSimulation = async () => {
+// 开始模拟 - 立即跳转，API调用在Process页面进行
+const startSimulation = () => {
   if (!canSubmit.value || loading.value) return
   
-  loading.value = true
-  try {
-    const formDataObj = new FormData()
-    files.value.forEach(file => {
-      formDataObj.append('files', file)
+  // 存储待上传的数据
+  import('../store/pendingUpload.js').then(({ setPendingUpload }) => {
+    setPendingUpload(files.value, formData.value.simulationRequirement)
+    
+    // 立即跳转到Process页面（使用特殊标识表示新建项目）
+    router.push({
+      name: 'Process',
+      params: { projectId: 'new' }
     })
-    formDataObj.append('simulation_requirement', formData.value.simulationRequirement)
-    
-    const response = await generateOntology(formDataObj)
-    
-    if (response.success) {
-      router.push({
-        name: 'Process',
-        params: { projectId: response.data.project_id }
-      })
-    }
-  } catch (err) {
-    console.error('Start simulation error:', err)
-  } finally {
-    loading.value = false
-  }
+  })
 }
 </script>
 
