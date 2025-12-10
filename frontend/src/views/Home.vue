@@ -1,115 +1,197 @@
 <template>
   <div class="home-container">
-    <div class="content-wrapper">
-      <!-- Logo -->
-      <div class="logo-section">
-        <img src="../assets/logo/MiroFish_logo_compressed.jpeg" alt="MiroFish" class="logo" />
+    <!-- 顶部导航栏 -->
+    <nav class="navbar">
+      <div class="nav-brand">MIROFISH</div>
+      <div class="nav-links">
+        <a href="#">文档</a>
+        <a href="#">运行时</a>
+        <a href="#">价格</a>
+        <a href="#" class="login-btn">登录</a>
       </div>
+    </nav>
 
-      <!-- 标语 + 装饰线 -->
-      <div class="slogan-section">
-        <div class="decorative-line"></div>
-        <h1 class="slogan">上传任意报告，即刻推演未来</h1>
-        <div class="decorative-line"></div>
-      </div>
-
-      <!-- 表单区域 -->
-      <div class="form-section">
-        <!-- 模拟需求输入框 -->
-        <div class="input-group">
-          <label for="requirement" class="input-label">模拟需求</label>
-          <textarea
-            id="requirement"
-            v-model="formData.simulationRequirement"
-            placeholder="请详细描述您的模拟需求..."
-            rows="6"
-            :disabled="loading"
-            class="requirement-input"
-          ></textarea>
+    <div class="main-content">
+      <!-- 上半部分：Hero 区域 -->
+      <section class="hero-section">
+        <div class="hero-left">
+          <div class="tag-row">
+            <span class="orange-tag">#1 预测引擎</span>
+            <span class="version-text">/ V3.0-预览版</span>
+          </div>
+          
+          <h1 class="main-title">
+            预测性智能<br>
+            基础设施
+          </h1>
+          
+          <p class="hero-desc">
+            在任意文档结构上部署预测模型。MiroFish 提供即时分析、风险模拟和未来场景生成，为高风险决策提供支持。
+          </p>
+          
+          <div class="decoration-square"></div>
         </div>
+        
+        <div class="hero-right">
+          <!-- Logo 区域 -->
+          <div class="logo-container">
+            <img src="../assets/logo/MiroFish_logo_left.jpeg" alt="MiroFish Logo" class="hero-logo" />
+          </div>
+          
+          <button class="scroll-down-btn">
+            ↓
+          </button>
+        </div>
+      </section>
 
-        <!-- 文件上传区域 -->
-        <div class="input-group">
-          <label class="input-label">上传文档</label>
-          <div
-            class="upload-area"
-            :class="{ 'drag-over': isDragOver, 'disabled': loading, 'has-files': files.length > 0 }"
-            @dragover.prevent="handleDragOver"
-            @dragleave.prevent="handleDragLeave"
-            @drop.prevent="handleDrop"
-            @click="triggerFileInput"
-          >
-            <input
-              ref="fileInput"
-              type="file"
-              multiple
-              accept=".pdf,.md,.txt"
-              @change="handleFileSelect"
-              style="display: none"
-              :disabled="loading"
-            />
-            <div v-if="files.length === 0" class="upload-placeholder">
-              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-              </svg>
-              <p class="upload-text">拖拽文件至此或点击上传</p>
-              <span class="upload-hint">支持 PDF / Markdown / TXT</span>
+      <!-- 下半部分：双栏布局 -->
+      <section class="dashboard-section">
+        <!-- 左栏：状态与步骤 -->
+        <div class="left-panel">
+          <div class="panel-header">
+            <span class="status-dot">■</span> 系统状态
+          </div>
+          
+          <h2 class="section-title">准备就绪</h2>
+          <p class="section-desc">
+            预测引擎待命中。上传非结构化数据（PDF、MD、TXT）以初始化模拟序列。
+          </p>
+          
+          <!-- 数据指标卡片 -->
+          <div class="metrics-row">
+            <div class="metric-card">
+              <div class="metric-value">127ms</div>
+              <div class="metric-label">启动时间</div>
             </div>
-            <div v-else class="file-list">
-              <div v-for="(file, index) in files" :key="index" class="file-item">
-                <div class="file-info">
-                  <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                  </svg>
-                  <div class="file-details">
-                    <span class="file-name">{{ file.name }}</span>
-                    <span class="file-size">{{ formatFileSize(file.size) }}</span>
-                  </div>
+            <div class="metric-card">
+              <div class="metric-value">∞</div>
+              <div class="metric-label">扩展限制</div>
+            </div>
+          </div>
+
+          <!-- 项目模拟步骤介绍 (新增区域) -->
+          <div class="steps-container">
+            <div class="steps-header">
+               <span class="diamond-icon">◇</span> 工作流序列
+            </div>
+            <div class="workflow-list">
+              <div class="workflow-item">
+                <span class="step-num">01</span>
+                <div class="step-info">
+                  <div class="step-title">图谱构建</div>
+                  <div class="step-desc">提取实体 & 构建本体</div>
                 </div>
-                <button
-                  class="remove-btn"
-                  @click.stop="removeFile(index)"
-                  :disabled="loading"
-                  aria-label="删除文件"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                  </svg>
-                </button>
+              </div>
+              <div class="workflow-item">
+                <span class="step-num">02</span>
+                <div class="step-info">
+                  <div class="step-title">模拟准备</div>
+                  <div class="step-desc">生成 Agent & 人设配置</div>
+                </div>
+              </div>
+              <div class="workflow-item">
+                <span class="step-num">03</span>
+                <div class="step-info">
+                  <div class="step-title">执行与访谈</div>
+                  <div class="step-desc">运行模拟 & 交互对话</div>
+                </div>
+              </div>
+              <div class="workflow-item">
+                <span class="step-num">04</span>
+                <div class="step-info">
+                  <div class="step-title">报告生成</div>
+                  <div class="step-desc">生成全方位分析报告</div>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- 开始模拟按钮 -->
-        <button
-          class="start-btn"
-          @click="startSimulation"
-          :disabled="!canSubmit || loading"
-        >
-          <span v-if="!loading">开 始 模 拟</span>
-          <span v-else class="loading-text">
-            <span class="loading-spinner"></span>
-            处理中
-          </span>
-        </button>
+        <!-- 右栏：交互控制台 -->
+        <div class="right-panel">
+          <div class="console-box">
+            <!-- 上传区域 -->
+            <div class="console-section">
+              <div class="console-header">
+                <span class="console-label">01 / 源文档</span>
+                <span class="console-meta">支持格式: PDF, MD, TXT</span>
+              </div>
+              
+              <div 
+                class="upload-zone"
+                :class="{ 'drag-over': isDragOver, 'has-files': files.length > 0 }"
+                @dragover.prevent="handleDragOver"
+                @dragleave.prevent="handleDragLeave"
+                @drop.prevent="handleDrop"
+                @click="triggerFileInput"
+              >
+                <input
+                  ref="fileInput"
+                  type="file"
+                  multiple
+                  accept=".pdf,.md,.txt"
+                  @change="handleFileSelect"
+                  style="display: none"
+                  :disabled="loading"
+                />
+                
+                <div v-if="files.length === 0" class="upload-placeholder">
+                  <div class="upload-icon">↑</div>
+                  <div class="upload-title">拖拽文件上传</div>
+                  <div class="upload-hint">或点击浏览文件系统</div>
+                </div>
+                
+                <div v-else class="file-list">
+                  <div v-for="(file, index) in files" :key="index" class="file-item">
+                    <span class="file-icon">📄</span>
+                    <span class="file-name">{{ file.name }}</span>
+                    <button @click.stop="removeFile(index)" class="remove-btn">×</button>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-        <!-- 错误提示 -->
-        <transition name="fade">
-          <div v-if="error" class="error-message">
-            <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            {{ error }}
+            <!-- 分割线 -->
+            <div class="console-divider">
+              <span>输入参数</span>
+            </div>
+
+            <!-- 输入区域 -->
+            <div class="console-section">
+              <div class="console-header">
+                <span class="console-label">>_ 02 / 模拟提示词</span>
+              </div>
+              <div class="input-wrapper">
+                <textarea
+                  v-model="formData.simulationRequirement"
+                  class="code-input"
+                  placeholder="// 输入模拟参数或针对模型的具体问题..."
+                  rows="6"
+                  :disabled="loading"
+                ></textarea>
+                <div class="model-badge">模型: GEMINI-3-PRO</div>
+              </div>
+            </div>
+
+            <!-- 启动按钮 -->
+            <button 
+              class="start-engine-btn"
+              @click="startSimulation"
+              :disabled="!canSubmit || loading"
+            >
+              <span v-if="!loading">启动引擎</span>
+              <span v-else>初始化中...</span>
+              <span class="btn-arrow">→</span>
+            </button>
           </div>
-        </transition>
-      </div>
+        </div>
+      </section>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { generateOntology } from '../api/graph'
 
@@ -138,7 +220,7 @@ const canSubmit = computed(() => {
 
 // 触发文件选择
 const triggerFileInput = () => {
-  if (!loading.value && files.value.length === 0) {
+  if (!loading.value) {
     fileInput.value?.click()
   }
 }
@@ -170,17 +252,10 @@ const handleDrop = (e) => {
 
 // 添加文件
 const addFiles = (newFiles) => {
-  // 过滤支持的文件类型
   const validFiles = newFiles.filter(file => {
     const ext = file.name.split('.').pop().toLowerCase()
     return ['pdf', 'md', 'txt'].includes(ext)
   })
-  
-  if (validFiles.length !== newFiles.length) {
-    error.value = '部分文件格式不支持,已自动过滤'
-    setTimeout(() => { error.value = '' }, 3000)
-  }
-  
   files.value.push(...validFiles)
 }
 
@@ -189,538 +264,512 @@ const removeFile = (index) => {
   files.value.splice(index, 1)
 }
 
-// 格式化文件大小
-const formatFileSize = (bytes) => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
 // 开始模拟
 const startSimulation = async () => {
   if (!canSubmit.value || loading.value) return
   
   loading.value = true
-  error.value = ''
-  
   try {
-    // 构建FormData
     const formDataObj = new FormData()
-    
-    // 添加文件
     files.value.forEach(file => {
       formDataObj.append('files', file)
     })
-    
-    // 添加必填字段
     formDataObj.append('simulation_requirement', formData.value.simulationRequirement)
     
-    // 调用API
     const response = await generateOntology(formDataObj)
     
     if (response.success) {
-      // 跳转到处理页面
       router.push({
         name: 'Process',
         params: { projectId: response.data.project_id }
       })
-    } else {
-      error.value = response.error || '生成本体失败,请重试'
     }
   } catch (err) {
     console.error('Start simulation error:', err)
-    error.value = err.message || '提交失败,请检查网络连接或稍后重试'
   } finally {
     loading.value = false
   }
 }
-
-// 页面加载后的处理
-onMounted(() => {
-  // 动画已经在CSS中定义，这里可以做其他初始化工作
-})
 </script>
 
 <style scoped>
-/* ==================== 基础布局 ==================== */
+/* 全局变量与重置 */
+:root {
+  --black: #000000;
+  --white: #FFFFFF;
+  --orange: #FF4500;
+  --gray-light: #F5F5F5;
+  --gray-text: #666666;
+  --border: #E5E5E5;
+  /* 
+    使用 Space Grotesk 作为主要标题字体，JetBrains Mono 作为代码/标签字体
+    确保已在 index.html 引入这些 Google Fonts 
+  */
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: 'Space Grotesk', -apple-system, sans-serif;
+}
+
 .home-container {
   min-height: 100vh;
+  background: var(--white);
+  font-family: var(--font-sans);
+  color: var(--black);
+}
+
+/* 顶部导航 */
+.navbar {
+  height: 60px;
+  background: var(--black);
+  color: var(--white);
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
-  background-color: #ffffff;
-  padding: 2rem 1rem;
+  padding: 0 40px;
 }
 
-.content-wrapper {
-  width: 100%;
-  max-width: 900px;
+.nav-brand {
+  font-family: var(--font-mono);
+  font-weight: 800;
+  letter-spacing: 1px;
+  font-size: 1.2rem;
 }
 
-/* ==================== Logo区域 ==================== */
-.logo-section {
-  text-align: center;
-  margin-bottom: 3rem;
+.nav-links {
+  display: flex;
+  gap: 30px;
+  align-items: center;
 }
 
-.logo {
-  max-width: 600px;
-  width: 100%;
-  height: auto;
-  display: block;
-  margin: 0 auto;
-}
-
-/* ==================== 标语区域 ==================== */
-.slogan-section {
-  text-align: center;
-  margin-bottom: 4rem;
-}
-
-.decorative-line {
-  width: 200px;
-  height: 1px;
-  background-color: #000000;
-  margin: 1.5rem auto;
-}
-
-.slogan {
-  font-size: 2.5rem;
-  font-weight: 200;
-  color: #000000;
-  letter-spacing: 0.15em;
-  line-height: 1.8;
-  margin: 0;
-}
-
-.slogan div {
-  margin: 0.3rem 0;
-}
-
-/* ==================== 表单区域 ==================== */
-.form-section {
-  /* 移除动画，确保立即可见 */
-}
-
-.input-group {
-  margin-bottom: 3rem;
-}
-
-.input-label {
-  display: block;
-  font-size: 1rem;
+.nav-links a {
+  color: #888;
+  text-decoration: none;
+  font-family: var(--font-mono); /* 导航链接也使用代码字体，增加科技感 */
+  font-size: 0.85rem;
   font-weight: 500;
-  color: #000000;
-  margin-bottom: 1rem;
-  letter-spacing: 0.05em;
 }
 
-/* ==================== 输入框样式 ==================== */
-.requirement-input {
-  width: 100%;
-  min-height: 150px;
-  padding: 1.5rem;
-  border: 1px solid #000000;
-  background-color: #ffffff;
-  color: #000000;
-  font-size: 1rem;
-  font-family: inherit;
+.nav-links a:hover {
+  color: var(--white);
+}
+
+.login-btn {
+  background: var(--white);
+  color: var(--black) !important;
+  padding: 6px 16px;
+  font-weight: 700 !important;
+}
+
+/* 主要内容区 */
+.main-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 60px 40px;
+}
+
+/* Hero 区域 */
+.hero-section {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 80px;
+  position: relative;
+}
+
+.hero-left {
+  flex: 1;
+  padding-right: 60px;
+}
+
+.tag-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 25px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.orange-tag {
+  background: var(--orange);
+  color: var(--white);
+  padding: 4px 8px;
+  font-weight: 700;
+}
+
+.version-text {
+  color: #999;
+}
+
+.main-title {
+  font-size: 4.5rem;
+  line-height: 1.1;
+  font-weight: 700;
+  margin: 0 0 30px 0;
+  letter-spacing: -1.5px;
+}
+
+.hero-desc {
+  font-size: 1.1rem;
   line-height: 1.6;
-  transition: all 0.3s ease;
-  box-sizing: border-box;
-  resize: vertical;
+  color: var(--gray-text);
+  max-width: 600px;
+  margin-bottom: 40px;
 }
 
-.requirement-input::placeholder {
-  color: #999999;
+.decoration-square {
+  width: 16px;
+  height: 16px;
+  background: var(--orange);
 }
 
-.requirement-input:focus {
-  outline: none;
-  border-width: 2px;
-  padding: calc(1.5rem - 1px);
+.hero-right {
+  flex: 0.8;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
 }
 
-.requirement-input:disabled {
-  background-color: #f8f8f8;
-  color: #999999;
-  cursor: not-allowed;
+.logo-container {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  padding-right: 40px;
 }
 
-/* ==================== 上传区域 ==================== */
-.upload-area {
-  min-height: 200px;
-  border: 2px dashed #000000;
-  padding: 3rem 2rem;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  background-color: #ffffff;
+.hero-logo {
+  max-width: 500px; /* 调整logo大小 */
+  width: 100%;
+}
+
+.scroll-down-btn {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  color: var(--orange);
+  font-size: 1.2rem;
+  transition: all 0.2s;
 }
 
-.upload-area:hover:not(.disabled):not(.has-files) {
-  border-style: solid;
-  background-color: #f8f8f8;
+.scroll-down-btn:hover {
+  border-color: var(--orange);
 }
 
-.upload-area.drag-over:not(.disabled) {
-  border-width: 3px;
-  border-style: solid;
-  background-color: #f0f0f0;
+/* Dashboard 双栏布局 */
+.dashboard-section {
+  display: flex;
+  gap: 60px;
+  border-top: 1px solid var(--border);
+  padding-top: 60px;
 }
 
-.upload-area.disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
+/* 左侧面板 */
+.left-panel {
+  flex: 0.8;
 }
 
-.upload-area.has-files {
-  cursor: default;
-  padding: 2rem;
+.panel-header {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: #999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.status-dot {
+  color: var(--orange);
+  font-size: 0.8rem;
+}
+
+.section-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 15px 0;
+}
+
+.section-desc {
+  color: var(--gray-text);
+  margin-bottom: 40px;
+  line-height: 1.6;
+}
+
+.metrics-row {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 60px;
+}
+
+.metric-card {
+  border: 1px solid var(--border);
+  padding: 20px 30px;
+  min-width: 150px;
+}
+
+.metric-value {
+  font-family: var(--font-mono);
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+
+.metric-label {
+  font-size: 0.85rem;
+  color: #999;
+}
+
+/* 项目模拟步骤介绍 */
+.steps-container {
+  border: 1px solid var(--border);
+  padding: 30px;
+  position: relative;
+}
+
+.steps-header {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: #999;
+  margin-bottom: 25px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diamond-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.workflow-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.workflow-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.step-num {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--black);
+  opacity: 0.3;
+}
+
+.step-info {
+  flex: 1;
+}
+
+.step-title {
+  font-weight: 700;
+  font-size: 1rem;
+  margin-bottom: 4px;
+}
+
+.step-desc {
+  font-size: 0.85rem;
+  color: var(--gray-text);
+}
+
+/* 右侧交互控制台 */
+.right-panel {
+  flex: 1.2;
+}
+
+.console-box {
+  border: 1px solid #CCC; /* 外部实线 */
+  padding: 8px; /* 内边距形成双重边框感 */
+}
+
+.console-section {
+  padding: 20px;
+}
+
+.console-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 15px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.upload-zone {
+  border: 1px dashed #CCC;
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  background: #FAFAFA;
+}
+
+.upload-zone:hover {
+  background: #F0F0F0;
+  border-color: #999;
 }
 
 .upload-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
+  text-align: center;
 }
 
 .upload-icon {
-  width: 64px;
-  height: 64px;
-  stroke-width: 1.5;
-  animation: float 3s ease-in-out infinite;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #DDD;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 15px;
+  color: #999;
 }
 
-.upload-text {
-  font-size: 1.1rem;
-  color: #000000;
-  margin: 0;
-  font-weight: 400;
-  letter-spacing: 0.05em;
+.upload-title {
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-bottom: 5px;
 }
 
 .upload-hint {
-  font-size: 0.9rem;
-  color: #666666;
-  letter-spacing: 0.05em;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: #999;
 }
 
-/* ==================== 文件列表 ==================== */
 .file-list {
   width: 100%;
-  text-align: left;
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .file-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 1.5rem;
-  border-bottom: 1px solid #e0e0e0;
-  transition: background-color 0.2s;
-}
-
-.file-item:last-child {
-  border-bottom: none;
-}
-
-.file-item:hover {
-  background-color: #fafafa;
-}
-
-.file-info {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex: 1;
-  min-width: 0;
-}
-
-.file-icon {
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-  stroke-width: 1.5;
-}
-
-.file-details {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  min-width: 0;
+  background: var(--white);
+  padding: 8px 12px;
+  border: 1px solid #EEE;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
 }
 
 .file-name {
-  font-size: 1rem;
-  color: #000000;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.file-size {
-  font-size: 0.85rem;
-  color: #666666;
+  flex: 1;
+  margin: 0 10px;
 }
 
 .remove-btn {
-  width: 32px;
-  height: 32px;
-  border: 1px solid #000000;
-  background-color: #ffffff;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2rem;
+  color: #999;
+}
+
+.console-divider {
+  display: flex;
+  align-items: center;
+  margin: 10px 0;
+}
+
+.console-divider::before,
+.console-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #EEE;
+}
+
+.console-divider span {
+  padding: 0 15px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: #BBB;
+  letter-spacing: 1px;
+}
+
+.input-wrapper {
+  position: relative;
+  border: 1px solid #DDD;
+  background: #FAFAFA;
+}
+
+.code-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 20px;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  min-height: 150px;
+}
+
+.model-badge {
+  position: absolute;
+  bottom: 10px;
+  right: 15px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: #AAA;
+}
+
+.start-engine-btn {
+  width: 100%;
+  background: var(--black);
+  color: var(--white);
+  border: none;
+  padding: 20px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   cursor: pointer;
   transition: all 0.2s;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  letter-spacing: 1px;
 }
 
-.remove-btn svg {
-  width: 16px;
-  height: 16px;
-  stroke-width: 2;
+.start-engine-btn:hover:not(:disabled) {
+  background: var(--orange);
 }
 
-.remove-btn:hover:not(:disabled) {
-  background-color: #000000;
-}
-
-.remove-btn:hover:not(:disabled) svg {
-  stroke: #ffffff;
-}
-
-.remove-btn:disabled {
+.start-engine-btn:disabled {
+  background: #CCC;
   cursor: not-allowed;
-  opacity: 0.5;
 }
 
-/* ==================== 开始模拟按钮 ==================== */
-.start-btn {
-  width: 100%;
-  max-width: 400px;
-  margin: 0 auto;
-  display: block;
-  padding: 1.5rem 4rem;
-  border: 2px solid #000000;
-  background-color: #000000;
-  color: #ffffff;
-  font-size: 1.3rem;
-  font-weight: 500;
-  letter-spacing: 0.2em;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.start-btn:hover:not(:disabled) {
-  background-color: #ffffff;
-  color: #000000;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.start-btn:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: none;
-}
-
-.start-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.loading-text {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-}
-
-.loading-spinner {
-  display: inline-block;
-  width: 18px;
-  height: 18px;
-  border: 2px solid #ffffff;
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-/* ==================== 错误提示 ==================== */
-.error-message {
-  margin-top: 2rem;
-  padding: 1.25rem 1.5rem;
-  border: 1px solid #ff0000;
-  background-color: #fff5f5;
-  color: #ff0000;
-  font-size: 0.95rem;
-  text-align: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  letter-spacing: 0.02em;
-}
-
-.error-icon {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-  stroke-width: 2;
-}
-
-/* ==================== 动画定义 ==================== */
-@keyframes fadeInDown {
-  from {
-    opacity: 0;
-    transform: translateY(-30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* ==================== 过渡效果 ==================== */
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.fade-enter-from, .fade-leave-to {
-  opacity: 0;
-}
-
-/* ==================== 响应式设计 ==================== */
+/* 响应式适配 */
 @media (max-width: 1024px) {
-  .content-wrapper {
-    max-width: 800px;
+  .dashboard-section {
+    flex-direction: column;
   }
   
-  .logo {
-    max-width: 500px;
+  .hero-section {
+    flex-direction: column;
   }
   
-  .slogan {
-    font-size: 2rem;
+  .hero-left {
+    padding-right: 0;
+    margin-bottom: 40px;
   }
   
-  .decorative-line {
-    width: 150px;
-  }
-}
-
-@media (max-width: 768px) {
-  .home-container {
-    padding: 1.5rem 1rem;
-  }
-  
-  .logo {
-    max-width: 350px;
-  }
-  
-  .slogan {
-    font-size: 1.5rem;
-    letter-spacing: 0.1em;
-  }
-  
-  .decorative-line {
-    width: 100px;
-  }
-  
-  .slogan-section {
-    margin-bottom: 3rem;
-  }
-  
-  .input-group {
-    margin-bottom: 2rem;
-  }
-  
-  .requirement-input {
-    min-height: 120px;
-    padding: 1rem;
-  }
-  
-  .upload-area {
-    min-height: 160px;
-    padding: 2rem 1rem;
-  }
-  
-  .upload-icon {
-    width: 48px;
-    height: 48px;
-  }
-  
-  .upload-text {
-    font-size: 1rem;
-  }
-  
-  .start-btn {
-    padding: 1.25rem 3rem;
-    font-size: 1.1rem;
-  }
-  
-  .file-item {
-    padding: 1rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .logo {
-    max-width: 280px;
-  }
-  
-  .slogan {
-    font-size: 1.2rem;
-  }
-  
-  .start-btn {
-    max-width: 100%;
-    font-size: 1rem;
-    letter-spacing: 0.15em;
+  .hero-logo {
+    max-width: 200px;
+    margin-bottom: 20px;
   }
 }
 </style>
