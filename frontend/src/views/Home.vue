@@ -58,18 +58,18 @@
           
           <h2 class="section-title">准备就绪</h2>
           <p class="section-desc">
-            预测引擎待命中。上传非结构化数据（PDF、MD、TXT）以初始化模拟序列。
+            预测引擎待命中，可上传多份非结构化数据以初始化模拟序列
           </p>
           
           <!-- 数据指标卡片 -->
           <div class="metrics-row">
             <div class="metric-card">
-              <div class="metric-value">127ms</div>
-              <div class="metric-label">启动时间</div>
+              <div class="metric-value">低成本</div>
+              <div class="metric-label">常规模拟平均5$/次</div>
             </div>
             <div class="metric-card">
-              <div class="metric-value">∞</div>
-              <div class="metric-label">扩展限制</div>
+              <div class="metric-value">高可用</div>
+              <div class="metric-label">最多百万级Agent模拟</div>
             </div>
           </div>
 
@@ -83,28 +83,35 @@
                 <span class="step-num">01</span>
                 <div class="step-info">
                   <div class="step-title">图谱构建</div>
-                  <div class="step-desc">提取实体 & 构建本体</div>
+                  <div class="step-desc">事件梳理 & 实体记忆注入 & GraphRAG构建</div>
                 </div>
               </div>
               <div class="workflow-item">
                 <span class="step-num">02</span>
                 <div class="step-info">
-                  <div class="step-title">模拟准备</div>
-                  <div class="step-desc">生成 Agent & 人设配置</div>
+                  <div class="step-title">环境搭建</div>
+                  <div class="step-desc">实体关系抽取 & 人设生成 & 环境配置Agent注入仿真参数</div>
                 </div>
               </div>
               <div class="workflow-item">
                 <span class="step-num">03</span>
                 <div class="step-info">
-                  <div class="step-title">执行与访谈</div>
-                  <div class="step-desc">运行模拟 & 交互对话</div>
+                  <div class="step-title">开始模拟</div>
+                  <div class="step-desc">双平台并行模拟 & 自动解析预测需求 & 动态更新时序记忆</div>
                 </div>
               </div>
               <div class="workflow-item">
                 <span class="step-num">04</span>
                 <div class="step-info">
                   <div class="step-title">报告生成</div>
-                  <div class="step-desc">生成全方位分析报告</div>
+                  <div class="step-desc">ReportAgent拥有丰富的工具集与模拟后环境进行深度交互</div>
+                </div>
+              </div>
+              <div class="workflow-item">
+                <span class="step-num">05</span>
+                <div class="step-info">
+                  <div class="step-title">深度互动</div>
+                  <div class="step-desc">与模拟世界中的任意一位进行对话 & 与ReportAgent进行对话</div>
                 </div>
               </div>
             </div>
@@ -117,7 +124,7 @@
             <!-- 上传区域 -->
             <div class="console-section">
               <div class="console-header">
-                <span class="console-label">01 / 源文档</span>
+                <span class="console-label">01 / 现实种子</span>
                 <span class="console-meta">支持格式: PDF, MD, TXT</span>
               </div>
               
@@ -169,11 +176,11 @@
                 <textarea
                   v-model="formData.simulationRequirement"
                   class="code-input"
-                  placeholder="// 输入模拟参数或针对模型的具体问题..."
+                  placeholder="// 用自然语言输入模拟或预测需求（例.武大若发布撤销肖某处分的公告，会引发什么舆情走向）"
                   rows="6"
                   :disabled="loading"
                 ></textarea>
-                <div class="model-badge">模型: GEMINI-3-PRO</div>
+                <div class="model-badge">引擎: MiroFish-V1.0</div>
               </div>
             </div>
 
@@ -539,6 +546,13 @@ const startSimulation = async () => {
   gap: 60px;
   border-top: 1px solid var(--border);
   padding-top: 60px;
+  align-items: flex-start;
+}
+
+.dashboard-section .left-panel,
+.dashboard-section .right-panel {
+  display: flex;
+  flex-direction: column;
 }
 
 /* 左侧面板 */
@@ -569,14 +583,14 @@ const startSimulation = async () => {
 
 .section-desc {
   color: var(--gray-text);
-  margin-bottom: 40px;
+  margin-bottom: 25px;
   line-height: 1.6;
 }
 
 .metrics-row {
   display: flex;
   gap: 20px;
-  margin-bottom: 60px;
+  margin-bottom: 15px;
 }
 
 .metric-card {
