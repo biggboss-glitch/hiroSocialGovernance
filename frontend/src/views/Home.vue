@@ -42,7 +42,7 @@
             <img src="../assets/logo/MiroFish_logo_left.jpeg" alt="MiroFish Logo" class="hero-logo" />
           </div>
           
-          <button class="scroll-down-btn">
+          <button class="scroll-down-btn" @click="scrollToBottom">
             ↓
           </button>
         </div>
@@ -178,15 +178,17 @@
             </div>
 
             <!-- 启动按钮 -->
-            <button 
-              class="start-engine-btn"
-              @click="startSimulation"
-              :disabled="!canSubmit || loading"
-            >
-              <span v-if="!loading">启动引擎</span>
-              <span v-else>初始化中...</span>
-              <span class="btn-arrow">→</span>
-            </button>
+            <div class="console-section btn-section">
+              <button 
+                class="start-engine-btn"
+                @click="startSimulation"
+                :disabled="!canSubmit || loading"
+              >
+                <span v-if="!loading">启动引擎</span>
+                <span v-else>初始化中...</span>
+                <span class="btn-arrow">→</span>
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -266,6 +268,14 @@ const addFiles = (newFiles) => {
 // 移除文件
 const removeFile = (index) => {
   files.value.splice(index, 1)
+}
+
+// 滚动到底部
+const scrollToBottom = () => {
+  window.scrollTo({
+    top: document.body.scrollHeight,
+    behavior: 'smooth'
+  })
 }
 
 // 开始模拟
@@ -657,6 +667,10 @@ const startSimulation = async () => {
   padding: 20px;
 }
 
+.console-section.btn-section {
+  padding-top: 0;
+}
+
 .console-header {
   display: flex;
   justify-content: space-between;
@@ -803,17 +817,42 @@ const startSimulation = async () => {
   justify-content: space-between;
   align-items: center;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s ease;
   letter-spacing: 1px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 可点击状态（非禁用） */
+.start-engine-btn:not(:disabled) {
+  background: var(--black);
+  border: 1px solid var(--black);
+  animation: pulse-border 2s infinite;
 }
 
 .start-engine-btn:hover:not(:disabled) {
   background: var(--orange);
+  border-color: var(--orange);
+  transform: translateY(-2px);
+}
+
+.start-engine-btn:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .start-engine-btn:disabled {
-  background: #CCC;
+  background: #E5E5E5;
+  color: #999;
   cursor: not-allowed;
+  transform: none;
+  border: 1px solid #E5E5E5;
+}
+
+/* 引导动画：微妙的边框脉冲 */
+@keyframes pulse-border {
+  0% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.2); }
+  70% { box-shadow: 0 0 0 6px rgba(0, 0, 0, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); }
 }
 
 /* 响应式适配 */
