@@ -44,6 +44,74 @@
               <span class="building-dot"></span>
               实时更新中...
             </div>
+            
+            <!-- 节点/边详情面板 -->
+            <div v-if="selectedItem" class="detail-panel">
+              <div class="detail-panel-header">
+                <span class="detail-title">{{ selectedItem.type === 'node' ? '节点详情' : '关系详情' }}</span>
+                <span v-if="selectedItem.type === 'node'" class="detail-badge" :style="{ background: selectedItem.color }">
+                  {{ selectedItem.entityType }}
+                </span>
+                <button class="detail-close" @click="closeDetailPanel">×</button>
+              </div>
+              
+              <!-- 节点详情 -->
+              <div v-if="selectedItem.type === 'node'" class="detail-content">
+                <div class="detail-row">
+                  <span class="detail-label">Name:</span>
+                  <span class="detail-value">{{ selectedItem.data.name }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">UUID:</span>
+                  <span class="detail-value uuid">{{ selectedItem.data.uuid }}</span>
+                </div>
+                <div class="detail-row" v-if="selectedItem.data.created_at">
+                  <span class="detail-label">Created:</span>
+                  <span class="detail-value">{{ formatDate(selectedItem.data.created_at) }}</span>
+                </div>
+                <div class="detail-section" v-if="selectedItem.data.summary">
+                  <span class="detail-label">Summary:</span>
+                  <p class="detail-summary">{{ selectedItem.data.summary }}</p>
+                </div>
+                <div class="detail-row" v-if="selectedItem.data.labels?.length">
+                  <span class="detail-label">Labels:</span>
+                  <div class="detail-labels">
+                    <span v-for="label in selectedItem.data.labels" :key="label" class="label-tag">{{ label }}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- 边详情 -->
+              <div v-else class="detail-content">
+                <div class="edge-relation">
+                  <span class="edge-source">{{ selectedItem.data.source_name }}</span>
+                  <span class="edge-arrow">→</span>
+                  <span class="edge-type">{{ selectedItem.data.name || selectedItem.data.fact_type }}</span>
+                  <span class="edge-arrow">→</span>
+                  <span class="edge-target">{{ selectedItem.data.target_name }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">UUID:</span>
+                  <span class="detail-value uuid">{{ selectedItem.data.uuid }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Label:</span>
+                  <span class="detail-value">{{ selectedItem.data.name || selectedItem.data.fact_type || 'RELATED_TO' }}</span>
+                </div>
+                <div class="detail-section" v-if="selectedItem.data.fact">
+                  <span class="detail-label">Fact:</span>
+                  <p class="detail-summary">{{ selectedItem.data.fact }}</p>
+                </div>
+                <div class="detail-row" v-if="selectedItem.data.created_at">
+                  <span class="detail-label">Created:</span>
+                  <span class="detail-value">{{ formatDate(selectedItem.data.created_at) }}</span>
+                </div>
+                <div class="detail-row" v-if="selectedItem.data.valid_at">
+                  <span class="detail-label">Valid From:</span>
+                  <span class="detail-value">{{ formatDate(selectedItem.data.valid_at) }}</span>
+                </div>
+              </div>
+            </div>
           </div>
           
           <!-- 加载状态 -->
@@ -315,6 +383,7 @@ const graphData = ref(null)
 const buildProgress = ref(null)
 const ontologyProgress = ref(null) // 本体生成进度
 const currentPhase = ref(-1) // -1: 上传中, 0: 本体生成中, 1: 图谱构建, 2: 完成
+const selectedItem = ref(null) // 选中的节点或边
 
 // DOM引用
 const graphContainer = ref(null)
@@ -363,6 +432,46 @@ const goHome = () => {
 const goToNextStep = () => {
   // TODO: 进入环境搭建步骤
   alert('环境搭建功能开发中...')
+}
+
+// 关闭详情面板
+const closeDetailPanel = () => {
+  selectedItem.value = null
+}
+
+// 格式化日期
+const formatDate = (dateStr) => {
+  if (!dateStr) return '-'
+  try {
+    const date = new Date(dateStr)
+    return date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  } catch {
+    return dateStr
+  }
+}
+
+// 选中节点
+const selectNode = (nodeData, color) => {
+  selectedItem.value = {
+    type: 'node',
+    data: nodeData,
+    color: color,
+    entityType: nodeData.labels?.find(l => l !== 'Entity' && l !== 'Node') || 'Entity'
+  }
+}
+
+// 选中边
+const selectEdge = (edgeData) => {
+  selectedItem.value = {
+    type: 'edge',
+    data: edgeData
+  }
 }
 
 const getPhaseStatusClass = (phase) => {
@@ -741,10 +850,17 @@ const renderGraph = () => {
     return
   }
   
+  // 创建节点映射用于查找名称
+  const nodeMap = {}
+  nodesData.forEach(n => {
+    nodeMap[n.uuid] = n
+  })
+  
   const nodes = nodesData.map(n => ({
     id: n.uuid,
     name: n.name || '未命名',
-    type: n.labels?.find(l => l !== 'Entity' && l !== 'Node') || 'Entity'
+    type: n.labels?.find(l => l !== 'Entity' && l !== 'Node') || 'Entity',
+    rawData: n // 保存原始数据
   }))
   
   // 创建节点ID集合用于过滤有效边
@@ -755,7 +871,12 @@ const renderGraph = () => {
     .map(e => ({
       source: e.source_node_uuid,
       target: e.target_node_uuid,
-      type: e.fact_type || e.name || 'RELATED_TO'
+      type: e.fact_type || e.name || 'RELATED_TO',
+      rawData: {
+        ...e,
+        source_name: nodeMap[e.source_node_uuid]?.name || '未知',
+        target_name: nodeMap[e.target_node_uuid]?.name || '未知'
+      }
     }))
   
   console.log('Nodes:', nodes.length, 'Edges:', edges.length)
@@ -785,16 +906,41 @@ const renderGraph = () => {
       g.attr('transform', event.transform)
     }))
   
-  // 绘制边
-  const link = g.append('g')
+  // 绘制边（包含可点击的透明宽线）
+  const linkGroup = g.append('g')
     .attr('class', 'links')
-    .selectAll('line')
+    .selectAll('g')
     .data(edges)
     .enter()
-    .append('line')
+    .append('g')
+    .style('cursor', 'pointer')
+    .on('click', (event, d) => {
+      event.stopPropagation()
+      selectEdge(d.rawData)
+    })
+  
+  // 可见的细线
+  const link = linkGroup.append('line')
     .attr('stroke', '#ccc')
     .attr('stroke-width', 1.5)
     .attr('stroke-opacity', 0.6)
+  
+  // 透明的宽线用于点击
+  linkGroup.append('line')
+    .attr('stroke', 'transparent')
+    .attr('stroke-width', 10)
+  
+  // 边标签
+  const linkLabel = g.append('g')
+    .attr('class', 'link-labels')
+    .selectAll('text')
+    .data(edges)
+    .enter()
+    .append('text')
+    .attr('font-size', '9px')
+    .attr('fill', '#999')
+    .attr('text-anchor', 'middle')
+    .text(d => d.type.length > 15 ? d.type.substring(0, 12) + '...' : d.type)
   
   // 绘制节点
   const node = g.append('g')
@@ -804,6 +950,10 @@ const renderGraph = () => {
     .enter()
     .append('g')
     .style('cursor', 'pointer')
+    .on('click', (event, d) => {
+      event.stopPropagation()
+      selectNode(d.rawData, colorScale(d.type))
+    })
     .call(d3.drag()
       .on('start', dragstarted)
       .on('drag', dragged)
@@ -814,6 +964,7 @@ const renderGraph = () => {
     .attr('fill', d => colorScale(d.type))
     .attr('stroke', '#fff')
     .attr('stroke-width', 2)
+    .attr('class', 'node-circle')
   
   node.append('text')
     .attr('dx', 14)
@@ -823,16 +974,23 @@ const renderGraph = () => {
     .attr('fill', '#333')
     .attr('font-family', 'JetBrains Mono, monospace')
   
-  // 添加 tooltip
-  node.append('title')
-    .text(d => `${d.name}\n类型: ${d.type}`)
+  // 点击空白处关闭详情面板
+  svg.on('click', () => {
+    closeDetailPanel()
+  })
   
   simulation.on('tick', () => {
-    link
+    // 更新所有边的位置（包括可见线和透明点击区域）
+    linkGroup.selectAll('line')
       .attr('x1', d => d.source.x)
       .attr('y1', d => d.source.y)
       .attr('x2', d => d.target.x)
       .attr('y2', d => d.target.y)
+    
+    // 更新边标签位置
+    linkLabel
+      .attr('x', d => (d.source.x + d.target.x) / 2)
+      .attr('y', d => (d.source.y + d.target.y) / 2 - 5)
     
     node.attr('transform', d => `translate(${d.x},${d.y})`)
   })
@@ -1171,6 +1329,152 @@ onUnmounted(() => {
   background: #FF6B35;
   border-radius: 50%;
   animation: pulse 1s infinite;
+}
+
+/* 节点/边详情面板 */
+.detail-panel {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 320px;
+  max-height: calc(100% - 32px);
+  background: #fff;
+  border: 1px solid #E0E0E0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+}
+
+.detail-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: #FAFAFA;
+  border-bottom: 1px solid #E0E0E0;
+}
+
+.detail-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.detail-badge {
+  padding: 2px 10px;
+  font-size: 0.75rem;
+  color: #fff;
+  border-radius: 2px;
+}
+
+.detail-close {
+  margin-left: auto;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  color: #999;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.detail-close:hover {
+  color: #333;
+}
+
+.detail-content {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.detail-row {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.detail-label {
+  font-size: 0.8rem;
+  color: #999;
+  min-width: 70px;
+  flex-shrink: 0;
+}
+
+.detail-value {
+  font-size: 0.85rem;
+  color: #333;
+  word-break: break-word;
+}
+
+.detail-value.uuid {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.detail-section {
+  margin-bottom: 12px;
+}
+
+.detail-summary {
+  margin: 8px 0 0 0;
+  font-size: 0.85rem;
+  color: #333;
+  line-height: 1.6;
+  padding: 10px;
+  background: #F9F9F9;
+  border-left: 3px solid #FF6B35;
+}
+
+.detail-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.label-tag {
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  background: #F0F0F0;
+  border: 1px solid #E0E0E0;
+  color: #666;
+}
+
+/* 边详情关系展示 */
+.edge-relation {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #F9F9F9;
+  border: 1px solid #E0E0E0;
+}
+
+.edge-source,
+.edge-target {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #333;
+}
+
+.edge-arrow {
+  color: #999;
+}
+
+.edge-type {
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  background: #FF6B35;
+  color: #fff;
 }
 
 .error-icon {
