@@ -4,10 +4,9 @@
     <nav class="navbar">
       <div class="nav-brand">MIROFISH</div>
       <div class="nav-links">
-        <a href="#">文档</a>
-        <a href="#">运行时</a>
-        <a href="#">价格</a>
-        <a href="#" class="login-btn">登录</a>
+        <a href="https://github.com/your-repo/MiroFish" target="_blank" class="github-link">
+          访问我们的Github主页 <span class="arrow">↗</span>
+        </a>
       </div>
     </nav>
 
@@ -16,19 +15,24 @@
       <section class="hero-section">
         <div class="hero-left">
           <div class="tag-row">
-            <span class="orange-tag">#1 预测引擎</span>
-            <span class="version-text">/ V3.0-预览版</span>
+            <span class="orange-tag">简洁通用的群体智能引擎</span>
+            <span class="version-text">/ V1.0-预览版</span>
           </div>
           
           <h1 class="main-title">
-            预测性智能<br>
-            基础设施
+            上传任意报告<br>
+            <span class="gradient-text">即刻推演未来</span>
           </h1>
           
-          <p class="hero-desc">
-            在任意文档结构上部署预测模型。MiroFish 提供即时分析、风险模拟和未来场景生成，为高风险决策提供支持。
-          </p>
-          
+          <div class="hero-desc">
+            <p>
+              即使只有一段文字，<span class="highlight-bold">MiroFish</span> 也能基于其中的现实种子，全自动生成与之对应的至多<span class="highlight-orange">百万级Agent</span>构成的平行世界。通过上帝视角注入变量，在复杂的群体交互中寻找动态环境下的<span class="highlight-code">“局部最优解”</span>。
+            </p>
+            <p class="slogan-text">
+              让未来在 Agent 群中预演，让决策在百战后胜出<span class="blinking-cursor">_</span>
+            </p>
+          </div>
+           
           <div class="decoration-square"></div>
         </div>
         
@@ -336,27 +340,27 @@ const startSimulation = async () => {
 
 .nav-links {
   display: flex;
-  gap: 30px;
   align-items: center;
 }
 
-.nav-links a {
-  color: #888;
-  text-decoration: none;
-  font-family: var(--font-mono); /* 导航链接也使用代码字体，增加科技感 */
-  font-size: 0.85rem;
-  font-weight: 500;
-}
-
-.nav-links a:hover {
+.github-link {
   color: var(--white);
+  text-decoration: none;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: opacity 0.2s;
 }
 
-.login-btn {
-  background: var(--white);
-  color: var(--black) !important;
-  padding: 6px 16px;
-  font-weight: 700 !important;
+.github-link:hover {
+  opacity: 0.8;
+}
+
+.arrow {
+  font-family: sans-serif;
 }
 
 /* 主要内容区 */
@@ -391,28 +395,88 @@ const startSimulation = async () => {
 .orange-tag {
   background: var(--orange);
   color: var(--white);
-  padding: 4px 8px;
+  padding: 4px 10px;
   font-weight: 700;
+  letter-spacing: 1px;
+  font-size: 0.75rem;
 }
 
 .version-text {
   color: #999;
+  font-weight: 500;
+  letter-spacing: 0.5px;
 }
 
 .main-title {
   font-size: 4.5rem;
-  line-height: 1.1;
-  font-weight: 700;
-  margin: 0 0 30px 0;
-  letter-spacing: -1.5px;
+  line-height: 1.2;
+  font-weight: 800;
+  margin: 0 0 40px 0;
+  letter-spacing: -2px;
+  color: var(--black);
+}
+
+.gradient-text {
+  background: linear-gradient(90deg, #000000 0%, #444444 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
 }
 
 .hero-desc {
-  font-size: 1.1rem;
-  line-height: 1.6;
+  font-size: 1.05rem;
+  line-height: 1.8;
   color: var(--gray-text);
-  max-width: 600px;
-  margin-bottom: 40px;
+  max-width: 640px;
+  margin-bottom: 50px;
+  font-weight: 400;
+  text-align: justify;
+}
+
+.hero-desc p {
+  margin-bottom: 1.5rem;
+}
+
+.highlight-bold {
+  color: var(--black);
+  font-weight: 700;
+}
+
+.highlight-orange {
+  color: var(--orange);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.highlight-code {
+  background: rgba(0, 0, 0, 0.05);
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--black);
+  font-weight: 600;
+}
+
+.slogan-text {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--black);
+  letter-spacing: 1px;
+  border-left: 3px solid var(--orange);
+  padding-left: 15px;
+  margin-top: 20px;
+}
+
+.blinking-cursor {
+  color: var(--orange);
+  animation: blink 1s step-end infinite;
+  font-weight: 700;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 .decoration-square {
