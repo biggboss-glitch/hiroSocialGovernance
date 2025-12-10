@@ -22,10 +22,16 @@
             <span class="header-icon">◈</span>
             <span class="header-title">实时知识图谱</span>
           </div>
-          <div class="header-right" v-if="graphData">
-            <span class="stat-item">{{ graphData.node_count }} 节点</span>
-            <span class="stat-divider">|</span>
-            <span class="stat-item">{{ graphData.edge_count }} 关系</span>
+          <div class="header-right">
+            <template v-if="graphData">
+              <span class="stat-item">{{ graphData.node_count || graphData.nodes?.length || 0 }} 节点</span>
+              <span class="stat-divider">|</span>
+              <span class="stat-item">{{ graphData.edge_count || graphData.edges?.length || 0 }} 关系</span>
+              <span class="stat-divider">|</span>
+            </template>
+            <button class="refresh-btn" @click="refreshGraph" :disabled="graphLoading" title="刷新图谱">
+              <span class="refresh-icon" :class="{ 'spinning': graphLoading }">↻</span>
+            </button>
           </div>
         </div>
         
@@ -538,10 +544,20 @@ let graphPollTimer = null
 
 // 启动图谱数据轮询
 const startGraphPolling = () => {
-  // 每 3 秒获取一次图谱数据
+  // 立即获取一次
+  fetchGraphData()
+  
+  // 每 10 秒自动获取一次图谱数据
   graphPollTimer = setInterval(async () => {
     await fetchGraphData()
-  }, 3000)
+  }, 10000)
+}
+
+// 手动刷新图谱
+const refreshGraph = async () => {
+  graphLoading.value = true
+  await fetchGraphData()
+  graphLoading.value = false
 }
 
 // 停止图谱数据轮询
@@ -613,9 +629,17 @@ const pollTaskStatus = async (taskId) => {
       console.log('Task status:', task.status, 'Progress:', task.progress)
       
       if (task.status === 'completed') {
+        console.log('✅ 图谱构建完成，正在加载完整数据...')
+        
         stopPolling()
         stopGraphPolling()
         currentPhase.value = 2
+        
+        // 更新进度显示为完成状态
+        buildProgress.value = {
+          progress: 100,
+          message: '构建完成，正在加载图谱...'
+        }
         
         // 重新加载项目数据获取 graph_id
         const projectResponse = await getProject(currentProjectId.value)
@@ -624,9 +648,14 @@ const pollTaskStatus = async (taskId) => {
           
           // 最终加载完整图谱数据
           if (projectResponse.data.graph_id) {
+            console.log('📊 加载完整图谱:', projectResponse.data.graph_id)
             await loadGraph(projectResponse.data.graph_id)
+            console.log('✅ 图谱加载完成')
           }
         }
+        
+        // 清除进度显示
+        buildProgress.value = null
       } else if (task.status === 'failed') {
         stopPolling()
         stopGraphPolling()
@@ -990,6 +1019,42 @@ onUnmounted(() => {
 
 .stat-divider {
   color: #ddd;
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: #F5F5F5;
+  border: 1px solid #E0E0E0;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: #FF6B35;
+  border-color: #FF6B35;
+  color: #fff;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.refresh-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.refresh-icon.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 /* 图谱容器 */
