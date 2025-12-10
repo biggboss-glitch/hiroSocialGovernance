@@ -3,10 +3,13 @@
     <!-- 顶部导航栏 -->
     <nav class="navbar">
       <div class="nav-brand" @click="goHome">MIROFISH</div>
-      <div class="nav-step">
-        <span class="step-badge">STEP 01</span>
-        <span class="step-name">图谱构建</span>
+      
+      <!-- 中间步骤指示器 -->
+      <div class="nav-center">
+        <div class="step-badge">STEP 01</div>
+        <div class="step-name">图谱构建</div>
       </div>
+
       <div class="nav-status">
         <span class="status-dot" :class="statusClass"></span>
         <span class="status-text">{{ statusText }}</span>
@@ -16,10 +19,10 @@
     <!-- 主内容区 -->
     <div class="main-content">
       <!-- 左侧: 实时图谱展示 -->
-      <div class="left-panel">
+      <div class="left-panel" :class="{ 'full-screen': isFullScreen }">
         <div class="panel-header">
           <div class="header-left">
-            <span class="header-icon">◈</span>
+            <span class="header-deco">◆</span>
             <span class="header-title">实时知识图谱</span>
           </div>
           <div class="header-right">
@@ -29,9 +32,14 @@
               <span class="stat-item">{{ graphData.edge_count || graphData.edges?.length || 0 }} 关系</span>
               <span class="stat-divider">|</span>
             </template>
-            <button class="refresh-btn" @click="refreshGraph" :disabled="graphLoading" title="刷新图谱">
-              <span class="refresh-icon" :class="{ 'spinning': graphLoading }">↻</span>
-            </button>
+            <div class="action-buttons">
+                <button class="action-btn" @click="refreshGraph" :disabled="graphLoading" title="刷新图谱">
+                  <span class="icon-refresh" :class="{ 'spinning': graphLoading }">↻</span>
+                </button>
+                <button class="action-btn" @click="toggleFullScreen" :title="isFullScreen ? '退出全屏' : '全屏显示'">
+                  <span class="icon-fullscreen">{{ isFullScreen ? '↙' : '↗' }}</span>
+                </button>
+            </div>
           </div>
         </div>
         
@@ -214,8 +222,8 @@
       </div>
 
       <!-- 右侧: 构建流程详情 -->
-      <div class="right-panel">
-        <div class="panel-header">
+      <div class="right-panel" :class="{ 'hidden': isFullScreen }">
+        <div class="panel-header dark-header">
           <span class="header-icon">▣</span>
           <span class="header-title">构建流程</span>
         </div>
@@ -426,6 +434,7 @@ const buildProgress = ref(null)
 const ontologyProgress = ref(null) // 本体生成进度
 const currentPhase = ref(-1) // -1: 上传中, 0: 本体生成中, 1: 图谱构建, 2: 完成
 const selectedItem = ref(null) // 选中的节点或边
+const isFullScreen = ref(false)
 
 // DOM引用
 const graphContainer = ref(null)
@@ -474,6 +483,14 @@ const goHome = () => {
 const goToNextStep = () => {
   // TODO: 进入环境搭建步骤
   alert('环境搭建功能开发中...')
+}
+
+const toggleFullScreen = () => {
+  isFullScreen.value = !isFullScreen.value
+  // Wait for transition to finish then re-render graph
+  setTimeout(() => {
+    renderGraph()
+  }, 350) 
 }
 
 // 关闭详情面板
@@ -1088,6 +1105,7 @@ onUnmounted(() => {
   min-height: 100vh;
   background: var(--white);
   font-family: 'JetBrains Mono', 'Space Grotesk', monospace;
+  overflow: hidden; /* Prevent body scroll in fullscreen */
 }
 
 /* 导航栏 */
@@ -1095,16 +1113,18 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 40px;
-  height: 60px;
+  padding: 0 24px;
+  height: 56px;
   background: #000;
   color: #fff;
+  z-index: 10;
+  position: relative;
 }
 
 .nav-brand {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 700;
-  letter-spacing: 0.15em;
+  letter-spacing: 0.1em;
   cursor: pointer;
   transition: opacity 0.2s;
 }
@@ -1113,7 +1133,7 @@ onUnmounted(() => {
   opacity: 0.8;
 }
 
-.nav-step {
+.nav-center {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1122,28 +1142,30 @@ onUnmounted(() => {
 .step-badge {
   background: #FF6B35;
   color: #fff;
-  padding: 4px 12px;
-  font-size: 0.75rem;
+  padding: 2px 8px;
+  font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.05em;
+  border-radius: 2px;
 }
 
 .step-name {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   letter-spacing: 0.05em;
+  color: #fff;
 }
 
 .nav-status {
   display: flex;
   align-items: center;
-  gap: 8px;
 }
 
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #666;
+  margin-right: 8px;
 }
 
 .status-dot.processing {
@@ -1165,46 +1187,57 @@ onUnmounted(() => {
 }
 
 .status-text {
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   color: #999;
 }
 
 /* 主内容区 */
 .main-content {
   display: flex;
-  height: calc(100vh - 60px);
+  height: calc(100vh - 56px);
+  position: relative;
 }
 
-/* 左侧面板 */
+/* 左侧面板 - 50% default */
 .left-panel {
-  flex: 1;
+  width: 50%;
+  flex: none; /* Fixed width initially */
   display: flex;
   flex-direction: column;
   border-right: 1px solid #E0E0E0;
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  background: #fff;
+  z-index: 5;
+}
+
+.left-panel.full-screen {
+  width: 100%;
+  border-right: none;
 }
 
 .panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px;
+  padding: 12px 24px;
   border-bottom: 1px solid #E0E0E0;
-  background: #FAFAFA;
+  background: #fff;
+  height: 50px;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
-.header-icon {
-  font-size: 1rem;
+.header-deco {
   color: #FF6B35;
+  font-size: 0.8rem;
 }
 
 .header-title {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 600;
   letter-spacing: 0.05em;
 }
@@ -1212,44 +1245,62 @@ onUnmounted(() => {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 0.8rem;
+  gap: 16px;
+  font-size: 0.75rem;
   color: #666;
 }
 
-.stat-divider {
-  color: #ddd;
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-.refresh-btn {
+.stat-val {
+  font-weight: 600;
+  color: #333;
+}
+
+.stat-divider {
+  color: #eee;
+}
+
+.action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.action-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: #F5F5F5;
-  border: 1px solid #E0E0E0;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: 1px solid transparent;
   cursor: pointer;
   transition: all 0.2s;
+  color: #666;
+  border-radius: 2px;
 }
 
-.refresh-btn:hover:not(:disabled) {
-  background: #FF6B35;
-  border-color: #FF6B35;
-  color: #fff;
+.action-btn:hover:not(:disabled) {
+  background: #F5F5F5;
+  color: #000;
 }
 
-.refresh-btn:disabled {
-  opacity: 0.5;
+.action-btn:disabled {
+  opacity: 0.3;
   cursor: not-allowed;
 }
 
-.refresh-icon {
+.icon-refresh, .icon-fullscreen {
   font-size: 1rem;
   line-height: 1;
 }
 
-.refresh-icon.spinning {
+.icon-refresh.spinning {
   animation: spin 1s linear infinite;
 }
 
@@ -1618,15 +1669,26 @@ onUnmounted(() => {
   color: #999;
 }
 
-/* 右侧面板 */
+/* 右侧面板 - 50% default */
 .right-panel {
-  width: 480px;
+  width: 50%;
+  flex: none;
   display: flex;
   flex-direction: column;
   background: #fff;
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, transform 0.3s ease;
+  overflow: hidden;
+  opacity: 1;
 }
 
-.right-panel .panel-header {
+.right-panel.hidden {
+  width: 0;
+  opacity: 0;
+  transform: translateX(20px);
+  pointer-events: none;
+}
+
+.right-panel .panel-header.dark-header {
   background: #000;
   color: #fff;
   border-bottom: none;
@@ -1634,6 +1696,7 @@ onUnmounted(() => {
 
 .right-panel .header-icon {
   color: #FF6B35;
+  margin-right: 8px;
 }
 
 /* 流程内容 */
@@ -1734,28 +1797,6 @@ onUnmounted(() => {
   padding: 16px;
 }
 
-.detail-section {
-  margin-bottom: 16px;
-}
-
-.detail-section:last-child {
-  margin-bottom: 0;
-}
-
-.detail-label {
-  font-size: 0.75rem;
-  color: #999;
-  margin-bottom: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.detail-content {
-  font-size: 0.85rem;
-  color: #333;
-  line-height: 1.6;
-}
-
 /* 实体标签 */
 .entity-tags {
   display: flex;
@@ -1825,10 +1866,6 @@ onUnmounted(() => {
   border-top-color: #FF6B35;
   border-radius: 50%;
   animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
 }
 
 .progress-text {
@@ -2008,14 +2045,21 @@ onUnmounted(() => {
   }
   
   .left-panel {
+    width: 100% !important;
     border-right: none;
     border-bottom: 1px solid #E0E0E0;
     height: 50vh;
   }
   
   .right-panel {
-    width: 100%;
+    width: 100% !important;
     height: 50vh;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  
+  .right-panel.hidden {
+      display: none;
   }
 }
 </style>
