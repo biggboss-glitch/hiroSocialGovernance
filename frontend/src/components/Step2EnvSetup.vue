@@ -499,9 +499,10 @@
     </div>
 
     <!-- Profile Detail Modal -->
-    <div v-if="selectedProfile" class="profile-modal-overlay" @click.self="selectedProfile = null">
-      <div class="profile-modal">
-        <div class="modal-header">
+    <Transition name="modal">
+      <div v-if="selectedProfile" class="profile-modal-overlay" @click.self="selectedProfile = null">
+        <div class="profile-modal">
+          <div class="modal-header">
           <div class="modal-header-info">
             <div class="modal-name-row">
               <span class="modal-realname">{{ selectedProfile.realname }}</span>
@@ -581,7 +582,8 @@
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </Transition>
 
     <!-- Bottom Info / Logs -->
     <div class="system-logs">
@@ -2367,6 +2369,31 @@ onUnmounted(() => {
 
 .hint-icon {
   font-size: 14px;
+}
+
+/* Modal Transition */
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+
+.modal-enter-active .profile-modal {
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.modal-leave-active .profile-modal {
+  transition: all 0.3s ease-in;
+}
+
+.modal-enter-from .profile-modal,
+.modal-leave-to .profile-modal {
+  transform: scale(0.95) translateY(10px);
+  opacity: 0;
 }
 </style>
 
