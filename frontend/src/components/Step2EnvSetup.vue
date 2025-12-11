@@ -1403,18 +1403,43 @@ onUnmounted(() => {
 }
 
 .narrative-box {
-  background: #F9F9F9;
-  padding: 12px;
-  border-radius: 6px;
-  border-left: 3px solid #FF5722;
+  background: #FFFFFF;
+  padding: 20px 24px;
+  border-radius: 12px;
+  border: 1px solid #EEF2F6;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.03);
+  transition: all 0.3s ease;
+}
+
+.narrative-box .box-label {
+  display: flex;
+  align-items: center;
+  color: #64748B;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.narrative-box .box-label::before {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 6px;
+  background: #6366F1;
+  border-radius: 50%;
+  margin-right: 8px;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
 }
 
 .narrative-text {
-  font-size: 13px;
-  color: #444;
-  line-height: 1.6;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  color: #334155;
+  line-height: 1.8;
   margin: 0;
   text-align: justify;
+  letter-spacing: 0.01em;
 }
 
 .topics-section {
@@ -1429,7 +1454,7 @@ onUnmounted(() => {
 
 .hot-topic-tag {
   font-size: 12px;
-  color: #FF5722;
+  color:rgba(255, 86, 34, 0.88);
   background: #FFF3E0;
   padding: 4px 10px;
   border-radius: 12px;
