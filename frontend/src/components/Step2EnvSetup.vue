@@ -134,27 +134,211 @@
           </p>
           
           <!-- Config Preview -->
-          <div v-if="simulationConfig" class="config-preview">
-            <div class="config-section">
-              <span class="config-label">模拟时长</span>
-              <span class="config-value">{{ simulationConfig.time_config?.total_simulation_hours || '-' }} 小时</span>
+          <div v-if="simulationConfig" class="config-detail-panel">
+            <!-- 时间配置 -->
+            <div class="config-block">
+              <div class="config-block-header">
+                <span class="config-block-title">时间配置</span>
+              </div>
+              <div class="config-grid">
+                <div class="config-item">
+                  <span class="config-item-label">模拟时长</span>
+                  <span class="config-item-value">{{ simulationConfig.time_config?.total_simulation_hours || '-' }} 小时</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-item-label">每轮时长</span>
+                  <span class="config-item-value">{{ simulationConfig.time_config?.minutes_per_round || '-' }} 分钟</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-item-label">总轮次</span>
+                  <span class="config-item-value">{{ Math.floor((simulationConfig.time_config?.total_simulation_hours * 60 / simulationConfig.time_config?.minutes_per_round)) || '-' }} 轮</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-item-label">每小时Agent数</span>
+                  <span class="config-item-value">{{ simulationConfig.time_config?.agents_per_hour_min }}-{{ simulationConfig.time_config?.agents_per_hour_max }}</span>
+                </div>
+              </div>
+              <div class="time-periods">
+                <div class="period-item">
+                  <span class="period-label">高峰时段</span>
+                  <span class="period-hours">{{ simulationConfig.time_config?.peak_hours?.join(':00, ') }}:00</span>
+                  <span class="period-multiplier">×{{ simulationConfig.time_config?.peak_activity_multiplier }}</span>
+                </div>
+                <div class="period-item">
+                  <span class="period-label">工作时段</span>
+                  <span class="period-hours">{{ simulationConfig.time_config?.work_hours?.[0] }}:00-{{ simulationConfig.time_config?.work_hours?.slice(-1)[0] }}:00</span>
+                  <span class="period-multiplier">×{{ simulationConfig.time_config?.work_activity_multiplier }}</span>
+                </div>
+                <div class="period-item">
+                  <span class="period-label">低谷时段</span>
+                  <span class="period-hours">{{ simulationConfig.time_config?.off_peak_hours?.[0] }}:00-{{ simulationConfig.time_config?.off_peak_hours?.slice(-1)[0] }}:00</span>
+                  <span class="period-multiplier">×{{ simulationConfig.time_config?.off_peak_activity_multiplier }}</span>
+                </div>
+              </div>
             </div>
-            <div class="config-section">
-              <span class="config-label">总轮次</span>
-              <span class="config-value">{{ (simulationConfig.time_config?.total_simulation_hours * 60 / simulationConfig.time_config?.minutes_per_round) || '-' }} 轮</span>
+
+            <!-- Agent 配置 -->
+            <div class="config-block">
+              <div class="config-block-header">
+                <span class="config-block-title">Agent 配置</span>
+                <span class="config-block-badge">{{ simulationConfig.agent_configs?.length || 0 }} 个</span>
+              </div>
+              <div class="agents-cards">
+                <div 
+                  v-for="agent in simulationConfig.agent_configs" 
+                  :key="agent.agent_id" 
+                  class="agent-card"
+                >
+                  <!-- 卡片头部 -->
+                  <div class="agent-card-header">
+                    <div class="agent-identity">
+                      <span class="agent-id">Agent {{ agent.agent_id }}</span>
+                      <span class="agent-name">{{ agent.entity_name }}</span>
+                    </div>
+                    <div class="agent-tags">
+                      <span class="agent-type">{{ agent.entity_type }}</span>
+                      <span class="agent-stance" :class="'stance-' + agent.stance">{{ agent.stance }}</span>
+                    </div>
+                  </div>
+                  
+                  <!-- 活跃时间轴 -->
+                  <div class="agent-timeline">
+                    <span class="timeline-label">活跃时段</span>
+                    <div class="mini-timeline">
+                      <div 
+                        v-for="hour in 24" 
+                        :key="hour - 1" 
+                        class="timeline-hour"
+                        :class="{ 'active': agent.active_hours?.includes(hour - 1) }"
+                        :title="`${hour - 1}:00`"
+                      ></div>
+                    </div>
+                    <div class="timeline-marks">
+                      <span>0</span>
+                      <span>6</span>
+                      <span>12</span>
+                      <span>18</span>
+                      <span>24</span>
+                    </div>
+                  </div>
+
+                  <!-- 行为参数 -->
+                  <div class="agent-params">
+                    <div class="param-group">
+                      <div class="param-item">
+                        <span class="param-label">发帖/时</span>
+                        <span class="param-value">{{ agent.posts_per_hour }}</span>
+                      </div>
+                      <div class="param-item">
+                        <span class="param-label">评论/时</span>
+                        <span class="param-value">{{ agent.comments_per_hour }}</span>
+                      </div>
+                      <div class="param-item">
+                        <span class="param-label">响应延迟</span>
+                        <span class="param-value">{{ agent.response_delay_min }}-{{ agent.response_delay_max }}min</span>
+                      </div>
+                    </div>
+                    <div class="param-group">
+                      <div class="param-item">
+                        <span class="param-label">活跃度</span>
+                        <span class="param-value with-bar">
+                          <span class="mini-bar" :style="{ width: (agent.activity_level * 100) + '%' }"></span>
+                          {{ (agent.activity_level * 100).toFixed(0) }}%
+                        </span>
+                      </div>
+                      <div class="param-item">
+                        <span class="param-label">情感倾向</span>
+                        <span class="param-value" :class="agent.sentiment_bias > 0 ? 'positive' : agent.sentiment_bias < 0 ? 'negative' : 'neutral'">
+                          {{ agent.sentiment_bias > 0 ? '+' : '' }}{{ agent.sentiment_bias?.toFixed(1) }}
+                        </span>
+                      </div>
+                      <div class="param-item">
+                        <span class="param-label">影响力</span>
+                        <span class="param-value highlight">{{ agent.influence_weight?.toFixed(1) }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="config-section">
-              <span class="config-label">平台配置</span>
-              <span class="config-value">
-                <span v-if="simulationConfig.twitter_config" class="platform-tag">Twitter</span>
-                <span v-if="simulationConfig.reddit_config" class="platform-tag">Reddit</span>
-              </span>
+
+            <!-- 平台配置 -->
+            <div class="config-block">
+              <div class="config-block-header">
+                <span class="config-block-title">平台推荐算法配置</span>
+              </div>
+              <div class="platforms-grid">
+                <div v-if="simulationConfig.twitter_config" class="platform-card">
+                  <div class="platform-card-header">
+                    <span class="platform-name">Twitter</span>
+                  </div>
+                  <div class="platform-params">
+                    <div class="param-row">
+                      <span class="param-label">时效权重</span>
+                      <span class="param-value">{{ simulationConfig.twitter_config.recency_weight }}</span>
+                    </div>
+                    <div class="param-row">
+                      <span class="param-label">热度权重</span>
+                      <span class="param-value">{{ simulationConfig.twitter_config.popularity_weight }}</span>
+                    </div>
+                    <div class="param-row">
+                      <span class="param-label">相关性权重</span>
+                      <span class="param-value">{{ simulationConfig.twitter_config.relevance_weight }}</span>
+                    </div>
+                    <div class="param-row">
+                      <span class="param-label">病毒阈值</span>
+                      <span class="param-value">{{ simulationConfig.twitter_config.viral_threshold }}</span>
+                    </div>
+                    <div class="param-row">
+                      <span class="param-label">回音室强度</span>
+                      <span class="param-value">{{ simulationConfig.twitter_config.echo_chamber_strength }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="simulationConfig.reddit_config" class="platform-card">
+                  <div class="platform-card-header">
+                    <span class="platform-name">Reddit</span>
+                  </div>
+                  <div class="platform-params">
+                    <div class="param-row">
+                      <span class="param-label">时效权重</span>
+                      <span class="param-value">{{ simulationConfig.reddit_config.recency_weight }}</span>
+                    </div>
+                    <div class="param-row">
+                      <span class="param-label">热度权重</span>
+                      <span class="param-value">{{ simulationConfig.reddit_config.popularity_weight }}</span>
+                    </div>
+                    <div class="param-row">
+                      <span class="param-label">相关性权重</span>
+                      <span class="param-value">{{ simulationConfig.reddit_config.relevance_weight }}</span>
+                    </div>
+                    <div class="param-row">
+                      <span class="param-label">病毒阈值</span>
+                      <span class="param-value">{{ simulationConfig.reddit_config.viral_threshold }}</span>
+                    </div>
+                    <div class="param-row">
+                      <span class="param-label">回音室强度</span>
+                      <span class="param-value">{{ simulationConfig.reddit_config.echo_chamber_strength }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            
-            <!-- LLM Reasoning -->
-            <div v-if="simulationConfig.generation_reasoning" class="reasoning-section">
-              <span class="reasoning-label">LLM 配置推理</span>
-              <p class="reasoning-text">{{ simulationConfig.generation_reasoning.split('|')[0] }} ...</p>
+
+            <!-- LLM 配置推理 -->
+            <div v-if="simulationConfig.generation_reasoning" class="config-block">
+              <div class="config-block-header">
+                <span class="config-block-title">LLM 配置推理</span>
+              </div>
+              <div class="reasoning-content">
+                <div 
+                  v-for="(reason, idx) in simulationConfig.generation_reasoning.split('|')" 
+                  :key="idx" 
+                  class="reasoning-item"
+                >
+                  <p class="reasoning-text">{{ reason.trim() }}</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1011,67 +1195,392 @@ onUnmounted(() => {
 }
 
 /* Config Preview */
-.config-preview {
-  background: #FAFAFA;
-  border-radius: 6px;
-  padding: 16px;
+/* Config Detail Panel */
+.config-detail-panel {
   margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.config-section {
+.config-block {
+  background: #FFFFFF;
+  border: 1px solid #EEF2F6;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.config-block-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px dashed #E0E0E0;
+  padding: 12px 16px;
+  background: #F8FAFC;
+  border-bottom: 1px solid #EEF2F6;
 }
 
-.config-section:last-child {
-  border-bottom: none;
-}
-
-.config-label {
+.config-block-title {
   font-size: 12px;
-  color: #666;
-}
-
-.config-value {
-  font-size: 14px;
   font-weight: 600;
-  color: #333;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.platform-tag {
-  display: inline-block;
+.config-block-badge {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  background: #333;
+  font-size: 11px;
+  background: #6366F1;
   color: #FFF;
   padding: 2px 8px;
-  border-radius: 3px;
-  margin-left: 6px;
+  border-radius: 10px;
 }
 
-.reasoning-section {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid #E0E0E0;
+/* Config Grid */
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: #EEF2F6;
+  padding: 1px;
 }
 
-.reasoning-label {
-  display: block;
+.config-item {
+  background: #FFF;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.config-item-label {
+  font-size: 11px;
+  color: #94A3B8;
+}
+
+.config-item-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1E293B;
+}
+
+/* Time Periods */
+.time-periods {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.period-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #F8FAFC;
+  border-radius: 6px;
+}
+
+.period-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748B;
+  min-width: 70px;
+}
+
+.period-hours {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #475569;
+  flex: 1;
+}
+
+.period-multiplier {
+  font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
   font-weight: 600;
-  color: #999;
+  color: #6366F1;
+  background: #EEF2FF;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Agents Cards */
+.agents-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  padding: 16px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.agents-cards::-webkit-scrollbar {
+  width: 4px;
+}
+
+.agents-cards::-webkit-scrollbar-thumb {
+  background: #DDD;
+  border-radius: 2px;
+}
+
+.agents-cards::-webkit-scrollbar-thumb:hover {
+  background: #CCC;
+}
+
+.agent-card {
+  background: #FFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
+  padding: 16px;
+  transition: all 0.2s ease;
+}
+
+.agent-card:hover {
+  border-color: #CBD5E1;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+}
+
+/* Agent Card Header */
+.agent-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.agent-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #94A3B8;
+}
+
+.agent-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1E293B;
+}
+
+.agent-tags {
+  display: flex;
+  gap: 6px;
+}
+
+.agent-type {
+  font-size: 10px;
+  color: #64748B;
+  background: #F1F5F9;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.agent-stance {
+  font-size: 10px;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.stance-neutral {
+  background: #F1F5F9;
+  color: #64748B;
+}
+
+.stance-supportive {
+  background: #DCFCE7;
+  color: #16A34A;
+}
+
+.stance-opposing {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+
+.stance-observer {
+  background: #FEF3C7;
+  color: #D97706;
+}
+
+/* Agent Timeline */
+.agent-timeline {
+  margin-bottom: 14px;
+}
+
+.timeline-label {
+  display: block;
+  font-size: 10px;
+  color: #94A3B8;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.mini-timeline {
+  display: flex;
+  gap: 2px;
+  height: 16px;
+  background: #F8FAFC;
+  border-radius: 4px;
+  padding: 3px;
+}
+
+.timeline-hour {
+  flex: 1;
+  background: #E2E8F0;
+  border-radius: 2px;
+  transition: all 0.2s;
+}
+
+.timeline-hour.active {
+  background: linear-gradient(180deg, #6366F1, #818CF8);
+}
+
+.timeline-marks {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: #94A3B8;
+}
+
+/* Agent Params */
+.agent-params {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.param-group {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.param-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.param-item .param-label {
+  font-size: 10px;
+  color: #94A3B8;
+}
+
+.param-item .param-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.param-value.with-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mini-bar {
+  height: 4px;
+  background: linear-gradient(90deg, #6366F1, #A855F7);
+  border-radius: 2px;
+  min-width: 4px;
+  max-width: 40px;
+}
+
+.param-value.positive {
+  color: #16A34A;
+}
+
+.param-value.negative {
+  color: #DC2626;
+}
+
+.param-value.neutral {
+  color: #64748B;
+}
+
+.param-value.highlight {
+  color: #6366F1;
+}
+
+/* Platforms Grid */
+.platforms-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: #EEF2F6;
+}
+
+.platform-card {
+  background: #FFF;
+  padding: 16px;
+}
+
+.platform-card-header {
+  margin-bottom: 12px;
+}
+
+.platform-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1E293B;
+}
+
+.platform-params {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.param-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.param-label {
+  font-size: 12px;
+  color: #64748B;
+}
+
+.param-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1E293B;
+}
+
+/* Reasoning Content */
+.reasoning-content {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reasoning-item {
+  padding: 12px 16px;
+  background: #F8FAFC;
+  border-radius: 8px;
+  border-left: 3px solid #6366F1;
 }
 
 .reasoning-text {
-  font-size: 12px;
-  color: #666;
-  line-height: 1.6;
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.7;
   margin: 0;
 }
 
