@@ -159,10 +159,11 @@
           <p class="description">图谱构建已完成，请进入下一步进行模拟环境搭建</p>
           <button 
             class="action-btn" 
-            :disabled="currentPhase < 2"
-            @click="$emit('next-step')"
+            :disabled="currentPhase < 2 || creatingSimulation"
+            @click="handleEnterEnvSetup"
           >
-            进入环境搭建 ➝
+            <span v-if="creatingSimulation" class="spinner-sm"></span>
+            {{ creatingSimulation ? '创建中...' : '进入环境搭建 ➝' }}
           </button>
         </div>
       </div>
@@ -186,6 +187,10 @@
 
 <script setup>
 import { computed, ref, watch, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
+import { createSimulation } from '../api/simulation'
+
+const router = useRouter()
 
 const props = defineProps({
   currentPhase: { type: Number, default: 0 },
@@ -200,6 +205,42 @@ defineEmits(['next-step'])
 
 const selectedOntologyItem = ref(null)
 const logContent = ref(null)
+const creatingSimulation = ref(false)
+
+// 进入环境搭建 - 创建 simulation 并跳转
+const handleEnterEnvSetup = async () => {
+  if (!props.projectData?.project_id || !props.projectData?.graph_id) {
+    console.error('缺少项目或图谱信息')
+    return
+  }
+  
+  creatingSimulation.value = true
+  
+  try {
+    const res = await createSimulation({
+      project_id: props.projectData.project_id,
+      graph_id: props.projectData.graph_id,
+      enable_twitter: true,
+      enable_reddit: true
+    })
+    
+    if (res.success && res.data?.simulation_id) {
+      // 跳转到 simulation 页面
+      router.push({
+        name: 'Simulation',
+        params: { simulationId: res.data.simulation_id }
+      })
+    } else {
+      console.error('创建模拟失败:', res.error)
+      alert('创建模拟失败: ' + (res.error || '未知错误'))
+    }
+  } catch (err) {
+    console.error('创建模拟异常:', err)
+    alert('创建模拟异常: ' + err.message)
+  } finally {
+    creatingSimulation.value = false
+  }
+}
 
 const selectOntologyItem = (item, type) => {
   selectedOntologyItem.value = { ...item, itemType: type }

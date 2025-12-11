@@ -22,8 +22,8 @@
 
       <div class="header-right">
         <div class="workflow-step">
-          <span class="step-num">Step 1/5</span>
-          <span class="step-name">图谱构建</span>
+          <span class="step-num">Step {{ currentStep }}/5</span>
+          <span class="step-name">{{ stepNames[currentStep - 1] }}</span>
         </div>
         <div class="step-divider"></div>
         <span class="status-indicator" :class="statusClass">
@@ -46,9 +46,11 @@
         />
       </div>
 
-      <!-- Right Panel: Workbench -->
+      <!-- Right Panel: Step Components -->
       <div class="panel-wrapper right" :style="rightPanelStyle">
-        <WorkbenchPanel 
+        <!-- Step 1: 图谱构建 -->
+        <Step1GraphBuild 
+          v-if="currentStep === 1"
           :currentPhase="currentPhase"
           :projectData="projectData"
           :ontologyProgress="ontologyProgress"
@@ -56,6 +58,16 @@
           :graphData="graphData"
           :systemLogs="systemLogs"
           @next-step="handleNextStep"
+        />
+        <!-- Step 2: 环境搭建 -->
+        <Step2EnvSetup
+          v-else-if="currentStep === 2"
+          :projectData="projectData"
+          :graphData="graphData"
+          :systemLogs="systemLogs"
+          @go-back="handleGoBack"
+          @next-step="handleNextStep"
+          @add-log="addLog"
         />
       </div>
     </main>
@@ -66,7 +78,8 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import GraphPanel from '../components/GraphPanel.vue'
-import WorkbenchPanel from '../components/WorkbenchPanel.vue'
+import Step1GraphBuild from '../components/Step1GraphBuild.vue'
+import Step2EnvSetup from '../components/Step2EnvSetup.vue'
 import { generateOntology, getProject, buildGraph, getTaskStatus, getGraphData } from '../api/graph'
 import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
 
@@ -75,6 +88,10 @@ const router = useRouter()
 
 // Layout State
 const viewMode = ref('split') // graph | split | workbench
+
+// Step State
+const currentStep = ref(1) // 1: 图谱构建, 2: 环境搭建, 3: 开始模拟, 4: 报告生成, 5: 深度互动
+const stepNames = ['图谱构建', '环境搭建', '开始模拟', '报告生成', '深度互动']
 
 // Data State
 const currentProjectId = ref(route.params.projectId)
@@ -140,7 +157,17 @@ const toggleMaximize = (target) => {
 }
 
 const handleNextStep = () => {
-  alert('Environment Setup coming soon...')
+  if (currentStep.value < 5) {
+    currentStep.value++
+    addLog(`进入 Step ${currentStep.value}: ${stepNames[currentStep.value - 1]}`)
+  }
+}
+
+const handleGoBack = () => {
+  if (currentStep.value > 1) {
+    currentStep.value--
+    addLog(`返回 Step ${currentStep.value}: ${stepNames[currentStep.value - 1]}`)
+  }
 }
 
 // --- Data Logic ---
