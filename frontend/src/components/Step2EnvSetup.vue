@@ -137,9 +137,6 @@
           <div v-if="simulationConfig" class="config-detail-panel">
             <!-- 时间配置 -->
             <div class="config-block">
-              <div class="config-block-header">
-                <span class="config-block-title">时间配置</span>
-              </div>
               <div class="config-grid">
                 <div class="config-item">
                   <span class="config-item-label">模拟时长</span>
@@ -154,7 +151,7 @@
                   <span class="config-item-value">{{ Math.floor((simulationConfig.time_config?.total_simulation_hours * 60 / simulationConfig.time_config?.minutes_per_round)) || '-' }} 轮</span>
                 </div>
                 <div class="config-item">
-                  <span class="config-item-label">每小时Agent数</span>
+                  <span class="config-item-label">每小时活跃</span>
                   <span class="config-item-value">{{ simulationConfig.time_config?.agents_per_hour_min }}-{{ simulationConfig.time_config?.agents_per_hour_max }}</span>
                 </div>
               </div>
@@ -168,6 +165,11 @@
                   <span class="period-label">工作时段</span>
                   <span class="period-hours">{{ simulationConfig.time_config?.work_hours?.[0] }}:00-{{ simulationConfig.time_config?.work_hours?.slice(-1)[0] }}:00</span>
                   <span class="period-multiplier">×{{ simulationConfig.time_config?.work_activity_multiplier }}</span>
+                </div>
+                <div class="period-item">
+                  <span class="period-label">早间时段</span>
+                  <span class="period-hours">{{ simulationConfig.time_config?.morning_hours?.[0] }}:00-{{ simulationConfig.time_config?.morning_hours?.slice(-1)[0] }}:00</span>
+                  <span class="period-multiplier">×{{ simulationConfig.time_config?.morning_activity_multiplier }}</span>
                 </div>
                 <div class="period-item">
                   <span class="period-label">低谷时段</span>
@@ -265,12 +267,12 @@
             <!-- 平台配置 -->
             <div class="config-block">
               <div class="config-block-header">
-                <span class="config-block-title">平台推荐算法配置</span>
+                <span class="config-block-title">推荐算法配置</span>
               </div>
               <div class="platforms-grid">
                 <div v-if="simulationConfig.twitter_config" class="platform-card">
                   <div class="platform-card-header">
-                    <span class="platform-name">Twitter</span>
+                    <span class="platform-name">平台 1：广场 / 信息流</span>
                   </div>
                   <div class="platform-params">
                     <div class="param-row">
@@ -297,7 +299,7 @@
                 </div>
                 <div v-if="simulationConfig.reddit_config" class="platform-card">
                   <div class="platform-card-header">
-                    <span class="platform-name">Reddit</span>
+                    <span class="platform-name">平台 2：话题 / 社区</span>
                   </div>
                   <div class="platform-params">
                     <div class="param-row">
@@ -332,7 +334,7 @@
               </div>
               <div class="reasoning-content">
                 <div 
-                  v-for="(reason, idx) in simulationConfig.generation_reasoning.split('|')" 
+                  v-for="(reason, idx) in simulationConfig.generation_reasoning.split('|').slice(0, 2)" 
                   :key="idx" 
                   class="reasoning-item"
                 >
@@ -1128,7 +1130,7 @@ onUnmounted(() => {
 }
 
 .profile-card:hover {
-  border-color: #FF5722;
+  border-color: #999;
   background: #FFF;
 }
 
@@ -1198,40 +1200,40 @@ onUnmounted(() => {
 /* Config Detail Panel */
 .config-detail-panel {
   margin-top: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
 }
 
 .config-block {
-  background: #FFFFFF;
-  border: 1px solid #EEF2F6;
-  border-radius: 10px;
-  overflow: hidden;
+  margin-top: 16px;
+  border-top: 1px solid #E5E5E5;
+  padding-top: 12px;
+}
+
+.config-block:first-child {
+  margin-top: 0;
+  border-top: none;
+  padding-top: 0;
 }
 
 .config-block-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  background: #F8FAFC;
-  border-bottom: 1px solid #EEF2F6;
+  margin-bottom: 12px;
 }
 
 .config-block-title {
   font-size: 12px;
   font-weight: 600;
-  color: #475569;
+  color: #666;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.5px;
 }
 
 .config-block-badge {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
-  background: #6366F1;
-  color: #FFF;
+  background: #F1F5F9;
+  color: #475569;
   padding: 2px 8px;
   border-radius: 10px;
 }
@@ -1240,14 +1242,13 @@ onUnmounted(() => {
 .config-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 1px;
-  background: #EEF2F6;
-  padding: 1px;
+  gap: 12px;
 }
 
 .config-item {
-  background: #FFF;
-  padding: 14px 16px;
+  background: #F9F9F9;
+  padding: 12px 14px;
+  border-radius: 6px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1267,7 +1268,7 @@ onUnmounted(() => {
 
 /* Time Periods */
 .time-periods {
-  padding: 12px 16px;
+  margin-top: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1278,7 +1279,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
-  background: #F8FAFC;
+  background: #F9F9F9;
   border-radius: 6px;
 }
 
@@ -1311,9 +1312,9 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
-  padding: 16px;
   max-height: 400px;
   overflow-y: auto;
+  padding-right: 4px;
 }
 
 .agents-cards::-webkit-scrollbar {
@@ -1330,16 +1331,16 @@ onUnmounted(() => {
 }
 
 .agent-card {
-  background: #FFF;
-  border: 1px solid #E2E8F0;
-  border-radius: 10px;
-  padding: 16px;
+  background: #F9F9F9;
+  border: 1px solid #E5E5E5;
+  border-radius: 6px;
+  padding: 14px;
   transition: all 0.2s ease;
 }
 
 .agent-card:hover {
-  border-color: #CBD5E1;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+  border-color: #999;
+  background: #FFF;
 }
 
 /* Agent Card Header */
@@ -1519,23 +1520,25 @@ onUnmounted(() => {
 .platforms-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 1px;
-  background: #EEF2F6;
+  gap: 12px;
 }
 
 .platform-card {
-  background: #FFF;
-  padding: 16px;
+  background: #F9F9F9;
+  padding: 14px;
+  border-radius: 6px;
 }
 
 .platform-card-header {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #E5E5E5;
 }
 
 .platform-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  color: #1E293B;
+  color: #333;
 }
 
 .platform-params {
@@ -1564,22 +1567,20 @@ onUnmounted(() => {
 
 /* Reasoning Content */
 .reasoning-content {
-  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .reasoning-item {
-  padding: 12px 16px;
-  background: #F8FAFC;
-  border-radius: 8px;
-  border-left: 3px solid #6366F1;
+  padding: 12px 14px;
+  background: #F9F9F9;
+  border-radius: 6px;
 }
 
 .reasoning-text {
   font-size: 13px;
-  color: #475569;
+  color: #555;
   line-height: 1.7;
   margin: 0;
 }
@@ -1904,11 +1905,12 @@ onUnmounted(() => {
 
 .box-label {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  color: #999;
+  color: #666;
   text-transform: uppercase;
-  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
 }
 
 .narrative-box {
@@ -1921,24 +1923,12 @@ onUnmounted(() => {
 }
 
 .narrative-box .box-label {
-  display: flex;
-  align-items: center;
-  color: #64748B;
+  display: block;
+  color: #666;
   font-size: 12px;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.5px;
   margin-bottom: 12px;
   font-weight: 600;
-}
-
-.narrative-box .box-label::before {
-  content: '';
-  display: block;
-  width: 6px;
-  height: 6px;
-  background: #6366F1;
-  border-radius: 50%;
-  margin-right: 8px;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
 }
 
 .narrative-text {
