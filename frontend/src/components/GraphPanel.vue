@@ -9,7 +9,7 @@
           <span class="btn-text">Refresh</span>
         </button>
         <button class="tool-btn" @click="$emit('toggle-maximize')" title="最大化/还原">
-          <span class="icon-maximize">×</span>
+          <span class="icon-maximize">⛶</span>
         </button>
       </div>
     </div>

@@ -18,7 +18,7 @@
         <div class="card-content">
           <p class="api-note">POST /api/graph/ontology/generate</p>
           <p class="description">
-            上传文档后，LLM分析文档内容，自动生成适合舆论模拟的本体结构（实体类型 + 关系类型）。
+            LLM分析文档内容与模拟需求，梳理出现实种子，自动生成合适的本体结构
           </p>
 
           <!-- Loading / Progress -->
@@ -110,7 +110,7 @@
         <div class="card-header">
           <div class="step-info">
             <span class="step-num">02</span>
-            <span class="step-title">图谱构建</span>
+            <span class="step-title">GraphRAG构建</span>
           </div>
           <div class="step-status">
             <span v-if="currentPhase > 1" class="badge success">已完成</span>
@@ -122,7 +122,7 @@
         <div class="card-content">
           <p class="api-note">POST /api/graph/build</p>
           <p class="description">
-            基于生成的本体，将文档分块后调用 Zep API 构建知识图谱，提取实体和关系。
+            基于生成的本体，将文档自动分块后调用 Zep 构建知识图谱，提取实体和关系，并形成时序记忆与社区摘要
           </p>
           
           <!-- Stats Cards -->
@@ -156,7 +156,7 @@
         </div>
         
         <div class="card-content">
-          <p class="description">图谱构建已完成，请进入下一步进行环境参数配置。</p>
+          <p class="description">图谱构建已完成，请进入下一步进行模拟环境搭建</p>
           <button 
             class="action-btn" 
             :disabled="currentPhase < 2"
@@ -290,7 +290,6 @@ watch(() => props.systemLogs.length, () => {
 .step-title {
   font-weight: 600;
   font-size: 14px;
-  text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
