@@ -15,13 +15,17 @@
             :class="{ active: viewMode === mode }"
             @click="viewMode = mode"
           >
-            {{ mode.toUpperCase() }}
+            {{ { graph: '图谱', split: '双栏', workbench: '工作台' }[mode] }}
           </button>
         </div>
       </div>
 
       <div class="header-right">
-        <!-- Optional user info or status -->
+        <div class="workflow-step">
+          <span class="step-num">Step 1/5</span>
+          <span class="step-name">图谱构建</span>
+        </div>
+        <div class="step-divider"></div>
         <span class="status-indicator" :class="statusClass">
           <span class="dot"></span>
           {{ statusText }}
@@ -391,6 +395,7 @@ onUnmounted(() => {
 }
 
 .brand {
+  font-family: 'JetBrains Mono', monospace;
   font-weight: 800;
   font-size: 18px;
   letter-spacing: 1px;
@@ -429,6 +434,37 @@ onUnmounted(() => {
   gap: 8px;
   font-size: 12px;
   color: #666;
+  font-weight: 500;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.workflow-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.step-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  color: #999;
+}
+
+.step-name {
+  font-weight: 700;
+  color: #000;
+}
+
+.step-divider {
+  width: 1px;
+  height: 14px;
+  background-color: #E0E0E0;
 }
 
 .dot {
