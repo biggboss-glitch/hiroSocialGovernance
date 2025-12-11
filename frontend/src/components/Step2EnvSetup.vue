@@ -60,31 +60,20 @@
           <p class="description">
             从知识图谱读取实体，使用 LLM 为每个实体生成详细的 Agent 人设与行为配置
           </p>
-          
-          <!-- Progress Bar -->
-          <div v-if="phase >= 1" class="progress-section">
-            <div class="progress-bar">
-              <div class="progress-fill" :style="{ width: prepareProgress + '%' }"></div>
-            </div>
-            <div class="progress-info">
-              <span class="progress-stage">{{ currentStage }}</span>
-              <span class="progress-detail">{{ progressMessage }}</span>
-            </div>
-          </div>
 
           <!-- Profiles Stats -->
           <div v-if="profiles.length > 0" class="stats-grid">
             <div class="stat-card">
               <span class="stat-value">{{ profiles.length }}</span>
-              <span class="stat-label">Agent 人设</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-value">{{ entityTypes.length }}</span>
-              <span class="stat-label">实体类型</span>
+              <span class="stat-label">当前Agent数</span>
             </div>
             <div class="stat-card">
               <span class="stat-value">{{ expectedTotal || '-' }}</span>
-              <span class="stat-label">预期总数</span>
+              <span class="stat-label">预期Agent总数</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value">{{ totalTopicsCount }}</span>
+              <span class="stat-label">现实种子当前关联话题数</span>
             </div>
           </div>
 
@@ -104,10 +93,23 @@
                 @click="selectProfile(profile)"
               >
                 <div class="profile-header">
-                  <span class="profile-name">{{ profile.user_name || profile.username || `Agent ${idx}` }}</span>
-                  <span class="profile-type">{{ profile.entity_type || 'Unknown' }}</span>
+                  <span class="profile-realname">{{ profile.realname || 'Unknown' }}</span>
+                  <span class="profile-username">@{{ profile.username || `agent_${idx}` }}</span>
                 </div>
-                <p class="profile-bio">{{ truncateBio(profile.bio || profile.description || '暂无简介') }}</p>
+                <div class="profile-meta">
+                  <span class="profile-profession">{{ profile.profession || '未知职业' }}</span>
+                </div>
+                <p class="profile-bio">{{ profile.bio || '暂无简介' }}</p>
+                <div v-if="profile.interested_topics?.length" class="profile-topics">
+                  <span 
+                    v-for="topic in profile.interested_topics.slice(0, 4)" 
+                    :key="topic" 
+                    class="topic-tag"
+                  >{{ topic }}</span>
+                  <span v-if="profile.interested_topics.length > 4" class="topic-more">
+                    +{{ profile.interested_topics.length - 4 }}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -296,6 +298,13 @@ const displayProfiles = computed(() => {
     return profiles.value
   }
   return profiles.value.slice(0, 6)
+})
+
+// 计算所有人设的关联话题总数
+const totalTopicsCount = computed(() => {
+  return profiles.value.reduce((sum, p) => {
+    return sum + (p.interested_topics?.length || 0)
+  }, 0)
 })
 
 // Methods
@@ -672,82 +681,34 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-/* Progress Section */
-.progress-section {
-  margin: 16px 0;
-}
-
-.progress-bar {
-  height: 6px;
-  background: #E5E5E5;
-  border-radius: 3px;
-  overflow: hidden;
-  margin-bottom: 12px;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #FF5722, #FF9800);
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-
-.progress-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.progress-stage {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  font-weight: 600;
-  color: #FF5722;
-  text-transform: uppercase;
-}
-
-.progress-detail {
-  font-size: 12px;
-  color: #666;
-  max-width: 60%;
-  text-align: right;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* Stats Grid */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-top: 16px;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  background: #F9F9F9;
+  padding: 16px;
+  border-radius: 6px;
 }
 
 .stat-card {
-  background: #FAFAFA;
-  border: 1px solid #E5E5E5;
-  border-radius: 6px;
-  padding: 12px 8px;
   text-align: center;
-  min-width: 0;
 }
 
 .stat-value {
   display: block;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
-  color: #333;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: #000;
+  font-family: 'JetBrains Mono', monospace;
 }
 
 .stat-label {
-  display: block;
-  font-size: 11px;
+  font-size: 9px;
   color: #999;
+  text-transform: uppercase;
   margin-top: 4px;
+  display: block;
 }
 
 /* Profiles Preview */
@@ -781,11 +742,11 @@ onUnmounted(() => {
 }
 
 .profiles-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-  max-height: 240px;
-  overflow: hidden;
+  max-height: 400px;
+  overflow-y: auto;
   transition: max-height 0.3s ease;
 }
 
@@ -797,7 +758,7 @@ onUnmounted(() => {
   background: #FAFAFA;
   border: 1px solid #E5E5E5;
   border-radius: 6px;
-  padding: 12px;
+  padding: 14px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -809,31 +770,64 @@ onUnmounted(() => {
 
 .profile-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.profile-realname {
+  font-size: 14px;
+  font-weight: 700;
+  color: #000;
+}
+
+.profile-username {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #999;
+}
+
+.profile-meta {
   margin-bottom: 8px;
 }
 
-.profile-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: #333;
-}
-
-.profile-type {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  background: #E3F2FD;
-  color: #1565C0;
-  padding: 2px 6px;
+.profile-profession {
+  font-size: 11px;
+  color: #666;
+  background: #F0F0F0;
+  padding: 2px 8px;
   border-radius: 3px;
 }
 
 .profile-bio {
   font-size: 12px;
-  color: #666;
-  line-height: 1.5;
-  margin: 0;
+  color: #444;
+  line-height: 1.6;
+  margin: 0 0 10px 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.profile-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.topic-tag {
+  font-size: 10px;
+  color: #1565C0;
+  background: #E3F2FD;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.topic-more {
+  font-size: 10px;
+  color: #999;
+  padding: 2px 6px;
 }
 
 /* Config Preview */
