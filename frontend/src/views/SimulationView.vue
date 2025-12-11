@@ -145,10 +145,24 @@ const handleGoBack = () => {
   }
 }
 
-const handleNextStep = () => {
+const handleNextStep = (params = {}) => {
   addLog('进入 Step 3: 开始模拟')
-  // TODO: 跳转到 Step 3
-  alert('Step 3: 开始模拟 - Coming soon...')
+  
+  // 记录模拟轮数配置
+  if (params.maxRounds) {
+    addLog(`自定义模拟轮数: ${params.maxRounds} 轮`)
+  } else {
+    addLog('使用自动配置的模拟轮数')
+  }
+  
+  // TODO: 调用 startSimulation API 并跳转到 Step 3
+  // 可以在这里调用 /api/simulation/start 接口
+  // const startParams = {
+  //   simulation_id: currentSimulationId.value,
+  //   ...(params.maxRounds && { max_rounds: params.maxRounds })
+  // }
+  
+  alert(`Step 3: 开始模拟 - Coming soon...\n${params.maxRounds ? `轮数: ${params.maxRounds}` : '使用自动配置轮数'}`)
 }
 
 // --- Data Logic ---

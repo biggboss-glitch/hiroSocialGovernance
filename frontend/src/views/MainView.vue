@@ -156,10 +156,15 @@ const toggleMaximize = (target) => {
   }
 }
 
-const handleNextStep = () => {
+const handleNextStep = (params = {}) => {
   if (currentStep.value < 5) {
     currentStep.value++
     addLog(`进入 Step ${currentStep.value}: ${stepNames[currentStep.value - 1]}`)
+    
+    // 如果是从 Step 2 进入 Step 3，记录模拟轮数配置
+    if (currentStep.value === 3 && params.maxRounds) {
+      addLog(`自定义模拟轮数: ${params.maxRounds} 轮`)
+    }
   }
 }
 

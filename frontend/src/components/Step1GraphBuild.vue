@@ -156,6 +156,7 @@
         </div>
         
         <div class="card-content">
+          <p class="api-note">POST /api/simulation/create</p>
           <p class="description">图谱构建已完成，请进入下一步进行模拟环境搭建</p>
           <button 
             class="action-btn" 
@@ -343,7 +344,7 @@ watch(() => props.systemLogs.length, () => {
 }
 
 .badge.success { background: #E8F5E9; color: #2E7D32; }
-.badge.processing { background: #FFF3E0; color: #EF6C00; }
+.badge.processing { background: #FF5722; color: #FFF; }
 .badge.accent { background: #FF5722; color: #FFF; }
 .badge.pending { background: #F5F5F5; color: #999; }
 
