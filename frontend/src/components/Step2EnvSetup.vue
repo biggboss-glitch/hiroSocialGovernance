@@ -118,7 +118,7 @@
         <div class="card-header">
           <div class="step-info">
             <span class="step-num">03</span>
-            <span class="step-title">生成模拟配置</span>
+            <span class="step-title">生成双平台模拟配置</span>
           </div>
           <div class="step-status">
             <span v-if="phase > 2" class="badge success">已完成</span>
@@ -128,9 +128,9 @@
         </div>
 
         <div class="card-content">
-          <p class="api-note">LLM 智能配置</p>
+          <p class="api-note">POST /api/simulation/prepare</p>
           <p class="description">
-            LLM 根据模拟需求智能生成时间配置、Agent 活跃度、发言频率、事件触发等参数
+            LLM 根据模拟需求与现实种子，智能设置世界时间流速、推荐算法、每个个体的活跃时间段、发言频率、事件触发等参数
           </p>
           
           <!-- Config Preview -->
