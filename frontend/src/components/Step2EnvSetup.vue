@@ -58,7 +58,7 @@
         <div class="card-content">
           <p class="api-note">POST /api/simulation/prepare</p>
           <p class="description">
-            从知识图谱读取实体，使用 LLM 为每个实体生成详细的 Agent 人设与行为配置
+            结合上下文，自动调用工具从知识图谱梳理实体与关系，初始化模拟个体，并基于现实种子赋予他们独特的行为与记忆
           </p>
 
           <!-- Profiles Stats -->
@@ -81,13 +81,10 @@
           <div v-if="profiles.length > 0" class="profiles-preview">
             <div class="preview-header">
               <span class="preview-title">已生成的 Agent 人设</span>
-              <button class="expand-btn" @click="showProfilesDetail = !showProfilesDetail">
-                {{ showProfilesDetail ? '收起' : '展开全部' }}
-              </button>
             </div>
-            <div class="profiles-list" :class="{ expanded: showProfilesDetail }">
+            <div class="profiles-list">
               <div 
-                v-for="(profile, idx) in displayProfiles" 
+                v-for="(profile, idx) in profiles" 
                 :key="idx" 
                 class="profile-card"
                 @click="selectProfile(profile)"
@@ -102,12 +99,12 @@
                 <p class="profile-bio">{{ profile.bio || '暂无简介' }}</p>
                 <div v-if="profile.interested_topics?.length" class="profile-topics">
                   <span 
-                    v-for="topic in profile.interested_topics.slice(0, 4)" 
+                    v-for="topic in profile.interested_topics.slice(0, 3)" 
                     :key="topic" 
                     class="topic-tag"
                   >{{ topic }}</span>
-                  <span v-if="profile.interested_topics.length > 4" class="topic-more">
-                    +{{ profile.interested_topics.length - 4 }}
+                  <span v-if="profile.interested_topics.length > 3" class="topic-more">
+                    +{{ profile.interested_topics.length - 3 }}
                   </span>
                 </div>
               </div>
@@ -200,30 +197,81 @@
     <div v-if="selectedProfile" class="profile-modal-overlay" @click.self="selectedProfile = null">
       <div class="profile-modal">
         <div class="modal-header">
-          <span class="modal-title">{{ selectedProfile.user_name || selectedProfile.username }}</span>
+          <div class="modal-header-info">
+            <div class="modal-name-row">
+              <span class="modal-realname">{{ selectedProfile.realname }}</span>
+              <span class="modal-username">@{{ selectedProfile.username }}</span>
+            </div>
+            <span class="modal-profession">{{ selectedProfile.profession }}</span>
+          </div>
           <button class="close-btn" @click="selectedProfile = null">×</button>
         </div>
+        
         <div class="modal-body">
-          <div class="modal-section">
-            <span class="section-label">实体类型</span>
-            <span class="section-value">{{ selectedProfile.entity_type }}</span>
+          <!-- 基本信息 -->
+          <div class="modal-info-grid">
+            <div class="info-item">
+              <span class="info-label">事件外显年龄</span>
+              <span class="info-value">{{ selectedProfile.age || '-' }} 岁</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">事件外显性别</span>
+              <span class="info-value">{{ { male: '男', female: '女', other: '其他' }[selectedProfile.gender] || selectedProfile.gender }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">国家/地区</span>
+              <span class="info-value">{{ selectedProfile.country || '-' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">事件外显MBTI</span>
+              <span class="info-value mbti">{{ selectedProfile.mbti || '-' }}</span>
+            </div>
           </div>
-          <div class="modal-section">
-            <span class="section-label">来源实体</span>
-            <span class="section-value">{{ selectedProfile.source_entity_name || '-' }}</span>
-          </div>
+
+          <!-- 简介 -->
           <div class="modal-section">
             <span class="section-label">人设简介</span>
-            <p class="section-text">{{ selectedProfile.bio || selectedProfile.description || '暂无简介' }}</p>
+            <p class="section-bio">{{ selectedProfile.bio || '暂无简介' }}</p>
           </div>
-          <div class="modal-section" v-if="selectedProfile.personality">
-            <span class="section-label">性格特点</span>
-            <p class="section-text">{{ selectedProfile.personality }}</p>
+
+          <!-- 关注话题 -->
+          <div class="modal-section" v-if="selectedProfile.interested_topics?.length">
+            <span class="section-label">现实种子关联话题</span>
+            <div class="topics-grid">
+              <span 
+                v-for="topic in selectedProfile.interested_topics" 
+                :key="topic" 
+                class="topic-item"
+              >{{ topic }}</span>
+            </div>
           </div>
-          <div class="modal-section" v-if="selectedProfile.interests?.length">
-            <span class="section-label">兴趣标签</span>
-            <div class="tags-row">
-              <span v-for="tag in selectedProfile.interests" :key="tag" class="interest-tag">{{ tag }}</span>
+
+          <!-- 详细人设 -->
+          <div class="modal-section" v-if="selectedProfile.persona">
+            <span class="section-label">详细人设背景</span>
+            
+            <!-- 人设维度概览 -->
+            <div class="persona-dimensions">
+              <div class="dimension-card">
+                <span class="dim-title">事件全景经历</span>
+                <span class="dim-desc">在此事件中的完整行为轨迹</span>
+              </div>
+              <div class="dimension-card">
+                <span class="dim-title">行为模式侧写</span>
+                <span class="dim-desc">经验总结与行事风格偏好</span>
+              </div>
+              <div class="dimension-card">
+                <span class="dim-title">独特记忆印记</span>
+                <span class="dim-desc">基于现实种子形成的记忆</span>
+              </div>
+              <div class="dimension-card">
+                <span class="dim-title">社会关系网络</span>
+                <span class="dim-desc">个体链接与交互图谱</span>
+              </div>
+            </div>
+
+            <div class="persona-content">
+              <p class="section-persona">{{ selectedProfile.persona }}</p>
             </div>
           </div>
         </div>
@@ -733,25 +781,26 @@ onUnmounted(() => {
   letter-spacing: 0.5px;
 }
 
-.expand-btn {
-  font-size: 12px;
-  color: #FF5722;
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-
 .profiles-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px;
-  max-height: 400px;
+  max-height: 320px;
   overflow-y: auto;
-  transition: max-height 0.3s ease;
+  padding-right: 4px;
 }
 
-.profiles-list.expanded {
-  max-height: none;
+.profiles-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.profiles-list::-webkit-scrollbar-thumb {
+  background: #DDD;
+  border-radius: 2px;
+}
+
+.profiles-list::-webkit-scrollbar-thumb:hover {
+  background: #CCC;
 }
 
 .profile-card {
@@ -902,61 +951,134 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  backdrop-filter: blur(4px);
 }
 
 .profile-modal {
   background: #FFF;
-  border-radius: 12px;
+  border-radius: 16px;
   width: 90%;
-  max-width: 500px;
-  max-height: 80vh;
+  max-width: 600px;
+  max-height: 85vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 }
 
 .modal-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 20px 24px;
-  border-bottom: 1px solid #E5E5E5;
+  align-items: flex-start;
+  padding: 24px;
+  background: #FFF;
+  border-bottom: 1px solid #F0F0F0;
 }
 
-.modal-title {
-  font-size: 18px;
+.modal-header-info {
+  flex: 1;
+}
+
+.modal-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.modal-realname {
+  font-size: 20px;
   font-weight: 700;
+  color: #000;
+}
+
+.modal-username {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: #999;
+}
+
+.modal-profession {
+  font-size: 12px;
+  color: #666;
+  background: #F5F5F5;
+  padding: 4px 10px;
+  border-radius: 4px;
+  display: inline-block;
+  font-weight: 500;
 }
 
 .close-btn {
   width: 32px;
   height: 32px;
   border: none;
-  background: #F5F5F5;
+  background: none;
+  color: #999;
   border-radius: 50%;
-  font-size: 18px;
+  font-size: 24px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  line-height: 1;
+  transition: color 0.2s;
+  padding: 0;
 }
 
 .close-btn:hover {
-  background: #E5E5E5;
+  color: #333;
 }
 
 .modal-body {
   padding: 24px;
   overflow-y: auto;
+  flex: 1;
 }
 
+/* 基本信息网格 */
+.modal-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px 16px;
+  margin-bottom: 32px;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-label {
+  font-size: 11px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.info-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+}
+
+.info-value.mbti {
+  font-family: 'JetBrains Mono', monospace;
+  color: #FF5722;
+}
+
+/* 模块区域 */
 .modal-section {
-  margin-bottom: 20px;
+  margin-bottom: 28px;
 }
 
 .section-label {
@@ -966,33 +1088,102 @@ onUnmounted(() => {
   color: #999;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 6px;
+  margin-bottom: 12px;
 }
 
-.section-value {
+.section-bio {
   font-size: 14px;
   color: #333;
-}
-
-.section-text {
-  font-size: 13px;
-  color: #666;
   line-height: 1.6;
   margin: 0;
+  padding: 16px;
+  background: #F9F9F9;
+  border-radius: 6px;
+  border-left: 3px solid #E0E0E0;
 }
 
-.tags-row {
+/* 话题标签 */
+.topics-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
-.interest-tag {
+.topic-item {
   font-size: 11px;
-  background: #F5F5F5;
-  color: #666;
+  color: #1565C0;
+  background: #E3F2FD;
   padding: 4px 10px;
   border-radius: 12px;
+  transition: all 0.2s;
+  border: none;
+}
+
+.topic-item:hover {
+  background: #BBDEFB;
+  color: #0D47A1;
+}
+
+/* 详细人设 */
+.persona-dimensions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.dimension-card {
+  background: #F8F9FA;
+  padding: 12px;
+  border-radius: 6px;
+  border-left: 3px solid #DDD;
+  transition: all 0.2s;
+}
+
+.dimension-card:hover {
+  background: #F0F0F0;
+  border-left-color: #999;
+}
+
+.dim-title {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.dim-desc {
+  display: block;
+  font-size: 10px;
+  color: #888;
+  line-height: 1.4;
+}
+
+.persona-content {
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.persona-content::-webkit-scrollbar {
+  width: 4px;
+}
+
+.persona-content::-webkit-scrollbar-thumb {
+  background: #DDD;
+  border-radius: 2px;
+}
+
+.section-persona {
+  font-size: 13px;
+  color: #555;
+  line-height: 1.8;
+  margin: 0;
+  text-align: justify;
 }
 
 /* System Logs */
