@@ -113,7 +113,7 @@
         </div>
       </div>
 
-      <!-- Step 03: 生成模拟配置 -->
+      <!-- Step 03: 生成双平台模拟配置 -->
       <div class="step-card" :class="{ 'active': phase === 2, 'completed': phase > 2 }">
         <div class="card-header">
           <div class="step-info">
@@ -137,38 +137,98 @@
           <div v-if="simulationConfig" class="config-preview">
             <div class="config-section">
               <span class="config-label">模拟时长</span>
-              <span class="config-value">{{ simulationConfig.time_config?.simulation_hours || '-' }} 小时</span>
+              <span class="config-value">{{ simulationConfig.time_config?.total_simulation_hours || '-' }} 小时</span>
             </div>
             <div class="config-section">
-              <span class="config-label">模拟轮次</span>
-              <span class="config-value">{{ simulationConfig.time_config?.max_rounds || '-' }} 轮</span>
+              <span class="config-label">总轮次</span>
+              <span class="config-value">{{ (simulationConfig.time_config?.total_simulation_hours * 60 / simulationConfig.time_config?.minutes_per_round) || '-' }} 轮</span>
             </div>
             <div class="config-section">
-              <span class="config-label">平台</span>
+              <span class="config-label">平台配置</span>
               <span class="config-value">
-                <span v-if="simulationConfig.platform_configs?.twitter" class="platform-tag">Twitter</span>
-                <span v-if="simulationConfig.platform_configs?.reddit" class="platform-tag">Reddit</span>
+                <span v-if="simulationConfig.twitter_config" class="platform-tag">Twitter</span>
+                <span v-if="simulationConfig.reddit_config" class="platform-tag">Reddit</span>
               </span>
             </div>
             
             <!-- LLM Reasoning -->
             <div v-if="simulationConfig.generation_reasoning" class="reasoning-section">
               <span class="reasoning-label">LLM 配置推理</span>
-              <p class="reasoning-text">{{ simulationConfig.generation_reasoning }}</p>
+              <p class="reasoning-text">{{ simulationConfig.generation_reasoning.split('|')[0] }} ...</p>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Step 04: 准备完成 -->
-      <div class="step-card" :class="{ 'active': phase === 3 }">
+      <!-- Step 04: 初始激活编排 -->
+      <div class="step-card" :class="{ 'active': phase === 3, 'completed': phase > 3 }">
         <div class="card-header">
           <div class="step-info">
             <span class="step-num">04</span>
+            <span class="step-title">初始激活编排</span>
+          </div>
+          <div class="step-status">
+            <span v-if="phase > 3" class="badge success">已完成</span>
+            <span v-else-if="phase === 3" class="badge processing">编排中</span>
+            <span v-else class="badge pending">等待</span>
+          </div>
+        </div>
+
+        <div class="card-content">
+          <p class="api-note">Event Orchestration</p>
+          <p class="description">
+            基于叙事方向，自动生成初始激活事件与热点话题，引导模拟世界的初始状态
+          </p>
+
+          <div v-if="simulationConfig?.event_config" class="orchestration-content">
+            <!-- 叙事方向 -->
+            <div class="narrative-box">
+              <span class="box-label">叙事引导方向</span>
+              <p class="narrative-text">{{ simulationConfig.event_config.narrative_direction }}</p>
+            </div>
+
+            <!-- 热点话题 -->
+            <div class="topics-section">
+              <span class="box-label">初始热点话题</span>
+              <div class="hot-topics-grid">
+                <span v-for="topic in simulationConfig.event_config.hot_topics.slice(0, 8)" :key="topic" class="hot-topic-tag">
+                  # {{ topic }}
+                </span>
+                <span v-if="simulationConfig.event_config.hot_topics.length > 8" class="hot-topic-more">
+                  +{{ simulationConfig.event_config.hot_topics.length - 8 }}
+                </span>
+              </div>
+            </div>
+
+            <!-- 初始帖子流 -->
+            <div class="initial-posts-section">
+              <span class="box-label">初始激活序列 ({{ simulationConfig.event_config.initial_posts.length }})</span>
+              <div class="posts-timeline">
+                <div v-for="(post, idx) in simulationConfig.event_config.initial_posts" :key="idx" class="timeline-item">
+                  <div class="timeline-marker"></div>
+                  <div class="timeline-content">
+                    <div class="post-header">
+                      <span class="post-role">{{ post.poster_type }}</span>
+                      <span class="post-id">Agent {{ post.poster_agent_id }}</span>
+                    </div>
+                    <p class="post-text">{{ post.content }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 05: 准备完成 -->
+      <div class="step-card" :class="{ 'active': phase === 4 }">
+        <div class="card-header">
+          <div class="step-info">
+            <span class="step-num">05</span>
             <span class="step-title">准备完成</span>
           </div>
           <div class="step-status">
-            <span v-if="phase >= 3" class="badge processing">进行中</span>
+            <span v-if="phase >= 4" class="badge processing">进行中</span>
           </div>
         </div>
 
@@ -183,7 +243,7 @@
             </button>
             <button 
               class="action-btn primary"
-              :disabled="phase < 3"
+              :disabled="phase < 4"
               @click="$emit('next-step')"
             >
               开始模拟 ➝
@@ -300,7 +360,8 @@ import {
   prepareSimulation, 
   getPrepareStatus, 
   getSimulationProfilesRealtime,
-  getSimulationConfig 
+  getSimulationConfig,
+  getSimulationConfigRealtime 
 } from '../api/simulation'
 
 const props = defineProps({
@@ -331,6 +392,11 @@ watch(currentStage, (newStage) => {
     phase.value = 1
   } else if (newStage === '生成模拟配置' || newStage === 'generating_config') {
     phase.value = 2
+    // 进入配置生成阶段，开始轮询配置
+    if (!configTimer) {
+      addLog('开始生成双平台模拟配置...')
+      startConfigPolling()
+    }
   } else if (newStage === '准备模拟脚本' || newStage === 'copying_scripts') {
     phase.value = 2 // 仍属于配置阶段
   }
@@ -339,6 +405,7 @@ watch(currentStage, (newStage) => {
 // Polling timer
 let pollTimer = null
 let profilesTimer = null
+let configTimer = null
 
 // Computed
 const displayProfiles = computed(() => {
@@ -504,6 +571,48 @@ const fetchProfilesRealtime = async () => {
   }
 }
 
+// 配置轮询
+const startConfigPolling = () => {
+  configTimer = setInterval(fetchConfigRealtime, 2000)
+}
+
+const stopConfigPolling = () => {
+  if (configTimer) {
+    clearInterval(configTimer)
+    configTimer = null
+  }
+}
+
+const fetchConfigRealtime = async () => {
+  if (!props.simulationId) return
+  
+  try {
+    const res = await getSimulationConfigRealtime(props.simulationId)
+    
+    if (res.success && res.data) {
+      const data = res.data
+      
+      // 如果配置已生成
+      if (data.config_generated && data.config) {
+        simulationConfig.value = data.config
+        addLog('模拟配置生成完成')
+        
+        // 显示配置摘要
+        if (data.summary) {
+          addLog(`配置摘要: ${data.summary.total_agents}个Agent, ${data.summary.simulation_hours}小时, ${data.summary.initial_posts_count}条初始帖子`)
+        }
+        
+        stopConfigPolling()
+        phase.value = 4
+        addLog('环境搭建完成，可以开始模拟')
+        emit('update-status', 'completed')
+      }
+    }
+  } catch (err) {
+    console.warn('获取 Config 失败:', err)
+  }
+}
+
 const loadPreparedData = async () => {
   phase.value = 2
   addLog('正在加载配置数据...')
@@ -511,15 +620,27 @@ const loadPreparedData = async () => {
   // 最后获取一次 Profiles
   await fetchProfilesRealtime()
 
-  // 获取配置
+  // 获取配置（使用实时接口）
   try {
-    const res = await getSimulationConfig(props.simulationId)
+    const res = await getSimulationConfigRealtime(props.simulationId)
     if (res.success && res.data) {
-      simulationConfig.value = res.data
-      addLog('模拟配置加载成功')
-      addLog('环境搭建完成，可以开始模拟')
-      phase.value = 3
-      emit('update-status', 'completed')
+      if (res.data.config_generated && res.data.config) {
+        simulationConfig.value = res.data.config
+        addLog('模拟配置加载成功')
+        
+        // 显示配置摘要
+        if (res.data.summary) {
+          addLog(`配置摘要: ${res.data.summary.total_agents}个Agent, ${res.data.summary.simulation_hours}小时`)
+        }
+        
+        addLog('环境搭建完成，可以开始模拟')
+        phase.value = 4
+        emit('update-status', 'completed')
+      } else {
+        // 配置尚未生成，开始轮询
+        addLog('配置生成中，等待完成...')
+        startConfigPolling()
+      }
     }
   } catch (err) {
     addLog(`加载配置失败: ${err.message}`)
@@ -548,6 +669,7 @@ onMounted(() => {
 onUnmounted(() => {
   stopPolling()
   stopProfilesPolling()
+  stopConfigPolling()
 })
 </script>
 
@@ -1253,6 +1375,125 @@ onUnmounted(() => {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+/* Orchestration Content */
+.orchestration-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 16px;
+}
+
+.box-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #999;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.narrative-box {
+  background: #F9F9F9;
+  padding: 12px;
+  border-radius: 6px;
+  border-left: 3px solid #FF5722;
+}
+
+.narrative-text {
+  font-size: 13px;
+  color: #444;
+  line-height: 1.6;
+  margin: 0;
+  text-align: justify;
+}
+
+.topics-section {
+  background: #FFF;
+}
+
+.hot-topics-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hot-topic-tag {
+  font-size: 12px;
+  color: #FF5722;
+  background: #FFF3E0;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.hot-topic-more {
+  font-size: 11px;
+  color: #999;
+  padding: 4px 6px;
+}
+
+.initial-posts-section {
+  border-top: 1px solid #EAEAEA;
+  padding-top: 16px;
+}
+
+.posts-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-left: 8px;
+  border-left: 2px solid #F0F0F0;
+  margin-top: 12px;
+}
+
+.timeline-item {
+  position: relative;
+  padding-left: 16px;
+}
+
+.timeline-marker {
+  position: absolute;
+  left: -5px;
+  top: 6px;
+  width: 8px;
+  height: 8px;
+  background: #CCC;
+  border-radius: 50%;
+  border: 2px solid #FFF;
+}
+
+.timeline-content {
+  background: #F9F9F9;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #EEE;
+}
+
+.post-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.post-role {
+  font-size: 11px;
+  font-weight: 700;
+  color: #333;
+  text-transform: uppercase;
+}
+
+.post-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #999;
+}
+
+.post-text {
+  font-size: 12px;
+  color: #555;
+  line-height: 1.5;
+  margin: 0;
 }
 </style>
 

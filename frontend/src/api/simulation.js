@@ -59,6 +59,15 @@ export const getSimulationConfig = (simulationId) => {
 }
 
 /**
+ * 实时获取生成中的模拟配置
+ * @param {string} simulationId
+ * @returns {Promise} 返回配置信息，包含元数据和配置内容
+ */
+export const getSimulationConfigRealtime = (simulationId) => {
+  return service.get(`/api/simulation/${simulationId}/config/realtime`)
+}
+
+/**
  * 列出所有模拟
  * @param {string} projectId - 可选，按项目ID过滤
  */

@@ -936,6 +936,126 @@ def get_simulation_profiles_realtime(simulation_id: str):
         }), 500
 
 
+@simulation_bp.route('/<simulation_id>/config/realtime', methods=['GET'])
+def get_simulation_config_realtime(simulation_id: str):
+    """
+    实时获取模拟配置（用于在生成过程中实时查看进度）
+    
+    与 /config 接口的区别：
+    - 直接读取文件，不经过 SimulationManager
+    - 适用于生成过程中的实时查看
+    - 返回额外的元数据（如文件修改时间、是否正在生成等）
+    - 即使配置还没生成完也能返回部分信息
+    
+    返回：
+        {
+            "success": true,
+            "data": {
+                "simulation_id": "sim_xxxx",
+                "file_exists": true,
+                "file_modified_at": "2025-12-04T18:20:00",
+                "is_generating": true,  // 是否正在生成
+                "generation_stage": "generating_config",  // 当前生成阶段
+                "config": {...}  // 配置内容（如果存在）
+            }
+        }
+    """
+    import json
+    from datetime import datetime
+    
+    try:
+        # 获取模拟目录
+        sim_dir = os.path.join(Config.OASIS_SIMULATION_DATA_DIR, simulation_id)
+        
+        if not os.path.exists(sim_dir):
+            return jsonify({
+                "success": False,
+                "error": f"模拟不存在: {simulation_id}"
+            }), 404
+        
+        # 配置文件路径
+        config_file = os.path.join(sim_dir, "simulation_config.json")
+        
+        # 检查文件是否存在
+        file_exists = os.path.exists(config_file)
+        config = None
+        file_modified_at = None
+        
+        if file_exists:
+            # 获取文件修改时间
+            file_stat = os.stat(config_file)
+            file_modified_at = datetime.fromtimestamp(file_stat.st_mtime).isoformat()
+            
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+            except (json.JSONDecodeError, Exception) as e:
+                logger.warning(f"读取 config 文件失败（可能正在写入中）: {e}")
+                config = None
+        
+        # 检查是否正在生成（通过 state.json 判断）
+        is_generating = False
+        generation_stage = None
+        config_generated = False
+        
+        state_file = os.path.join(sim_dir, "state.json")
+        if os.path.exists(state_file):
+            try:
+                with open(state_file, 'r', encoding='utf-8') as f:
+                    state_data = json.load(f)
+                    status = state_data.get("status", "")
+                    is_generating = status == "preparing"
+                    config_generated = state_data.get("config_generated", False)
+                    
+                    # 判断当前阶段
+                    if is_generating:
+                        if state_data.get("profiles_generated", False):
+                            generation_stage = "generating_config"
+                        else:
+                            generation_stage = "generating_profiles"
+                    elif status == "ready":
+                        generation_stage = "completed"
+            except Exception:
+                pass
+        
+        # 构建返回数据
+        response_data = {
+            "simulation_id": simulation_id,
+            "file_exists": file_exists,
+            "file_modified_at": file_modified_at,
+            "is_generating": is_generating,
+            "generation_stage": generation_stage,
+            "config_generated": config_generated,
+            "config": config
+        }
+        
+        # 如果配置存在，提取一些关键统计信息
+        if config:
+            response_data["summary"] = {
+                "total_agents": len(config.get("agent_configs", [])),
+                "simulation_hours": config.get("time_config", {}).get("total_simulation_hours"),
+                "initial_posts_count": len(config.get("event_config", {}).get("initial_posts", [])),
+                "hot_topics_count": len(config.get("event_config", {}).get("hot_topics", [])),
+                "has_twitter_config": "twitter_config" in config,
+                "has_reddit_config": "reddit_config" in config,
+                "generated_at": config.get("generated_at"),
+                "llm_model": config.get("llm_model")
+            }
+        
+        return jsonify({
+            "success": True,
+            "data": response_data
+        })
+        
+    except Exception as e:
+        logger.error(f"实时获取Config失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
 @simulation_bp.route('/<simulation_id>/config', methods=['GET'])
 def get_simulation_config(simulation_id: str):
     """
