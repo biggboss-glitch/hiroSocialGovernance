@@ -191,11 +191,8 @@
             <div class="topics-section">
               <span class="box-label">初始热点话题</span>
               <div class="hot-topics-grid">
-                <span v-for="topic in simulationConfig.event_config.hot_topics.slice(0, 8)" :key="topic" class="hot-topic-tag">
+                <span v-for="topic in simulationConfig.event_config.hot_topics" :key="topic" class="hot-topic-tag">
                   # {{ topic }}
-                </span>
-                <span v-if="simulationConfig.event_config.hot_topics.length > 8" class="hot-topic-more">
-                  +{{ simulationConfig.event_config.hot_topics.length - 8 }}
                 </span>
               </div>
             </div>
@@ -1449,18 +1446,16 @@ onUnmounted(() => {
 
 .timeline-item {
   position: relative;
-  padding-left: 16px;
+  padding-left: 20px;
 }
 
 .timeline-marker {
   position: absolute;
-  left: -5px;
-  top: 6px;
-  width: 8px;
-  height: 8px;
-  background: #CCC;
-  border-radius: 50%;
-  border: 2px solid #FFF;
+  left: 0;
+  top: 14px;
+  width: 12px;
+  height: 2px;
+  background: #DDD;
 }
 
 .timeline-content {
