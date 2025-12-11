@@ -6,7 +6,7 @@
         <div class="card-header">
           <div class="step-info">
             <span class="step-num">01</span>
-            <span class="step-title">模拟实例</span>
+            <span class="step-title">模拟实例初始化</span>
           </div>
           <div class="step-status">
             <span v-if="phase > 0" class="badge success">已完成</span>
@@ -17,17 +17,25 @@
         <div class="card-content">
           <p class="api-note">POST /api/simulation/create</p>
           <p class="description">
-            基于已构建的知识图谱创建模拟实例，初始化模拟环境
+            新建simulation实例，拉取模拟世界参数模版
           </p>
 
           <div v-if="simulationId" class="info-card">
+            <div class="info-row">
+              <span class="info-label">Project ID</span>
+              <span class="info-value mono">{{ projectData?.project_id }}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Graph ID</span>
+              <span class="info-value mono">{{ projectData?.graph_id }}</span>
+            </div>
             <div class="info-row">
               <span class="info-label">Simulation ID</span>
               <span class="info-value mono">{{ simulationId }}</span>
             </div>
             <div class="info-row">
-              <span class="info-label">Graph ID</span>
-              <span class="info-value mono">{{ projectData?.graph_id }}</span>
+              <span class="info-label">Task ID</span>
+              <span class="info-value mono">{{ taskId || '异步任务已完成' }}</span>
             </div>
           </div>
         </div>
@@ -154,19 +162,19 @@
       </div>
 
       <!-- Step 04: 准备完成 -->
-      <div class="step-card" :class="{ 'active': phase === 3, 'completed': phase >= 3 }">
+      <div class="step-card" :class="{ 'active': phase === 3 }">
         <div class="card-header">
           <div class="step-info">
             <span class="step-num">04</span>
             <span class="step-title">准备完成</span>
           </div>
           <div class="step-status">
-            <span v-if="phase >= 3" class="badge accent">就绪</span>
+            <span v-if="phase >= 3" class="badge processing">进行中</span>
           </div>
         </div>
-        
+
         <div class="card-content">
-          <p class="description">模拟环境已准备就绪，可以开始运行模拟</p>
+          <p class="description">模拟环境已准备完成，可以开始运行模拟</p>
           <div class="action-group">
             <button 
               class="action-btn secondary"
@@ -265,7 +273,18 @@ const entityTypes = ref([])
 const expectedTotal = ref(null)
 const simulationConfig = ref(null)
 const selectedProfile = ref(null)
-const showProfilesDetail = ref(false)
+const showProfilesDetail = ref(true)
+
+// Watch stage to update phase
+watch(currentStage, (newStage) => {
+  if (newStage === '生成Agent人设' || newStage === 'generating_profiles') {
+    phase.value = 1
+  } else if (newStage === '生成模拟配置' || newStage === 'generating_config') {
+    phase.value = 2
+  } else if (newStage === '准备模拟脚本' || newStage === 'copying_scripts') {
+    phase.value = 2 // 仍属于配置阶段
+  }
+})
 
 // Polling timer
 let pollTimer = null
@@ -496,28 +515,24 @@ onUnmounted(() => {
 /* Step Card */
 .step-card {
   background: #FFF;
-  border: 1px solid #E5E5E5;
   border-radius: 8px;
-  overflow: hidden;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  border: 1px solid #EAEAEA;
   transition: all 0.3s ease;
+  position: relative;
 }
 
 .step-card.active {
   border-color: #FF5722;
-  box-shadow: 0 2px 8px rgba(255, 87, 34, 0.1);
-}
-
-.step-card.completed {
-  border-color: #4CAF50;
+  box-shadow: 0 4px 12px rgba(255, 87, 34, 0.08);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  background: #FAFAFA;
-  border-bottom: 1px solid #E5E5E5;
+  margin-bottom: 16px;
 }
 
 .step-info {
@@ -528,9 +543,14 @@ onUnmounted(() => {
 
 .step-num {
   font-family: 'JetBrains Mono', monospace;
+  font-size: 20px;
   font-weight: 700;
-  font-size: 12px;
-  color: #999;
+  color: #E0E0E0;
+}
+
+.step-card.active .step-num,
+.step-card.completed .step-num {
+  color: #000;
 }
 
 .step-title {
@@ -540,11 +560,11 @@ onUnmounted(() => {
 }
 
 .badge {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 4px 10px;
+  font-size: 10px;
+  padding: 4px 8px;
   border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
 }
 
 .badge.success { background: #E8F5E9; color: #2E7D32; }
@@ -553,20 +573,20 @@ onUnmounted(() => {
 .badge.accent { background: #E3F2FD; color: #1565C0; }
 
 .card-content {
-  padding: 20px;
+  /* No extra padding - uses step-card's padding */
 }
 
 .api-note {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: 10px;
   color: #999;
   margin-bottom: 8px;
 }
 
 .description {
-  font-size: 13px;
+  font-size: 12px;
   color: #666;
-  line-height: 1.6;
+  line-height: 1.5;
   margin-bottom: 16px;
 }
 
@@ -700,7 +720,7 @@ onUnmounted(() => {
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  gap: 8px;
   margin-top: 16px;
 }
 
@@ -708,16 +728,19 @@ onUnmounted(() => {
   background: #FAFAFA;
   border: 1px solid #E5E5E5;
   border-radius: 6px;
-  padding: 16px;
+  padding: 12px 8px;
   text-align: center;
+  min-width: 0;
 }
 
 .stat-value {
   display: block;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 700;
   color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stat-label {
@@ -759,7 +782,7 @@ onUnmounted(() => {
 
 .profiles-list {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 12px;
   max-height: 240px;
   overflow: hidden;
@@ -980,50 +1003,57 @@ onUnmounted(() => {
 
 /* System Logs */
 .system-logs {
-  border-top: 1px solid #E5E5E5;
-  background: #1A1A1A;
-  color: #CCC;
+  background: #000;
+  color: #DDD;
+  padding: 16px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  border-top: 1px solid #222;
+  flex-shrink: 0;
 }
 
 .log-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 8px 16px;
   border-bottom: 1px solid #333;
-}
-
-.log-title {
-  font-weight: 600;
-  color: #FF5722;
-}
-
-.log-id {
-  color: #666;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  font-size: 10px;
+  color: #888;
 }
 
 .log-content {
-  height: 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 80px; /* Approx 4 lines visible */
   overflow-y: auto;
-  padding: 8px 16px;
+  padding-right: 4px;
+}
+
+.log-content::-webkit-scrollbar {
+  width: 4px;
+}
+
+.log-content::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 2px;
 }
 
 .log-line {
+  font-size: 11px;
   display: flex;
   gap: 12px;
-  padding: 4px 0;
-  border-bottom: 1px solid #2A2A2A;
+  line-height: 1.5;
 }
 
 .log-time {
   color: #666;
-  flex-shrink: 0;
+  min-width: 75px;
 }
 
 .log-msg {
   color: #CCC;
+  word-break: break-all;
 }
 
 /* Spinner */
@@ -1040,3 +1070,4 @@ onUnmounted(() => {
   to { transform: rotate(360deg); }
 }
 </style>
+

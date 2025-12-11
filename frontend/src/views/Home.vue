@@ -83,7 +83,7 @@
                 <span class="step-num">01</span>
                 <div class="step-info">
                   <div class="step-title">图谱构建</div>
-                  <div class="step-desc">事件梳理 & 实体记忆注入 & GraphRAG构建</div>
+                  <div class="step-desc">现实种子提取 & 个体与群体记忆注入 & GraphRAG构建</div>
                 </div>
               </div>
               <div class="workflow-item">

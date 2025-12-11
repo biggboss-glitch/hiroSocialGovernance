@@ -98,3 +98,4 @@ export const getRunStatus = (simulationId) => {
 export const getRunStatusDetail = (simulationId) => {
   return service.get(`/api/simulation/${simulationId}/run-status/detail`)
 }
+
