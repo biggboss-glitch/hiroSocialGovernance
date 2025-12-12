@@ -52,6 +52,7 @@
         <Step3Simulation
           :simulationId="currentSimulationId"
           :maxRounds="maxRounds"
+          :minutesPerRound="minutesPerRound"
           :projectData="projectData"
           :graphData="graphData"
           :systemLogs="systemLogs"
@@ -71,7 +72,7 @@ import { useRoute, useRouter } from 'vue-router'
 import GraphPanel from '../components/GraphPanel.vue'
 import Step3Simulation from '../components/Step3Simulation.vue'
 import { getProject, getGraphData } from '../api/graph'
-import { getSimulation, stopSimulation, closeSimulationEnv, getEnvStatus } from '../api/simulation'
+import { getSimulation, getSimulationConfig, stopSimulation, closeSimulationEnv, getEnvStatus } from '../api/simulation'
 
 const route = useRoute()
 const router = useRouter()
@@ -88,6 +89,7 @@ const viewMode = ref('split')
 const currentSimulationId = ref(route.params.simulationId)
 // 直接在初始化时从 query 参数获取 maxRounds，确保子组件能立即获取到值
 const maxRounds = ref(route.query.maxRounds ? parseInt(route.query.maxRounds) : null)
+const minutesPerRound = ref(30) // 默认每轮30分钟
 const projectData = ref(null)
 const graphData = ref(null)
 const graphLoading = ref(false)
@@ -205,6 +207,17 @@ const loadSimulationData = async () => {
     const simRes = await getSimulation(currentSimulationId.value)
     if (simRes.success && simRes.data) {
       const simData = simRes.data
+      
+      // 获取 simulation config 以获取 minutes_per_round
+      try {
+        const configRes = await getSimulationConfig(currentSimulationId.value)
+        if (configRes.success && configRes.data?.time_config?.minutes_per_round) {
+          minutesPerRound.value = configRes.data.time_config.minutes_per_round
+          addLog(`时间配置: 每轮 ${minutesPerRound.value} 分钟`)
+        }
+      } catch (configErr) {
+        addLog(`获取时间配置失败，使用默认值: ${minutesPerRound.value}分钟/轮`)
+      }
       
       // 获取 project 信息
       if (simData.project_id) {
