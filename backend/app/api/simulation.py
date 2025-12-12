@@ -467,6 +467,25 @@ def prepare_simulation():
         use_llm_for_profiles = data.get('use_llm_for_profiles', True)
         parallel_profile_count = data.get('parallel_profile_count', 5)
         
+        # ========== 同步获取实体数量（在后台任务启动前） ==========
+        # 这样前端在调用prepare后立即就能获取到预期Agent总数
+        try:
+            logger.info(f"同步获取实体数量: graph_id={state.graph_id}")
+            reader = ZepEntityReader()
+            # 快速读取实体（不需要边信息，只统计数量）
+            filtered_preview = reader.filter_defined_entities(
+                graph_id=state.graph_id,
+                defined_entity_types=entity_types_list,
+                enrich_with_edges=False  # 不获取边信息，加快速度
+            )
+            # 保存实体数量到状态（供前端立即获取）
+            state.entities_count = filtered_preview.filtered_count
+            state.entity_types = list(filtered_preview.entity_types)
+            logger.info(f"预期实体数量: {filtered_preview.filtered_count}, 类型: {filtered_preview.entity_types}")
+        except Exception as e:
+            logger.warning(f"同步获取实体数量失败（将在后台任务中重试）: {e}")
+            # 失败不影响后续流程，后台任务会重新获取
+        
         # 创建异步任务
         task_manager = TaskManager()
         task_id = task_manager.create_task(
@@ -477,7 +496,7 @@ def prepare_simulation():
             }
         )
         
-        # 更新模拟状态
+        # 更新模拟状态（包含预先获取的实体数量）
         state.status = SimulationStatus.PREPARING
         manager._save_simulation_state(state)
         
@@ -594,7 +613,9 @@ def prepare_simulation():
                 "task_id": task_id,
                 "status": "preparing",
                 "message": "准备任务已启动，请通过 /api/simulation/prepare/status 查询进度",
-                "already_prepared": False
+                "already_prepared": False,
+                "expected_entities_count": state.entities_count,  # 预期的Agent总数
+                "entity_types": state.entity_types  # 实体类型列表
             }
         })
         
