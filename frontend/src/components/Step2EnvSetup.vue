@@ -663,6 +663,11 @@ const simulationConfig = ref(null)
 const selectedProfile = ref(null)
 const showProfilesDetail = ref(true)
 
+// 日志去重：记录上一次输出的关键信息
+let lastLoggedMessage = ''
+let lastLoggedProfileCount = 0
+let lastLoggedConfigStage = ''
+
 // 模拟轮数配置
 const useCustomRounds = ref(false) // 默认使用自动配置轮数
 const customMaxRounds = ref(40)   // 默认推荐40轮
@@ -789,14 +794,19 @@ const startPrepareSimulation = async () => {
       }
       
       taskId.value = res.data.task_id
-      addLog(`准备任务已启动: ${res.data.task_id}`)
+      addLog(`准备任务已启动`)
+      addLog(`  └─ Task ID: ${res.data.task_id}`)
       
       // 立即设置预期Agent总数（从prepare接口返回值获取）
       if (res.data.expected_entities_count) {
         expectedTotal.value = res.data.expected_entities_count
-        addLog(`预期Agent总数: ${res.data.expected_entities_count}`)
+        addLog(`从Zep图谱读取到 ${res.data.expected_entities_count} 个实体`)
+        if (res.data.entity_types && res.data.entity_types.length > 0) {
+          addLog(`  └─ 实体类型: ${res.data.entity_types.join(', ')}`)
+        }
       }
       
+      addLog('开始轮询准备进度...')
       // 开始轮询进度
       startPolling()
       // 开始实时获取 Profiles
@@ -849,25 +859,43 @@ const pollPrepareStatus = async () => {
       prepareProgress.value = data.progress || 0
       progressMessage.value = data.message || ''
       
-      // 解析阶段信息
+      // 解析阶段信息并输出详细日志
       if (data.progress_detail) {
         currentStage.value = data.progress_detail.current_stage_name || ''
+        
+        // 输出详细进度日志（避免重复）
+        const detail = data.progress_detail
+        const logKey = `${detail.current_stage}-${detail.current_item}-${detail.total_items}`
+        if (logKey !== lastLoggedMessage && detail.item_description) {
+          lastLoggedMessage = logKey
+          const stageInfo = `[${detail.stage_index}/${detail.total_stages}]`
+          if (detail.total_items > 0) {
+            addLog(`${stageInfo} ${detail.current_stage_name}: ${detail.current_item}/${detail.total_items} - ${detail.item_description}`)
+          } else {
+            addLog(`${stageInfo} ${detail.current_stage_name}: ${detail.item_description}`)
+          }
+        }
       } else if (data.message) {
         // 从消息中提取阶段
         const match = data.message.match(/\[(\d+)\/(\d+)\]\s*([^:]+)/)
         if (match) {
           currentStage.value = match[3].trim()
         }
+        // 输出消息日志（避免重复）
+        if (data.message !== lastLoggedMessage) {
+          lastLoggedMessage = data.message
+          addLog(data.message)
+        }
       }
       
       // 检查是否完成
       if (data.status === 'completed' || data.status === 'ready' || data.already_prepared) {
-        addLog('准备工作已完成')
+        addLog('✓ 准备工作已完成')
         stopPolling()
         stopProfilesPolling()
         await loadPreparedData()
       } else if (data.status === 'failed') {
-        addLog(`准备失败: ${data.error || '未知错误'}`)
+        addLog(`✗ 准备失败: ${data.error || '未知错误'}`)
         stopPolling()
         stopProfilesPolling()
       }
@@ -884,6 +912,7 @@ const fetchProfilesRealtime = async () => {
     const res = await getSimulationProfilesRealtime(props.simulationId, 'reddit')
     
     if (res.success && res.data) {
+      const prevCount = profiles.value.length
       profiles.value = res.data.profiles || []
       expectedTotal.value = res.data.total_expected
       
@@ -893,6 +922,24 @@ const fetchProfilesRealtime = async () => {
         if (p.entity_type) types.add(p.entity_type)
       })
       entityTypes.value = Array.from(types)
+      
+      // 输出 Profile 生成进度日志（仅当数量变化时）
+      const currentCount = profiles.value.length
+      if (currentCount > 0 && currentCount !== lastLoggedProfileCount) {
+        lastLoggedProfileCount = currentCount
+        const total = expectedTotal.value || '?'
+        const latestProfile = profiles.value[currentCount - 1]
+        const profileName = latestProfile?.realname || latestProfile?.username || `Agent_${currentCount}`
+        if (currentCount === 1) {
+          addLog(`开始生成Agent人设...`)
+        }
+        addLog(`→ Agent人设 ${currentCount}/${total}: ${profileName} (${latestProfile?.profession || '未知职业'})`)
+        
+        // 如果全部生成完成
+        if (expectedTotal.value && currentCount >= expectedTotal.value) {
+          addLog(`✓ 全部 ${currentCount} 个Agent人设生成完成`)
+        }
+      }
     }
   } catch (err) {
     console.warn('获取 Profiles 失败:', err)
@@ -920,19 +967,45 @@ const fetchConfigRealtime = async () => {
     if (res.success && res.data) {
       const data = res.data
       
+      // 输出配置生成阶段日志（避免重复）
+      if (data.generation_stage && data.generation_stage !== lastLoggedConfigStage) {
+        lastLoggedConfigStage = data.generation_stage
+        if (data.generation_stage === 'generating_profiles') {
+          addLog('正在生成Agent人设配置...')
+        } else if (data.generation_stage === 'generating_config') {
+          addLog('正在调用LLM生成模拟配置参数...')
+        }
+      }
+      
       // 如果配置已生成
       if (data.config_generated && data.config) {
         simulationConfig.value = data.config
-        addLog('模拟配置生成完成')
+        addLog('✓ 模拟配置生成完成')
         
-        // 显示配置摘要
+        // 显示详细配置摘要
         if (data.summary) {
-          addLog(`配置摘要: ${data.summary.total_agents}个Agent, ${data.summary.simulation_hours}小时, ${data.summary.initial_posts_count}条初始帖子`)
+          addLog(`  ├─ Agent数量: ${data.summary.total_agents}个`)
+          addLog(`  ├─ 模拟时长: ${data.summary.simulation_hours}小时`)
+          addLog(`  ├─ 初始帖子: ${data.summary.initial_posts_count}条`)
+          addLog(`  ├─ 热点话题: ${data.summary.hot_topics_count}个`)
+          addLog(`  └─ 平台配置: Twitter ${data.summary.has_twitter_config ? '✓' : '✗'}, Reddit ${data.summary.has_reddit_config ? '✓' : '✗'}`)
+        }
+        
+        // 显示时间配置详情
+        if (data.config.time_config) {
+          const tc = data.config.time_config
+          addLog(`时间配置: 每轮${tc.minutes_per_round}分钟, 共${Math.floor((tc.total_simulation_hours * 60) / tc.minutes_per_round)}轮`)
+        }
+        
+        // 显示事件配置
+        if (data.config.event_config?.narrative_direction) {
+          const narrative = data.config.event_config.narrative_direction
+          addLog(`叙事方向: ${narrative.length > 50 ? narrative.substring(0, 50) + '...' : narrative}`)
         }
         
         stopConfigPolling()
         phase.value = 4
-        addLog('环境搭建完成，可以开始模拟')
+        addLog('✓ 环境搭建完成，可以开始模拟')
         emit('update-status', 'completed')
       }
     }
@@ -943,10 +1016,11 @@ const fetchConfigRealtime = async () => {
 
 const loadPreparedData = async () => {
   phase.value = 2
-  addLog('正在加载配置数据...')
+  addLog('正在加载已有配置数据...')
 
   // 最后获取一次 Profiles
   await fetchProfilesRealtime()
+  addLog(`已加载 ${profiles.value.length} 个Agent人设`)
 
   // 获取配置（使用实时接口）
   try {
@@ -954,19 +1028,21 @@ const loadPreparedData = async () => {
     if (res.success && res.data) {
       if (res.data.config_generated && res.data.config) {
         simulationConfig.value = res.data.config
-        addLog('模拟配置加载成功')
+        addLog('✓ 模拟配置加载成功')
         
-        // 显示配置摘要
+        // 显示详细配置摘要
         if (res.data.summary) {
-          addLog(`配置摘要: ${res.data.summary.total_agents}个Agent, ${res.data.summary.simulation_hours}小时`)
+          addLog(`  ├─ Agent数量: ${res.data.summary.total_agents}个`)
+          addLog(`  ├─ 模拟时长: ${res.data.summary.simulation_hours}小时`)
+          addLog(`  └─ 初始帖子: ${res.data.summary.initial_posts_count}条`)
         }
         
-        addLog('环境搭建完成，可以开始模拟')
+        addLog('✓ 环境搭建完成，可以开始模拟')
         phase.value = 4
         emit('update-status', 'completed')
       } else {
         // 配置尚未生成，开始轮询
-        addLog('配置生成中，等待完成...')
+        addLog('配置生成中，开始轮询等待...')
         startConfigPolling()
       }
     }
