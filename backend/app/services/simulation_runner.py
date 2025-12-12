@@ -1053,6 +1053,9 @@ class SimulationRunner:
         - reddit/actions.jsonl
         - simulation.log
         - stdout.log / stderr.log
+        - twitter_simulation.db（模拟数据库）
+        - reddit_simulation.db（模拟数据库）
+        - env_status.json（环境状态）
         
         注意：不会删除配置文件（simulation_config.json）和 profile 文件
         
@@ -1072,12 +1075,15 @@ class SimulationRunner:
         cleaned_files = []
         errors = []
         
-        # 要删除的文件列表
+        # 要删除的文件列表（包括数据库文件）
         files_to_delete = [
             "run_state.json",
             "simulation.log",
             "stdout.log",
             "stderr.log",
+            "twitter_simulation.db",  # Twitter 平台数据库
+            "reddit_simulation.db",   # Reddit 平台数据库
+            "env_status.json",        # 环境状态文件
         ]
         
         # 要删除的目录列表（包含动作日志）

@@ -2,7 +2,7 @@
   <div class="simulation-panel">
     <!-- Top Control Bar -->
     <div class="control-bar">
-      <div class="status-group" v-if="phase >= 1">
+      <div class="status-group">
         <!-- Twitter 平台进度 -->
         <div class="platform-status twitter" :class="{ active: runStatus.twitter_running, completed: runStatus.twitter_completed }">
           <div class="platform-header">
@@ -49,81 +49,23 @@
           </div>
         </div>
       </div>
-      
-      <!-- Phase 0 时显示简单状态 -->
-      <div class="status-group" v-else>
-        <div class="status-item">
-          <span class="label">ROUND</span>
-          <span class="value mono">0<span class="total">/{{ maxRounds || '-' }}</span></span>
-        </div>
-        <div class="status-item">
-          <span class="label">TIME</span>
-          <span class="value mono">0<span class="unit">h</span></span>
-        </div>
-      </div>
 
       <div class="action-controls">
         <button 
-          v-if="phase === 0"
-          class="ctrl-btn start"
-          :disabled="isStarting"
-          @click="doStartSimulation"
-        >
-          <span v-if="isStarting" class="spinner-sm"></span>
-          {{ isStarting ? 'INITIALIZING...' : 'START ENGINE' }}
-        </button>
-        
-        <button 
-          v-if="phase === 1"
-          class="ctrl-btn stop"
-          :disabled="isStopping"
-          @click="handleStopSimulation"
-        >
-          {{ isStopping ? 'STOPPING...' : 'STOP SIMULATION' }}
-        </button>
-
-        <button 
-          v-if="phase === 2"
           class="ctrl-btn next"
+          :disabled="phase !== 2"
           @click="handleNextStep"
         >
-          GENERATE REPORT ➝
+          <span v-if="phase !== 2" class="spinner-sm running"></span>
+          {{ phase === 2 ? 'GENERATE REPORT ➝' : 'SIMULATING...' }}
         </button>
       </div>
     </div>
 
-    <!-- Main Content: Dual Timeline or Start Screen -->
+    <!-- Main Content: Dual Timeline -->
     <div class="main-content-area" ref="scrollContainer">
-      <!-- Start Screen (Phase 0) -->
-      <div v-if="phase === 0" class="start-screen">
-        <div class="engine-status">
-          <div class="engine-icon">⚡️</div>
-          <h2>Simulation Engine Ready</h2>
-          <p>Initialize the dual-platform parallel simulation environment.</p>
-        </div>
-        
-        <div class="config-grid">
-          <div class="config-card">
-            <span class="label">SIMULATION ID</span>
-            <span class="val mono">{{ simulationId }}</span>
-          </div>
-          <div class="config-card">
-            <span class="label">TARGET ROUNDS</span>
-            <span class="val">{{ maxRounds || 'AUTO' }}</span>
-          </div>
-          <div class="config-card">
-            <span class="label">PLATFORMS</span>
-            <span class="val">Twitter + Reddit</span>
-          </div>
-        </div>
-
-        <div v-if="startError" class="error-banner">
-          {{ startError }}
-        </div>
-      </div>
-
-      <!-- Timeline Feed (Phase >= 1) -->
-      <div v-else class="timeline-feed">
+      <!-- Timeline Feed -->
+      <div class="timeline-feed">
         <div class="timeline-axis"></div>
         
         <TransitionGroup name="timeline-item">
@@ -238,12 +180,28 @@ const addLog = (msg) => {
   emit('add-log', msg)
 }
 
+// 重置所有状态（用于重新启动模拟）
+const resetAllState = () => {
+  phase.value = 0
+  runStatus.value = {}
+  recentActions.value = []
+  prevTwitterRound.value = 0
+  prevRedditRound.value = 0
+  startError.value = null
+  isStarting.value = false
+  isStopping.value = false
+  stopPolling()  // 停止之前可能存在的轮询
+}
+
 // 启动模拟
 const doStartSimulation = async () => {
   if (!props.simulationId) {
     addLog('错误：缺少 simulationId')
     return
   }
+  
+  // 先重置所有状态，确保不会受到上一次模拟的影响
+  resetAllState()
   
   isStarting.value = true
   startError.value = null
@@ -522,30 +480,6 @@ onUnmounted(() => {
   gap: 16px;
 }
 
-.status-item {
-  display: flex;
-  flex-direction: column;
-}
-
-.status-item .label {
-  font-size: 10px;
-  color: #999;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-}
-
-.status-item .value {
-  font-size: 16px;
-  font-weight: 700;
-  color: #333;
-}
-
-.status-item .total, .status-item .unit {
-  font-size: 12px;
-  color: #999;
-  font-weight: 500;
-}
-
 /* 双平台进度卡片 */
 .platform-status {
   display: flex;
@@ -649,16 +583,6 @@ onUnmounted(() => {
   transition: all 0.2s;
 }
 
-.ctrl-btn.start {
-  background: #000;
-  color: #FFF;
-}
-
-.ctrl-btn.stop {
-  background: #FFEBEE;
-  color: #C62828;
-}
-
 .ctrl-btn.next {
   background: #E8F5E9;
   color: #2E7D32;
@@ -680,67 +604,6 @@ onUnmounted(() => {
   overflow-y: auto;
   position: relative;
   background: #FAFAFA;
-}
-
-/* Start Screen */
-.start-screen {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  padding: 40px;
-}
-
-.engine-status {
-  text-align: center;
-  margin-bottom: 40px;
-}
-
-.engine-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-
-.engine-status h2 {
-  font-size: 24px;
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-
-.engine-status p {
-  color: #666;
-  font-size: 14px;
-}
-
-.config-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  width: 100%;
-  max-width: 600px;
-}
-
-.config-card {
-  background: #FFF;
-  padding: 16px;
-  border-radius: 8px;
-  border: 1px solid #EAEAEA;
-  text-align: center;
-}
-
-.config-card .label {
-  display: block;
-  font-size: 10px;
-  color: #999;
-  margin-bottom: 8px;
-}
-
-.config-card .val {
-  display: block;
-  font-size: 14px;
-  font-weight: 600;
-  color: #333;
 }
 
 /* --- Timeline Feed --- */
@@ -1016,6 +879,11 @@ onUnmounted(() => {
   border-top-color: #FFF;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+}
+
+.spinner-sm.running {
+  border: 2px solid rgba(46, 125, 50, 0.3);
+  border-top-color: #2E7D32;
 }
 
 @keyframes spin {
