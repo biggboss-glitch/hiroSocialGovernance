@@ -22,8 +22,8 @@
 
       <div class="header-right">
         <div class="workflow-step">
-          <span class="step-num">Step 2/5</span>
-          <span class="step-name">环境搭建</span>
+          <span class="step-num">Step 3/5</span>
+          <span class="step-name">开始模拟</span>
         </div>
         <div class="step-divider"></div>
         <span class="status-indicator" :class="statusClass">
@@ -40,16 +40,17 @@
         <GraphPanel 
           :graphData="graphData"
           :loading="graphLoading"
-          :currentPhase="2"
+          :currentPhase="3"
           @refresh="refreshGraph"
           @toggle-maximize="toggleMaximize('graph')"
         />
       </div>
 
-      <!-- Right Panel: Step2 环境搭建 -->
+      <!-- Right Panel: Step3 开始模拟 -->
       <div class="panel-wrapper right" :style="rightPanelStyle">
-        <Step2EnvSetup
+        <Step3Simulation
           :simulationId="currentSimulationId"
+          :maxRounds="maxRounds"
           :projectData="projectData"
           :graphData="graphData"
           :systemLogs="systemLogs"
@@ -64,10 +65,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import GraphPanel from '../components/GraphPanel.vue'
-import Step2EnvSetup from '../components/Step2EnvSetup.vue'
+import Step3Simulation from '../components/Step3Simulation.vue'
 import { getProject, getGraphData } from '../api/graph'
 import { getSimulation } from '../api/simulation'
 
@@ -84,6 +85,8 @@ const viewMode = ref('split')
 
 // Data State
 const currentSimulationId = ref(route.params.simulationId)
+// 直接在初始化时从 query 参数获取 maxRounds，确保子组件能立即获取到值
+const maxRounds = ref(route.query.maxRounds ? parseInt(route.query.maxRounds) : null)
 const projectData = ref(null)
 const graphData = ref(null)
 const graphLoading = ref(false)
@@ -110,15 +113,15 @@ const statusClass = computed(() => {
 
 const statusText = computed(() => {
   if (currentStatus.value === 'error') return 'Error'
-  if (currentStatus.value === 'completed') return 'Ready'
-  return 'Preparing'
+  if (currentStatus.value === 'completed') return 'Completed'
+  return 'Running'
 })
 
 // --- Helpers ---
 const addLog = (msg) => {
   const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.' + new Date().getMilliseconds().toString().padStart(3, '0')
   systemLogs.value.push({ time, msg })
-  if (systemLogs.value.length > 100) {
+  if (systemLogs.value.length > 200) {
     systemLogs.value.shift()
   }
 }
@@ -137,37 +140,14 @@ const toggleMaximize = (target) => {
 }
 
 const handleGoBack = () => {
-  // 返回到 process 页面
-  if (projectData.value?.project_id) {
-    router.push({ name: 'Process', params: { projectId: projectData.value.project_id } })
-  } else {
-    router.push('/')
-  }
+  // 返回到 Step 2 (环境搭建)
+  router.push({ name: 'Simulation', params: { simulationId: currentSimulationId.value } })
 }
 
-const handleNextStep = (params = {}) => {
-  addLog('进入 Step 3: 开始模拟')
-  
-  // 记录模拟轮数配置
-  if (params.maxRounds) {
-    addLog(`自定义模拟轮数: ${params.maxRounds} 轮`)
-  } else {
-    addLog('使用自动配置的模拟轮数')
-  }
-  
-  // 构建路由参数
-  const routeParams = {
-    name: 'SimulationRun',
-    params: { simulationId: currentSimulationId.value }
-  }
-  
-  // 如果有自定义轮数，通过 query 参数传递
-  if (params.maxRounds) {
-    routeParams.query = { maxRounds: params.maxRounds }
-  }
-  
-  // 跳转到 Step 3 页面
-  router.push(routeParams)
+const handleNextStep = () => {
+  addLog('进入 Step 4: 报告生成')
+  // TODO: 跳转到 Step 4 报告生成页面
+  alert('Step 4: 报告生成 - Coming soon...')
 }
 
 // --- Data Logic ---
@@ -223,7 +203,13 @@ const refreshGraph = () => {
 }
 
 onMounted(() => {
-  addLog('SimulationView 初始化')
+  addLog('SimulationRunView 初始化')
+  
+  // 记录 maxRounds 配置（值已在初始化时从 query 参数获取）
+  if (maxRounds.value) {
+    addLog(`自定义模拟轮数: ${maxRounds.value}`)
+  }
+  
   loadSimulationData()
 })
 </script>
@@ -355,4 +341,3 @@ onMounted(() => {
   border-right: 1px solid #EAEAEA;
 }
 </style>
-

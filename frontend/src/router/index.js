@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Home from '../views/Home.vue'
 import Process from '../views/MainView.vue'
 import SimulationView from '../views/SimulationView.vue'
+import SimulationRunView from '../views/SimulationRunView.vue'
 
 const routes = [
   {
@@ -19,6 +20,12 @@ const routes = [
     path: '/simulation/:simulationId',
     name: 'Simulation',
     component: SimulationView,
+    props: true
+  },
+  {
+    path: '/simulation/:simulationId/start',
+    name: 'SimulationRun',
+    component: SimulationRunView,
     props: true
   }
 ]

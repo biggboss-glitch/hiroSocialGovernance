@@ -671,6 +671,136 @@ class SimulationRunner:
         return state
     
     @classmethod
+    def _read_actions_from_file(
+        cls,
+        file_path: str,
+        default_platform: Optional[str] = None,
+        platform_filter: Optional[str] = None,
+        agent_id: Optional[int] = None,
+        round_num: Optional[int] = None
+    ) -> List[AgentAction]:
+        """
+        从单个动作文件中读取动作
+        
+        Args:
+            file_path: 动作日志文件路径
+            default_platform: 默认平台（当动作记录中没有 platform 字段时使用）
+            platform_filter: 过滤平台
+            agent_id: 过滤 Agent ID
+            round_num: 过滤轮次
+        """
+        if not os.path.exists(file_path):
+            return []
+        
+        actions = []
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                try:
+                    data = json.loads(line)
+                    
+                    # 跳过非动作记录（如 simulation_start, round_start, round_end 等事件）
+                    if "event_type" in data:
+                        continue
+                    
+                    # 跳过没有 agent_id 的记录（非 Agent 动作）
+                    if "agent_id" not in data:
+                        continue
+                    
+                    # 获取平台：优先使用记录中的 platform，否则使用默认平台
+                    record_platform = data.get("platform") or default_platform or ""
+                    
+                    # 过滤
+                    if platform_filter and record_platform != platform_filter:
+                        continue
+                    if agent_id is not None and data.get("agent_id") != agent_id:
+                        continue
+                    if round_num is not None and data.get("round") != round_num:
+                        continue
+                    
+                    actions.append(AgentAction(
+                        round_num=data.get("round", 0),
+                        timestamp=data.get("timestamp", ""),
+                        platform=record_platform,
+                        agent_id=data.get("agent_id", 0),
+                        agent_name=data.get("agent_name", ""),
+                        action_type=data.get("action_type", ""),
+                        action_args=data.get("action_args", {}),
+                        result=data.get("result"),
+                        success=data.get("success", True),
+                    ))
+                    
+                except json.JSONDecodeError:
+                    continue
+        
+        return actions
+    
+    @classmethod
+    def get_all_actions(
+        cls,
+        simulation_id: str,
+        platform: Optional[str] = None,
+        agent_id: Optional[int] = None,
+        round_num: Optional[int] = None
+    ) -> List[AgentAction]:
+        """
+        获取所有平台的完整动作历史（无分页限制）
+        
+        Args:
+            simulation_id: 模拟ID
+            platform: 过滤平台（twitter/reddit）
+            agent_id: 过滤Agent
+            round_num: 过滤轮次
+            
+        Returns:
+            完整的动作列表（按时间戳排序，新的在前）
+        """
+        sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
+        actions = []
+        
+        # 读取 Twitter 动作文件（根据文件路径自动设置 platform 为 twitter）
+        twitter_actions_log = os.path.join(sim_dir, "twitter", "actions.jsonl")
+        if not platform or platform == "twitter":
+            actions.extend(cls._read_actions_from_file(
+                twitter_actions_log,
+                default_platform="twitter",  # 自动填充 platform 字段
+                platform_filter=platform,
+                agent_id=agent_id, 
+                round_num=round_num
+            ))
+        
+        # 读取 Reddit 动作文件（根据文件路径自动设置 platform 为 reddit）
+        reddit_actions_log = os.path.join(sim_dir, "reddit", "actions.jsonl")
+        if not platform or platform == "reddit":
+            actions.extend(cls._read_actions_from_file(
+                reddit_actions_log,
+                default_platform="reddit",  # 自动填充 platform 字段
+                platform_filter=platform,
+                agent_id=agent_id,
+                round_num=round_num
+            ))
+        
+        # 如果分平台文件不存在，尝试读取旧的单一文件格式
+        if not actions:
+            actions_log = os.path.join(sim_dir, "actions.jsonl")
+            actions = cls._read_actions_from_file(
+                actions_log,
+                default_platform=None,  # 旧格式文件中应该有 platform 字段
+                platform_filter=platform,
+                agent_id=agent_id,
+                round_num=round_num
+            )
+        
+        # 按时间戳排序（新的在前）
+        actions.sort(key=lambda x: x.timestamp, reverse=True)
+        
+        return actions
+    
+    @classmethod
     def get_actions(
         cls,
         simulation_id: str,
@@ -681,7 +811,7 @@ class SimulationRunner:
         round_num: Optional[int] = None
     ) -> List[AgentAction]:
         """
-        获取动作历史
+        获取动作历史（带分页）
         
         Args:
             simulation_id: 模拟ID
@@ -694,48 +824,12 @@ class SimulationRunner:
         Returns:
             动作列表
         """
-        sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
-        actions_log = os.path.join(sim_dir, "actions.jsonl")
-        
-        if not os.path.exists(actions_log):
-            return []
-        
-        actions = []
-        
-        with open(actions_log, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                
-                try:
-                    data = json.loads(line)
-                    
-                    # 过滤
-                    if platform and data.get("platform") != platform:
-                        continue
-                    if agent_id is not None and data.get("agent_id") != agent_id:
-                        continue
-                    if round_num is not None and data.get("round") != round_num:
-                        continue
-                    
-                    actions.append(AgentAction(
-                        round_num=data.get("round", 0),
-                        timestamp=data.get("timestamp", ""),
-                        platform=data.get("platform", ""),
-                        agent_id=data.get("agent_id", 0),
-                        agent_name=data.get("agent_name", ""),
-                        action_type=data.get("action_type", ""),
-                        action_args=data.get("action_args", {}),
-                        result=data.get("result"),
-                        success=data.get("success", True),
-                    ))
-                    
-                except json.JSONDecodeError:
-                    continue
-        
-        # 按时间倒序排列
-        actions.reverse()
+        actions = cls.get_all_actions(
+            simulation_id=simulation_id,
+            platform=platform,
+            agent_id=agent_id,
+            round_num=round_num
+        )
         
         # 分页
         return actions[offset:offset + limit]
@@ -853,6 +947,81 @@ class SimulationRunner:
         result = sorted(agent_stats.values(), key=lambda x: x["total_actions"], reverse=True)
         
         return result
+    
+    @classmethod
+    def cleanup_simulation_logs(cls, simulation_id: str) -> Dict[str, Any]:
+        """
+        清理模拟的运行日志（用于强制重新开始模拟）
+        
+        会删除以下文件：
+        - run_state.json
+        - twitter/actions.jsonl
+        - reddit/actions.jsonl
+        - simulation.log
+        - stdout.log / stderr.log
+        
+        注意：不会删除配置文件（simulation_config.json）和 profile 文件
+        
+        Args:
+            simulation_id: 模拟ID
+            
+        Returns:
+            清理结果信息
+        """
+        import shutil
+        
+        sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
+        
+        if not os.path.exists(sim_dir):
+            return {"success": True, "message": "模拟目录不存在，无需清理"}
+        
+        cleaned_files = []
+        errors = []
+        
+        # 要删除的文件列表
+        files_to_delete = [
+            "run_state.json",
+            "simulation.log",
+            "stdout.log",
+            "stderr.log",
+        ]
+        
+        # 要删除的目录列表（包含动作日志）
+        dirs_to_clean = ["twitter", "reddit"]
+        
+        # 删除文件
+        for filename in files_to_delete:
+            file_path = os.path.join(sim_dir, filename)
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                    cleaned_files.append(filename)
+                except Exception as e:
+                    errors.append(f"删除 {filename} 失败: {str(e)}")
+        
+        # 清理平台目录中的动作日志
+        for dir_name in dirs_to_clean:
+            dir_path = os.path.join(sim_dir, dir_name)
+            if os.path.exists(dir_path):
+                actions_file = os.path.join(dir_path, "actions.jsonl")
+                if os.path.exists(actions_file):
+                    try:
+                        os.remove(actions_file)
+                        cleaned_files.append(f"{dir_name}/actions.jsonl")
+                    except Exception as e:
+                        errors.append(f"删除 {dir_name}/actions.jsonl 失败: {str(e)}")
+        
+        # 清理内存中的运行状态
+        if simulation_id in cls._run_states:
+            del cls._run_states[simulation_id]
+        
+        logger.info(f"清理模拟日志完成: {simulation_id}, 删除文件: {cleaned_files}")
+        
+        return {
+            "success": len(errors) == 0,
+            "cleaned_files": cleaned_files,
+            "errors": errors if errors else None
+        }
     
     # 防止重复清理的标志
     _cleanup_done = False

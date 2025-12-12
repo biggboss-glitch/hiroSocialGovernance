@@ -61,7 +61,7 @@ class OasisAgentProfile:
         """转换为Reddit平台格式"""
         profile = {
             "user_id": self.user_id,
-            "user_name": self.user_name,
+            "username": self.user_name,  # OASIS 库要求字段名为 username（无下划线）
             "name": self.name,
             "bio": self.bio,
             "persona": self.persona,
@@ -89,7 +89,7 @@ class OasisAgentProfile:
         """转换为Twitter平台格式"""
         profile = {
             "user_id": self.user_id,
-            "user_name": self.user_name,
+            "username": self.user_name,  # OASIS 库要求字段名为 username（无下划线）
             "name": self.name,
             "bio": self.bio,
             "persona": self.persona,

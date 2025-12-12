@@ -1274,21 +1274,28 @@ def generate_profiles():
 def start_simulation():
     """
     开始运行模拟
-    
+
     请求（JSON）：
         {
             "simulation_id": "sim_xxxx",          // 必填，模拟ID
             "platform": "parallel",                // 可选: twitter / reddit / parallel (默认)
             "max_rounds": 100,                     // 可选: 最大模拟轮数，用于截断过长的模拟
-            "enable_graph_memory_update": false    // 可选: 是否将Agent活动动态更新到Zep图谱记忆
+            "enable_graph_memory_update": false,   // 可选: 是否将Agent活动动态更新到Zep图谱记忆
+            "force": false                         // 可选: 强制重新开始（会停止运行中的模拟并清理日志）
         }
-    
+
+    关于 force 参数：
+        - 启用后，如果模拟正在运行或已完成，会先停止并清理运行日志
+        - 清理的内容包括：run_state.json, actions.jsonl, simulation.log 等
+        - 不会清理配置文件（simulation_config.json）和 profile 文件
+        - 适用于需要重新运行模拟的场景
+
     关于 enable_graph_memory_update：
         - 启用后，模拟中所有Agent的活动（发帖、评论、点赞等）都会实时更新到Zep图谱
         - 这可以让图谱"记住"模拟过程，用于后续分析或AI对话
         - 需要模拟关联的项目有有效的 graph_id
         - 采用批量更新机制，减少API调用次数
-    
+
     返回：
         {
             "success": true,
@@ -1299,24 +1306,26 @@ def start_simulation():
                 "twitter_running": true,
                 "reddit_running": true,
                 "started_at": "2025-12-01T10:00:00",
-                "graph_memory_update_enabled": true  // 是否启用了图谱记忆更新
+                "graph_memory_update_enabled": true,  // 是否启用了图谱记忆更新
+                "force_restarted": true               // 是否是强制重新开始
             }
         }
     """
     try:
         data = request.get_json() or {}
-        
+
         simulation_id = data.get('simulation_id')
         if not simulation_id:
             return jsonify({
                 "success": False,
                 "error": "请提供 simulation_id"
             }), 400
-        
+
         platform = data.get('platform', 'parallel')
         max_rounds = data.get('max_rounds')  # 可选：最大模拟轮数
         enable_graph_memory_update = data.get('enable_graph_memory_update', False)  # 可选：是否启用图谱记忆更新
-        
+        force = data.get('force', False)  # 可选：强制重新开始
+
         # 验证 max_rounds 参数
         if max_rounds is not None:
             try:
@@ -1331,28 +1340,30 @@ def start_simulation():
                     "success": False,
                     "error": "max_rounds 必须是有效的整数"
                 }), 400
-        
+
         if platform not in ['twitter', 'reddit', 'parallel']:
             return jsonify({
                 "success": False,
                 "error": f"无效的平台类型: {platform}，可选: twitter/reddit/parallel"
             }), 400
-        
+
         # 检查模拟是否已准备好
         manager = SimulationManager()
         state = manager.get_simulation(simulation_id)
-        
+
         if not state:
             return jsonify({
                 "success": False,
                 "error": f"模拟不存在: {simulation_id}"
             }), 404
+
+        force_restarted = False
         
         # 智能处理状态：如果准备工作已完成，允许重新启动
         if state.status != SimulationStatus.READY:
             # 检查准备工作是否已完成
             is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
-            
+
             if is_prepared:
                 # 准备工作已完成，检查是否有正在运行的进程
                 if state.status == SimulationStatus.RUNNING:
@@ -1360,11 +1371,27 @@ def start_simulation():
                     run_state = SimulationRunner.get_run_state(simulation_id)
                     if run_state and run_state.runner_status.value == "running":
                         # 进程确实在运行
-                        return jsonify({
-                            "success": False,
-                            "error": f"模拟正在运行中，请先调用 /stop 接口停止"
-                        }), 400
-                
+                        if force:
+                            # 强制模式：停止运行中的模拟
+                            logger.info(f"强制模式：停止运行中的模拟 {simulation_id}")
+                            try:
+                                SimulationRunner.stop_simulation(simulation_id)
+                            except Exception as e:
+                                logger.warning(f"停止模拟时出现警告: {str(e)}")
+                        else:
+                            return jsonify({
+                                "success": False,
+                                "error": f"模拟正在运行中，请先调用 /stop 接口停止，或使用 force=true 强制重新开始"
+                            }), 400
+
+                # 如果是强制模式，清理运行日志
+                if force:
+                    logger.info(f"强制模式：清理模拟日志 {simulation_id}")
+                    cleanup_result = SimulationRunner.cleanup_simulation_logs(simulation_id)
+                    if not cleanup_result.get("success"):
+                        logger.warning(f"清理日志时出现警告: {cleanup_result.get('errors')}")
+                    force_restarted = True
+
                 # 进程不存在或已结束，重置状态为 ready
                 logger.info(f"模拟 {simulation_id} 准备工作已完成，重置状态为 ready（原状态: {state.status.value}）")
                 state.status = SimulationStatus.READY
@@ -1412,6 +1439,7 @@ def start_simulation():
         if max_rounds:
             response_data['max_rounds_applied'] = max_rounds
         response_data['graph_memory_update_enabled'] = enable_graph_memory_update
+        response_data['force_restarted'] = force_restarted
         if enable_graph_memory_update:
             response_data['graph_id'] = graph_id
         
@@ -1557,9 +1585,12 @@ def get_run_status(simulation_id: str):
 @simulation_bp.route('/<simulation_id>/run-status/detail', methods=['GET'])
 def get_run_status_detail(simulation_id: str):
     """
-    获取模拟运行详细状态（包含最近动作）
+    获取模拟运行详细状态（包含所有动作）
     
     用于前端展示实时动态
+    
+    Query参数：
+        platform: 过滤平台（twitter/reddit，可选）
     
     返回：
         {
@@ -1569,7 +1600,7 @@ def get_run_status_detail(simulation_id: str):
                 "runner_status": "running",
                 "current_round": 5,
                 ...
-                "recent_actions": [
+                "all_actions": [
                     {
                         "round_num": 5,
                         "timestamp": "2025-12-01T10:30:00",
@@ -1582,12 +1613,15 @@ def get_run_status_detail(simulation_id: str):
                         "success": true
                     },
                     ...
-                ]
+                ],
+                "twitter_actions": [...],  # Twitter 平台的所有动作
+                "reddit_actions": [...]    # Reddit 平台的所有动作
             }
         }
     """
     try:
         run_state = SimulationRunner.get_run_state(simulation_id)
+        platform_filter = request.args.get('platform')
         
         if not run_state:
             return jsonify({
@@ -1595,13 +1629,49 @@ def get_run_status_detail(simulation_id: str):
                 "data": {
                     "simulation_id": simulation_id,
                     "runner_status": "idle",
-                    "recent_actions": []
+                    "all_actions": [],
+                    "twitter_actions": [],
+                    "reddit_actions": []
                 }
             })
         
+        # 获取完整的动作列表
+        all_actions = SimulationRunner.get_all_actions(
+            simulation_id=simulation_id,
+            platform=platform_filter
+        )
+        
+        # 分平台获取动作
+        twitter_actions = SimulationRunner.get_all_actions(
+            simulation_id=simulation_id,
+            platform="twitter"
+        ) if not platform_filter or platform_filter == "twitter" else []
+        
+        reddit_actions = SimulationRunner.get_all_actions(
+            simulation_id=simulation_id,
+            platform="reddit"
+        ) if not platform_filter or platform_filter == "reddit" else []
+        
+        # 获取当前轮次的动作（recent_actions 只展示最新一轮）
+        current_round = run_state.current_round
+        recent_actions = SimulationRunner.get_all_actions(
+            simulation_id=simulation_id,
+            platform=platform_filter,
+            round_num=current_round
+        ) if current_round > 0 else []
+        
+        # 获取基础状态信息
+        result = run_state.to_dict()
+        result["all_actions"] = [a.to_dict() for a in all_actions]
+        result["twitter_actions"] = [a.to_dict() for a in twitter_actions]
+        result["reddit_actions"] = [a.to_dict() for a in reddit_actions]
+        result["rounds_count"] = len(run_state.rounds)
+        # recent_actions 只展示当前最新一轮两个平台的内容
+        result["recent_actions"] = [a.to_dict() for a in recent_actions]
+        
         return jsonify({
             "success": True,
-            "data": run_state.to_detail_dict()
+            "data": result
         })
         
     except Exception as e:
