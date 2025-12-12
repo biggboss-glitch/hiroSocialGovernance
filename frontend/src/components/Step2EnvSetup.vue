@@ -90,8 +90,8 @@
                 @click="selectProfile(profile)"
               >
                 <div class="profile-header">
-                  <span class="profile-realname">{{ profile.realname || 'Unknown' }}</span>
-                  <span class="profile-username">@{{ profile.username || `agent_${idx}` }}</span>
+                  <span class="profile-realname">{{ profile.username || 'Unknown' }}</span>
+                  <span class="profile-username">@{{ profile.name || `agent_${idx}` }}</span>
                 </div>
                 <div class="profile-meta">
                   <span class="profile-profession">{{ profile.profession || '未知职业' }}</span>
@@ -535,8 +535,8 @@
           <div class="modal-header">
           <div class="modal-header-info">
             <div class="modal-name-row">
-              <span class="modal-realname">{{ selectedProfile.realname }}</span>
-              <span class="modal-username">@{{ selectedProfile.username }}</span>
+              <span class="modal-realname">{{ selectedProfile.username }}</span>
+              <span class="modal-username">@{{ selectedProfile.name }}</span>
             </div>
             <span class="modal-profession">{{ selectedProfile.profession }}</span>
           </div>
@@ -929,7 +929,7 @@ const fetchProfilesRealtime = async () => {
         lastLoggedProfileCount = currentCount
         const total = expectedTotal.value || '?'
         const latestProfile = profiles.value[currentCount - 1]
-        const profileName = latestProfile?.realname || latestProfile?.username || `Agent_${currentCount}`
+        const profileName = latestProfile?.name || latestProfile?.username || `Agent_${currentCount}`
         if (currentCount === 1) {
           addLog(`开始生成Agent人设...`)
         }

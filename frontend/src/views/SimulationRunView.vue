@@ -330,6 +330,13 @@ onUnmounted(() => {
   padding: 0 24px;
   background: #FFF;
   z-index: 100;
+  position: relative;
+}
+
+.header-center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .brand {
@@ -437,3 +444,4 @@ onUnmounted(() => {
   border-right: 1px solid #EAEAEA;
 }
 </style>
+

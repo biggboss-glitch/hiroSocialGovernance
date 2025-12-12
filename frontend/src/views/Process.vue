@@ -1137,6 +1137,9 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .step-badge {

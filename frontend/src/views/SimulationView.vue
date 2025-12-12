@@ -317,6 +317,7 @@ onMounted(async () => {
   padding: 0 24px;
   background: #FFF;
   z-index: 100;
+  position: relative;
 }
 
 .brand {
@@ -325,6 +326,12 @@ onMounted(async () => {
   font-size: 18px;
   letter-spacing: 1px;
   cursor: pointer;
+}
+
+.header-center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .view-switcher {
