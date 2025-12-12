@@ -52,18 +52,28 @@
 
       <div class="action-controls">
         <button 
-          class="ctrl-btn next"
+          class="action-btn primary"
           :disabled="phase !== 2"
           @click="handleNextStep"
         >
-          <span v-if="phase !== 2" class="spinner-sm running"></span>
-          {{ phase === 2 ? 'GENERATE REPORT ➝' : 'SIMULATING...' }}
+          开始生成结果报告 ➝
         </button>
       </div>
     </div>
 
     <!-- Main Content: Dual Timeline -->
     <div class="main-content-area" ref="scrollContainer">
+      <!-- Timeline Header -->
+      <div class="timeline-header" v-if="allActions.length > 0">
+        <div class="timeline-stats">
+          <span class="total-count">共 {{ allActions.length }} 条动作</span>
+          <span class="platform-breakdown">
+            <span class="twitter-count">𝕏 {{ twitterActionsCount }}</span>
+            <span class="reddit-count">📮 {{ redditActionsCount }}</span>
+          </span>
+        </div>
+      </div>
+      
       <!-- Timeline Feed -->
       <div class="timeline-feed">
         <div class="timeline-axis"></div>
@@ -71,7 +81,7 @@
         <TransitionGroup name="timeline-item">
           <div 
             v-for="action in reversedActions" 
-            :key="action.id || `${action.timestamp}-${action.agent_id}`" 
+            :key="action._uniqueId || action.id || `${action.timestamp}-${action.agent_id}`" 
             class="timeline-item"
             :class="action.platform"
           >
@@ -88,25 +98,99 @@
               </div>
               
               <div class="card-body">
-                <!-- Main Content -->
-                <div v-if="action.action_args?.content" class="content-text">
+                <!-- CREATE_POST: 发布帖子 -->
+                <div v-if="action.action_type === 'CREATE_POST' && action.action_args?.content" class="content-text">
                   {{ action.action_args.content }}
                 </div>
 
-                <!-- Quote / Repost Content -->
-                <div v-if="action.action_args?.quote_content" class="quoted-block">
-                  <div class="quote-author">
-                    Replying to @{{ action.action_args.original_author_name || 'User' }}
-                  </div>
-                  <div class="quote-text">
+                <!-- QUOTE_POST: 引用帖子 -->
+                <template v-if="action.action_type === 'QUOTE_POST'">
+                  <div v-if="action.action_args?.quote_content" class="content-text">
                     {{ action.action_args.quote_content }}
                   </div>
-                </div>
+                  <div v-if="action.action_args?.original_content" class="quoted-block">
+                    <div class="quote-header">
+                      <span class="quote-icon">🔗</span>
+                      <span class="quote-label">引用 @{{ action.action_args.original_author_name || 'User' }}</span>
+                    </div>
+                    <div class="quote-text">
+                      {{ truncateContent(action.action_args.original_content, 150) }}
+                    </div>
+                  </div>
+                </template>
 
-                <!-- Target Context (e.g. for Likes) -->
-                <div v-if="action.action_type?.includes('LIKE') && action.action_args?.post_content" class="target-context">
-                  <span class="context-label">Liked Post:</span>
-                  "{{ truncateContent(action.action_args.post_content) }}"
+                <!-- REPOST: 转发帖子 -->
+                <template v-if="action.action_type === 'REPOST'">
+                  <div class="repost-info">
+                    <span class="repost-icon">🔄</span>
+                    <span class="repost-label">转发自 @{{ action.action_args?.original_author_name || 'User' }}</span>
+                  </div>
+                  <div v-if="action.action_args?.original_content" class="repost-content">
+                    {{ truncateContent(action.action_args.original_content, 200) }}
+                  </div>
+                </template>
+
+                <!-- LIKE_POST: 点赞帖子 -->
+                <template v-if="action.action_type === 'LIKE_POST'">
+                  <div class="like-info">
+                    <span class="like-icon">❤️</span>
+                    <span class="like-label">点赞了 @{{ action.action_args?.post_author_name || 'User' }} 的帖子</span>
+                  </div>
+                  <div v-if="action.action_args?.post_content" class="liked-content">
+                    "{{ truncateContent(action.action_args.post_content, 120) }}"
+                  </div>
+                </template>
+
+                <!-- CREATE_COMMENT: 发表评论 -->
+                <template v-if="action.action_type === 'CREATE_COMMENT'">
+                  <div v-if="action.action_args?.content" class="content-text">
+                    {{ action.action_args.content }}
+                  </div>
+                  <div v-if="action.action_args?.post_id" class="comment-context">
+                    <span class="context-icon">💬</span>
+                    <span>评论于帖子 #{{ action.action_args.post_id }}</span>
+                  </div>
+                </template>
+
+                <!-- SEARCH_POSTS: 搜索帖子 -->
+                <template v-if="action.action_type === 'SEARCH_POSTS'">
+                  <div class="search-info">
+                    <span class="search-icon">🔍</span>
+                    <span class="search-label">搜索关键词:</span>
+                    <span class="search-query">"{{ action.action_args?.query || '' }}"</span>
+                  </div>
+                </template>
+
+                <!-- FOLLOW: 关注用户 -->
+                <template v-if="action.action_type === 'FOLLOW'">
+                  <div class="follow-info">
+                    <span class="follow-icon">👤</span>
+                    <span class="follow-label">关注了用户 @{{ action.action_args?.target_user || action.action_args?.user_id || 'User' }}</span>
+                  </div>
+                </template>
+
+                <!-- UPVOTE / DOWNVOTE -->
+                <template v-if="action.action_type === 'UPVOTE_POST' || action.action_type === 'DOWNVOTE_POST'">
+                  <div class="vote-info">
+                    <span class="vote-icon">{{ action.action_type === 'UPVOTE_POST' ? '👍' : '👎' }}</span>
+                    <span class="vote-label">{{ action.action_type === 'UPVOTE_POST' ? '赞同' : '反对' }}了帖子</span>
+                  </div>
+                  <div v-if="action.action_args?.post_content" class="voted-content">
+                    "{{ truncateContent(action.action_args.post_content, 120) }}"
+                  </div>
+                </template>
+
+                <!-- DO_NOTHING: 无操作（静默） -->
+                <template v-if="action.action_type === 'DO_NOTHING'">
+                  <div class="idle-info">
+                    <span class="idle-icon">💤</span>
+                    <span class="idle-label">此轮无活动</span>
+                  </div>
+                </template>
+
+                <!-- 通用回退：未知类型或有 content 但未被上述处理 -->
+                <div v-if="!['CREATE_POST', 'QUOTE_POST', 'REPOST', 'LIKE_POST', 'CREATE_COMMENT', 'SEARCH_POSTS', 'FOLLOW', 'UPVOTE_POST', 'DOWNVOTE_POST', 'DO_NOTHING'].includes(action.action_type) && action.action_args?.content" class="content-text">
+                  {{ action.action_args.content }}
                 </div>
               </div>
 
@@ -118,9 +202,9 @@
           </div>
         </TransitionGroup>
 
-        <div v-if="recentActions.length === 0" class="waiting-state">
+        <div v-if="allActions.length === 0" class="waiting-state">
           <div class="pulse-ring"></div>
-          <span>Waiting for agent actions...</span>
+          <span>等待 Agent 行动中...</span>
         </div>
       </div>
     </div>
@@ -166,13 +250,23 @@ const isStarting = ref(false)
 const isStopping = ref(false)
 const startError = ref(null)
 const runStatus = ref({})
-const recentActions = ref([])
+const allActions = ref([]) // 所有动作（增量累积）
+const actionIds = ref(new Set()) // 用于去重的动作ID集合
 const scrollContainer = ref(null)
 
 // Computed
-// Reverse actions to show newest at top
+// 按时间倒序显示动作（最新的在最前面）
 const reversedActions = computed(() => {
-  return [...recentActions.value]
+  return [...allActions.value].reverse()
+})
+
+// 各平台动作计数
+const twitterActionsCount = computed(() => {
+  return allActions.value.filter(a => a.platform === 'twitter').length
+})
+
+const redditActionsCount = computed(() => {
+  return allActions.value.filter(a => a.platform === 'reddit').length
 })
 
 // Methods
@@ -184,7 +278,8 @@ const addLog = (msg) => {
 const resetAllState = () => {
   phase.value = 0
   runStatus.value = {}
-  recentActions.value = []
+  allActions.value = []
+  actionIds.value = new Set()
   prevTwitterRound.value = 0
   prevRedditRound.value = 0
   startError.value = null
@@ -374,9 +469,32 @@ const fetchRunStatusDetail = async () => {
   try {
     const res = await getRunStatusDetail(props.simulationId)
     
-    if (res.success && res.data?.recent_actions) {
-      // Keep only last 50 actions for performance
-      recentActions.value = res.data.recent_actions.slice(0, 50)
+    if (res.success && res.data) {
+      // 使用 all_actions 获取完整的动作列表
+      const serverActions = res.data.all_actions || []
+      
+      // 增量添加新动作（去重）
+      let newActionsAdded = 0
+      serverActions.forEach(action => {
+        // 生成唯一ID
+        const actionId = action.id || `${action.timestamp}-${action.platform}-${action.agent_id}-${action.action_type}`
+        
+        if (!actionIds.value.has(actionId)) {
+          actionIds.value.add(actionId)
+          allActions.value.push({
+            ...action,
+            _uniqueId: actionId
+          })
+          newActionsAdded++
+        }
+      })
+      
+      // 如果有新动作，自动滚动到顶部（最新动作显示在上面）
+      if (newActionsAdded > 0 && scrollContainer.value) {
+        nextTick(() => {
+          scrollContainer.value.scrollTop = 0
+        })
+      }
     }
   } catch (err) {
     console.warn('获取详细状态失败:', err)
@@ -386,17 +504,19 @@ const fetchRunStatusDetail = async () => {
 // Helpers
 const getActionTypeLabel = (type) => {
   const labels = {
-    'CREATE_POST': 'POST',
-    'REPOST': 'REPOST',
-    'LIKE_POST': 'LIKE',
-    'CREATE_COMMENT': 'COMMENT',
-    'LIKE_COMMENT': 'LIKE',
-    'DO_NOTHING': 'IDLE',
-    'FOLLOW': 'FOLLOW',
-    'SEARCH_POSTS': 'SEARCH',
-    'QUOTE_POST': 'QUOTE'
+    'CREATE_POST': '发帖',
+    'REPOST': '转发',
+    'LIKE_POST': '点赞',
+    'CREATE_COMMENT': '评论',
+    'LIKE_COMMENT': '点赞',
+    'DO_NOTHING': '静默',
+    'FOLLOW': '关注',
+    'SEARCH_POSTS': '搜索',
+    'QUOTE_POST': '引用',
+    'UPVOTE_POST': '赞同',
+    'DOWNVOTE_POST': '反对'
   }
-  return labels[type] || type || 'UNKNOWN'
+  return labels[type] || type || '未知'
 }
 
 const getActionTypeClass = (type) => {
@@ -406,14 +526,19 @@ const getActionTypeClass = (type) => {
     'LIKE_POST': 'badge-like',
     'CREATE_COMMENT': 'badge-comment',
     'LIKE_COMMENT': 'badge-like',
-    'QUOTE_POST': 'badge-quote'
+    'QUOTE_POST': 'badge-quote',
+    'FOLLOW': 'badge-follow',
+    'SEARCH_POSTS': 'badge-search',
+    'UPVOTE_POST': 'badge-upvote',
+    'DOWNVOTE_POST': 'badge-downvote',
+    'DO_NOTHING': 'badge-idle'
   }
   return classes[type] || 'badge-default'
 }
 
-const truncateContent = (content) => {
+const truncateContent = (content, maxLength = 100) => {
   if (!content) return ''
-  if (content.length > 100) return content.substring(0, 100) + '...'
+  if (content.length > maxLength) return content.substring(0, maxLength) + '...'
   return content
 }
 
@@ -570,31 +695,31 @@ onUnmounted(() => {
   margin-left: 4px;
 }
 
-.ctrl-btn {
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-weight: 600;
-  font-size: 12px;
-  border: none;
-  cursor: pointer;
-  display: flex;
+/* Action Button - Step2 Style */
+.action-btn {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  transition: all 0.2s;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.ctrl-btn.next {
-  background: #E8F5E9;
-  color: #2E7D32;
+.action-btn.primary {
+  background: #000;
+  color: #FFF;
 }
 
-.ctrl-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+.action-btn.primary:hover:not(:disabled) {
+  opacity: 0.8;
 }
 
-.ctrl-btn:disabled {
-  opacity: 0.6;
+.action-btn:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
@@ -604,6 +729,46 @@ onUnmounted(() => {
   overflow-y: auto;
   position: relative;
   background: #FAFAFA;
+}
+
+/* Timeline Header */
+.timeline-header {
+  position: sticky;
+  top: 0;
+  background: rgba(250, 250, 250, 0.95);
+  backdrop-filter: blur(8px);
+  padding: 12px 24px;
+  border-bottom: 1px solid #E0E0E0;
+  z-index: 5;
+}
+
+.timeline-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.total-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.platform-breakdown {
+  display: flex;
+  gap: 16px;
+}
+
+.twitter-count {
+  font-size: 12px;
+  color: #1DA1F2;
+  font-weight: 500;
+}
+
+.reddit-count {
+  font-size: 12px;
+  color: #FF5722;
+  font-weight: 500;
 }
 
 /* --- Timeline Feed --- */
@@ -728,6 +893,11 @@ onUnmounted(() => {
 .badge-like { background: #FFEBEE; color: #C62828; }
 .badge-repost { background: #E8F5E9; color: #2E7D32; }
 .badge-comment { background: #FFF3E0; color: #E65100; }
+.badge-follow { background: #FCE4EC; color: #AD1457; }
+.badge-search { background: #E8EAF6; color: #3949AB; }
+.badge-upvote { background: #E8F5E9; color: #388E3C; }
+.badge-downvote { background: #FFEBEE; color: #D32F2F; }
+.badge-idle { background: #ECEFF1; color: #607D8B; }
 .badge-default { background: #F5F5F5; color: #757575; }
 
 .content-text {
@@ -737,26 +907,198 @@ onUnmounted(() => {
   margin-bottom: 8px;
 }
 
+/* Quote Block */
 .quoted-block {
-  background: #F9F9F9;
+  background: #F8F9FA;
   border-left: 3px solid #DDD;
-  padding: 8px 12px;
-  border-radius: 0 4px 4px 0;
-  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 0 6px 6px 0;
+  margin-top: 10px;
 }
 
-.quote-author {
+.quote-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.quote-icon {
+  font-size: 12px;
+}
+
+.quote-label {
   font-size: 11px;
   color: #666;
-  margin-bottom: 4px;
+  font-weight: 500;
 }
 
 .quote-text {
   font-size: 12px;
   color: #555;
+  line-height: 1.5;
+}
+
+/* Repost Styles */
+.repost-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  color: #2E7D32;
+}
+
+.repost-icon {
+  font-size: 14px;
+}
+
+.repost-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.repost-content {
+  background: #F1F8E9;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #555;
+  line-height: 1.5;
+}
+
+/* Like Styles */
+.like-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  color: #C62828;
+}
+
+.like-icon {
+  font-size: 14px;
+}
+
+.like-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.liked-content {
+  background: #FFEBEE;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #666;
   font-style: italic;
 }
 
+/* Comment Styles */
+.comment-context {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #666;
+}
+
+.context-icon {
+  font-size: 12px;
+}
+
+/* Search Styles */
+.search-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #E3F2FD;
+  border-radius: 6px;
+}
+
+.search-icon {
+  font-size: 16px;
+}
+
+.search-label {
+  font-size: 12px;
+  color: #666;
+}
+
+.search-query {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1565C0;
+}
+
+/* Follow Styles */
+.follow-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #F3E5F5;
+  border-radius: 6px;
+  color: #7B1FA2;
+}
+
+.follow-icon {
+  font-size: 14px;
+}
+
+.follow-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Vote Styles */
+.vote-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.vote-icon {
+  font-size: 14px;
+}
+
+.vote-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #666;
+}
+
+.voted-content {
+  background: #F5F5F5;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #666;
+  font-style: italic;
+}
+
+/* Idle Styles */
+.idle-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #F5F5F5;
+  border-radius: 6px;
+  color: #999;
+}
+
+.idle-icon {
+  font-size: 14px;
+}
+
+.idle-label {
+  font-size: 12px;
+}
+
+/* Target Context (Legacy) */
 .target-context {
   font-size: 11px;
   color: #666;
