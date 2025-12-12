@@ -152,3 +152,19 @@ export const getSimulationActions = (simulationId, params = {}) => {
   return service.get(`/api/simulation/${simulationId}/actions`, { params })
 }
 
+/**
+ * 关闭模拟环境（优雅退出）
+ * @param {Object} data - { simulation_id, timeout? }
+ */
+export const closeSimulationEnv = (data) => {
+  return service.post('/api/simulation/close-env', data)
+}
+
+/**
+ * 获取模拟环境状态
+ * @param {Object} data - { simulation_id }
+ */
+export const getEnvStatus = (data) => {
+  return service.post('/api/simulation/env-status', data)
+}
+

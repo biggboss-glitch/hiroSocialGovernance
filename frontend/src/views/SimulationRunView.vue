@@ -71,7 +71,7 @@ import { useRoute, useRouter } from 'vue-router'
 import GraphPanel from '../components/GraphPanel.vue'
 import Step3Simulation from '../components/Step3Simulation.vue'
 import { getProject, getGraphData } from '../api/graph'
-import { getSimulation } from '../api/simulation'
+import { getSimulation, stopSimulation, closeSimulationEnv, getEnvStatus } from '../api/simulation'
 
 const route = useRoute()
 const router = useRouter()
@@ -142,7 +142,50 @@ const toggleMaximize = (target) => {
   }
 }
 
-const handleGoBack = () => {
+const handleGoBack = async () => {
+  // 在返回 Step 2 之前，先关闭正在运行的模拟
+  addLog('准备返回 Step 2，正在关闭模拟...')
+  
+  // 停止轮询
+  stopGraphRefresh()
+  
+  try {
+    // 先尝试优雅关闭模拟环境
+    const envStatusRes = await getEnvStatus({ simulation_id: currentSimulationId.value })
+    
+    if (envStatusRes.success && envStatusRes.data?.env_alive) {
+      addLog('正在关闭模拟环境...')
+      try {
+        await closeSimulationEnv({ 
+          simulation_id: currentSimulationId.value,
+          timeout: 10
+        })
+        addLog('✓ 模拟环境已关闭')
+      } catch (closeErr) {
+        addLog(`关闭模拟环境失败，尝试强制停止...`)
+        try {
+          await stopSimulation({ simulation_id: currentSimulationId.value })
+          addLog('✓ 模拟已强制停止')
+        } catch (stopErr) {
+          addLog(`强制停止失败: ${stopErr.message}`)
+        }
+      }
+    } else {
+      // 环境未运行，检查是否需要停止进程
+      if (isSimulating.value) {
+        addLog('正在停止模拟进程...')
+        try {
+          await stopSimulation({ simulation_id: currentSimulationId.value })
+          addLog('✓ 模拟已停止')
+        } catch (err) {
+          addLog(`停止模拟失败: ${err.message}`)
+        }
+      }
+    }
+  } catch (err) {
+    addLog(`检查模拟状态失败: ${err.message}`)
+  }
+  
   // 返回到 Step 2 (环境搭建)
   router.push({ name: 'Simulation', params: { simulationId: currentSimulationId.value } })
 }
