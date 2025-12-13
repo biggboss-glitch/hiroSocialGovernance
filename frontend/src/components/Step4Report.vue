@@ -1196,6 +1196,23 @@ watch(() => props.reportId, (newId) => {
   flex-direction: column;
 }
 
+.left-panel::-webkit-scrollbar {
+  width: 4px;
+}
+
+.left-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.left-panel::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 2px;
+}
+
+.left-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
 .outline-overview {
   padding: 20px;
   border-bottom: 1px solid #F3F4F6;
@@ -1565,6 +1582,23 @@ watch(() => props.reportId, (newId) => {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+
+.right-panel::-webkit-scrollbar {
+  width: 4px;
+}
+
+.right-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.right-panel::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 2px;
+}
+
+.right-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
 }
 
 /* Workflow Timeline */
