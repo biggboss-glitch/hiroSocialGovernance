@@ -1268,7 +1268,7 @@ watch(() => props.reportId, (newId) => {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  max-height: 400px;
+  max-height: 100px;
   overflow-y: auto;
   padding-right: 4px;
 }
