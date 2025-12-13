@@ -93,10 +93,12 @@
       <div class="action-controls">
         <button 
           class="action-btn primary"
-          :disabled="phase !== 2"
+          :disabled="phase !== 2 || isGeneratingReport"
           @click="handleNextStep"
         >
-          开始生成结果报告 <span class="arrow-icon">→</span>
+          <span v-if="isGeneratingReport" class="loading-spinner-small"></span>
+          {{ isGeneratingReport ? '启动中...' : '开始生成结果报告' }} 
+          <span v-if="!isGeneratingReport" class="arrow-icon">→</span>
         </button>
       </div>
     </div>
@@ -285,12 +287,14 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { 
   startSimulation, 
   stopSimulation,
   getRunStatus, 
   getRunStatusDetail
 } from '../api/simulation'
+import { generateReport } from '../api/report'
 
 const props = defineProps({
   simulationId: String,
@@ -306,7 +310,10 @@ const props = defineProps({
 
 const emit = defineEmits(['go-back', 'next-step', 'add-log', 'update-status'])
 
+const router = useRouter()
+
 // State
+const isGeneratingReport = ref(false)
 const phase = ref(0) // 0: 未开始, 1: 运行中, 2: 已完成
 const isStarting = ref(false)
 const isStopping = ref(false)
@@ -631,8 +638,40 @@ const formatActionTime = (timestamp) => {
   }
 }
 
-const handleNextStep = () => {
-  emit('next-step')
+const handleNextStep = async () => {
+  if (!props.simulationId) {
+    addLog('错误：缺少 simulationId')
+    return
+  }
+  
+  if (isGeneratingReport.value) {
+    addLog('报告生成请求已发送，请稍候...')
+    return
+  }
+  
+  isGeneratingReport.value = true
+  addLog('正在启动报告生成...')
+  
+  try {
+    const res = await generateReport({
+      simulation_id: props.simulationId,
+      force_regenerate: false
+    })
+    
+    if (res.success && res.data) {
+      const reportId = res.data.report_id
+      addLog(`✓ 报告生成任务已启动: ${reportId}`)
+      
+      // 跳转到报告页面
+      router.push({ name: 'Report', params: { reportId } })
+    } else {
+      addLog(`✗ 启动报告生成失败: ${res.error || '未知错误'}`)
+      isGeneratingReport.value = false
+    }
+  } catch (err) {
+    addLog(`✗ 启动报告生成异常: ${err.message}`)
+    isGeneratingReport.value = false
+  }
 }
 
 // Scroll log to bottom
@@ -1210,4 +1249,16 @@ onUnmounted(() => {
 .log-time { color: #555; min-width: 75px; }
 .log-msg { color: #BBB; word-break: break-all; }
 .mono { font-family: 'JetBrains Mono', monospace; }
+
+/* Loading spinner for button */
+.loading-spinner-small {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #FFF;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 6px;
+}
 </style>
