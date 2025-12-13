@@ -169,11 +169,11 @@ class InsightForgeResult:
     def to_text(self) -> str:
         """转换为详细的文本格式，供LLM理解"""
         text_parts = [
-            f"## 深度洞察检索结果",
-            f"原始问题: {self.query}",
-            f"模拟需求: {self.simulation_requirement}",
-            f"\n### 检索统计",
-            f"- 相关事实: {self.total_facts}条",
+            f"## 未来预测深度分析",
+            f"分析问题: {self.query}",
+            f"预测场景: {self.simulation_requirement}",
+            f"\n### 预测数据统计",
+            f"- 相关预测事实: {self.total_facts}条",
             f"- 涉及实体: {self.total_entities}个",
             f"- 关系链: {self.total_relationships}条"
         ]
@@ -248,13 +248,13 @@ class PanoramaResult:
     def to_text(self) -> str:
         """转换为文本格式"""
         text_parts = [
-            f"## 广度搜索结果（全貌视图）",
-            f"查询: {self.query}",
-            f"\n### 统计信息",
-            f"- 总节点数: {self.total_nodes}",
-            f"- 总边数: {self.total_edges}",
-            f"- 当前有效事实: {self.active_count}条",
-            f"- 历史/过期事实: {self.historical_count}条"
+            f"## 未来全景预测",
+            f"预测主题: {self.query}",
+            f"\n### 预测世界概览",
+            f"- 总实体数: {self.total_nodes}",
+            f"- 总关系数: {self.total_edges}",
+            f"- 当前有效预测: {self.active_count}条",
+            f"- 历史演变记录: {self.historical_count}条"
         ]
         
         # 当前有效的事实
@@ -1091,10 +1091,10 @@ class ZepToolsService:
         
         将复杂问题分解为多个可以独立检索的子问题
         """
-        system_prompt = """你是一个专业的问题分析专家。你的任务是将一个复杂问题分解为多个可以独立检索的子问题。
+        system_prompt = """你是一个专业的问题分析专家。你的任务是将一个复杂问题分解为多个可以在模拟世界中独立观察的子问题。
 
 要求：
-1. 每个子问题应该足够具体，可以在知识图谱中检索到相关信息
+1. 每个子问题应该足够具体，可以在模拟世界中找到相关的Agent行为或事件
 2. 子问题应该覆盖原问题的不同维度（如：谁、什么、为什么、怎么样、何时、何地）
 3. 子问题应该与模拟场景相关
 4. 返回JSON格式：{"sub_queries": ["子问题1", "子问题2", ...]}"""

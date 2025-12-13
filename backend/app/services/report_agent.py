@@ -233,24 +233,52 @@ class ReportLogger:
             }
         )
     
-    def log_section_complete(
+    def log_section_content(
         self,
         section_title: str,
         section_index: int,
         content: str,
-        tool_calls_count: int
+        tool_calls_count: int,
+        is_subsection: bool = False
     ):
-        """记录章节生成完成（完整内容，不截断）"""
+        """记录章节/子章节内容生成完成（仅记录内容，不代表整个章节完成）"""
+        action = "subsection_content" if is_subsection else "section_content"
+        self.log(
+            action=action,
+            stage="generating",
+            section_title=section_title,
+            section_index=section_index,
+            details={
+                "content": content,  # 完整内容，不截断
+                "content_length": len(content),
+                "tool_calls_count": tool_calls_count,
+                "is_subsection": is_subsection,
+                "message": f"{'子章节' if is_subsection else '主章节'} {section_title} 内容生成完成"
+            }
+        )
+    
+    def log_section_full_complete(
+        self,
+        section_title: str,
+        section_index: int,
+        full_content: str,
+        subsection_count: int
+    ):
+        """
+        记录完整章节生成完成（包含所有子章节的合并内容）
+        
+        前端应监听此日志来判断一个章节是否真正完成，并获取完整内容
+        """
         self.log(
             action="section_complete",
             stage="generating",
             section_title=section_title,
             section_index=section_index,
             details={
-                "content": content,  # 完整章节内容，不截断
-                "content_length": len(content),
-                "tool_calls_count": tool_calls_count,
-                "message": f"章节 {section_title} 生成完成"
+                "content": full_content,  # 完整章节内容（含子章节），不截断
+                "content_length": len(full_content),
+                "subsection_count": subsection_count,
+                "message": f"章节 {section_title} 完整生成完成（含 {subsection_count} 个子章节）"
             }
         )
     
@@ -464,14 +492,14 @@ class ReportAgent:
     【重要】Report Agent必须优先调用工具获取模拟数据，而非使用自身知识！
     """
     
-    # 最大工具调用次数（每个章节）- 增加上限以鼓励更多检索
-    MAX_TOOL_CALLS_PER_SECTION = 10
+    # 最大工具调用次数（每个章节）
+    MAX_TOOL_CALLS_PER_SECTION = 4
     
     # 最大反思轮数
     MAX_REFLECTION_ROUNDS = 2
     
     # 对话中的最大工具调用次数
-    MAX_TOOL_CALLS_PER_CHAT = 8
+    MAX_TOOL_CALLS_PER_CHAT = 3
     
     def __init__(
         self, 
@@ -807,24 +835,34 @@ class ReportAgent:
             progress_callback("planning", 30, "正在生成报告大纲...")
         
         # 构建规划prompt
-        system_prompt = """你是一个专业的舆情分析报告撰写专家。你需要根据用户的模拟需求和已有的知识图谱信息，规划一份精炼的模拟分析报告大纲。
+        system_prompt = """你是一个「未来预测报告」的撰写专家，拥有对模拟世界的「上帝视角」——你可以洞察模拟中每一位Agent的行为、言论和互动。
 
-【重要】报告章节数量限制：
-- 报告最多包含5个主章节
+【核心理念】
+我们构建了一个模拟世界，并向其中注入了特定的「模拟需求」作为变量。模拟世界的演化结果，就是对未来可能发生情况的预测。你正在观察的不是"实验数据"，而是"未来的预演"。
+
+【你的任务】
+撰写一份「未来预测报告」，回答：
+1. 在我们设定的条件下，未来发生了什么？
+2. 各类Agent（人群）是如何反应和行动？
+3. 这个模拟揭示了哪些值得关注的未来趋势和风险？
+
+【报告定位】
+- ✅ 这是一份基于模拟的未来预测报告，揭示"如果这样，未来会怎样"
+- ✅ 聚焦于预测结果：事件走向、群体反应、涌现现象、潜在风险
+- ✅ 模拟世界中的Agent言行就是对未来人群行为的预测
+- ❌ 不是对现实世界现状的分析
+- ❌ 不是泛泛而谈的舆情综述
+
+【章节数量限制】
+- 最少2个主章节，最多5个主章节
 - 每个章节可以有0-2个子章节
-- 内容要精炼，避免冗余
-
-报告应聚焦以下核心内容（选择最相关的3-5项）：
-1. 执行摘要 - 简要总结模拟结果和关键发现
-2. 模拟背景 - 描述模拟的初始条件和场景设定
-3. 关键发现 - 分析模拟中的重要发现和趋势
-4. 舆情分析 - 分析舆论走向、情绪变化、关键意见领袖等
-5. 建议与展望 - 基于分析结果提出建议
+- 内容要精炼，聚焦于核心预测发现
+- 章节结构由你根据预测结果自主设计
 
 请输出JSON格式的报告大纲，格式如下：
 {
     "title": "报告标题",
-    "summary": "报告摘要（一句话概括）",
+    "summary": "报告摘要（一句话概括核心预测发现）",
     "sections": [
         {
             "title": "章节标题",
@@ -836,23 +874,28 @@ class ReportAgent:
     ]
 }
 
-注意：sections数组最多包含5个元素！"""
+注意：sections数组最少2个，最多5个元素！"""
 
-        user_prompt = f"""模拟需求：
-{self.simulation_requirement}
+        user_prompt = f"""【预测场景设定】
+我们向模拟世界注入的变量（模拟需求）：{self.simulation_requirement}
 
-已有的知识图谱信息：
-- 总节点数: {context.get('graph_statistics', {}).get('total_nodes', 0)}
-- 总边数: {context.get('graph_statistics', {}).get('total_edges', 0)}
-- 实体类型: {list(context.get('graph_statistics', {}).get('entity_types', {}).keys())}
-- 实体数量: {context.get('total_entities', 0)}
+【模拟世界规模】
+- 参与模拟的实体数量: {context.get('graph_statistics', {}).get('total_nodes', 0)}
+- 实体间产生的关系数量: {context.get('graph_statistics', {}).get('total_edges', 0)}
+- 实体类型分布: {list(context.get('graph_statistics', {}).get('entity_types', {}).keys())}
+- 活跃Agent数量: {context.get('total_entities', 0)}
 
-相关事实：
+【模拟预测到的部分未来事实样本】
 {json.dumps(context.get('related_facts', [])[:10], ensure_ascii=False, indent=2)}
 
-请根据以上信息，生成一份针对此模拟场景的报告大纲。
+请以「上帝视角」审视这个未来预演：
+1. 在我们设定的条件下，未来呈现出了什么样的状态？
+2. 各类人群（Agent）是如何反应和行动的？
+3. 这个模拟揭示了哪些值得关注的未来趋势？
 
-【再次提醒】报告必须控制在最多5个章节以内，内容要精炼聚焦。"""
+根据预测结果，设计最合适的报告章节结构。
+
+【再次提醒】报告章节数量：最少2个，最多5个，内容要精炼聚焦于核心预测发现。"""
 
         try:
             response = self.llm.chat_json(
@@ -896,16 +939,14 @@ class ReportAgent:
             
         except Exception as e:
             logger.error(f"大纲规划失败: {str(e)}")
-            # 返回默认大纲（5个章节）
+            # 返回默认大纲（3个章节，作为fallback）
             return ReportOutline(
-                title="模拟分析报告",
-                summary="基于模拟结果的分析报告",
+                title="未来预测报告",
+                summary="基于模拟预测的未来趋势与风险分析",
                 sections=[
-                    ReportSection(title="执行摘要"),
-                    ReportSection(title="模拟背景与场景设定"),
-                    ReportSection(title="关键发现与趋势分析"),
-                    ReportSection(title="舆情走向与情绪演化"),
-                    ReportSection(title="总结与建议")
+                    ReportSection(title="预测场景与核心发现"),
+                    ReportSection(title="人群行为预测分析"),
+                    ReportSection(title="趋势展望与风险提示")
                 ]
             )
     
@@ -949,32 +990,47 @@ class ReportAgent:
         sub_heading_level = 3  # 子标题使用三级（###）
         sub_sub_heading_level = 4  # 更小的子标题使用四级（####）
         
-        system_prompt = f"""你是一个专业的舆情分析报告撰写专家，正在撰写报告的一个章节。
+        system_prompt = f"""你是一个「未来预测报告」的撰写专家，正在撰写报告的一个章节。
 
 报告标题: {outline.title}
 报告摘要: {outline.summary}
-模拟需求: {self.simulation_requirement}
+预测场景（模拟需求）: {self.simulation_requirement}
 
 当前要撰写的章节: {section.title}
+
+═══════════════════════════════════════════════════════════════
+【核心理念】
+═══════════════════════════════════════════════════════════════
+
+模拟世界是对未来的预演。我们向模拟世界注入了特定条件（模拟需求），
+模拟中Agent的行为和互动，就是对未来人群行为的预测。
+
+你的任务是：
+- 揭示在设定条件下，未来发生了什么
+- 预测各类人群（Agent）是如何反应和行动的
+- 发现值得关注的未来趋势、风险和机会
+
+❌ 不要写成对现实世界现状的分析
+✅ 要聚焦于"未来会怎样"——模拟结果就是预测的未来
 
 ═══════════════════════════════════════════════════════════════
 【最重要的规则 - 必须遵守】
 ═══════════════════════════════════════════════════════════════
 
-1. 【必须调用工具获取数据】
-   - 你正在撰写的是基于模拟结果的分析报告
-   - 所有内容必须来自模拟图谱中的真实数据
+1. 【必须调用工具观察模拟世界】
+   - 你正在以「上帝视角」观察未来的预演
+   - 所有内容必须来自模拟世界中发生的事件和Agent言行
    - 禁止使用你自己的知识来编写报告内容
-   - 每个章节至少调用1-3次工具获取相关信息
+   - 每个章节至少调用2次工具（最多4次）来观察模拟的世界，它代表了未来
 
-2. 【必须引用模拟结果原文】
-   - 检索到的事实原文是最有价值的内容
-   - 在报告中使用引用格式展示这些原文，例如：
-     > "原文内容..."
-   - 这些原文证明了模拟的真实效果
+2. 【必须引用Agent的原始言行】
+   - Agent的发言和行为是对未来人群行为的预测
+   - 在报告中使用引用格式展示这些预测，例如：
+     > "某类人群会表示：原文内容..."
+   - 这些引用是模拟预测的核心证据
 
-3. 【尊重模拟结果】
-   - 报告内容必须反映模拟中实际发生的情况
+3. 【忠实呈现预测结果】
+   - 报告内容必须反映模拟世界中的代表未来的模拟结果
    - 不要添加模拟中不存在的信息
    - 如果某方面信息不足，如实说明
 
@@ -1017,7 +1073,7 @@ class ReportAgent:
 ```
 
 ═══════════════════════════════════════════════════════════════
-【可用检索工具】（建议每章节调用2-5次）
+【可用检索工具】（每章节调用2-4次）
 ═══════════════════════════════════════════════════════════════
 
 {self._get_tools_description()}
@@ -1026,6 +1082,7 @@ class ReportAgent:
 - insight_forge: 用于深度分析，会自动分解问题并多维度检索
 - panorama_search: 用于了解全貌和演变过程
 - quick_search: 用于快速验证某个具体信息
+- interview_agents: 用于采访模拟Agent，获取不同角色的真实观点和看法
 
 ═══════════════════════════════════════════════════════════════
 【ReACT工作流程】
@@ -1037,7 +1094,7 @@ class ReportAgent:
    {{"name": "工具名称", "parameters": {{"参数名": "参数值"}}}}
    </tool_call>
 3. Observation: [分析工具返回的结果]
-4. 重复步骤1-3，直到收集到足够信息（建议2-5轮）
+4. 重复步骤1-3，直到收集到足够信息（最多5轮）
 5. Final Answer: [基于检索结果撰写章节内容]
 
 ═══════════════════════════════════════════════════════════════
@@ -1111,9 +1168,9 @@ class ReportAgent:
             {"role": "user", "content": user_prompt}
         ]
         
-        # ReACT循环 - 优化后增加工具调用次数
+        # ReACT循环
         tool_calls_count = 0
-        max_iterations = self.MAX_TOOL_CALLS_PER_SECTION + 3  # 增加迭代次数
+        max_iterations = 5  # 最大迭代轮数
         min_tool_calls = 2  # 最少工具调用次数
         
         # 报告上下文，用于InsightForge的子问题生成
@@ -1173,13 +1230,16 @@ class ReportAgent:
                 final_answer = response.split("Final Answer:")[-1].strip()
                 logger.info(f"章节 {section.title} 生成完成（工具调用: {tool_calls_count}次）")
                 
-                # 记录章节完成日志
+                # 记录章节内容生成完成日志（注意：这只是内容完成，不代表整个章节完成）
+                # 如果是子章节，section_index >= 100
+                is_subsection = section_index >= 100
                 if self.report_logger:
-                    self.report_logger.log_section_complete(
+                    self.report_logger.log_section_content(
                         section_title=section.title,
                         section_index=section_index,
                         content=final_answer,
-                        tool_calls_count=tool_calls_count
+                        tool_calls_count=tool_calls_count,
+                        is_subsection=is_subsection
                     )
                 
                 return final_answer
@@ -1284,13 +1344,15 @@ class ReportAgent:
         else:
             final_answer = response
         
-        # 记录章节完成日志
+        # 记录章节内容生成完成日志（注意：这只是内容完成，不代表整个章节完成）
+        is_subsection = section_index >= 100
         if self.report_logger:
-            self.report_logger.log_section_complete(
+            self.report_logger.log_section_content(
                 section_title=section.title,
                 section_index=section_index,
                 content=final_answer,
-                tool_calls_count=tool_calls_count
+                tool_calls_count=tool_calls_count,
+                is_subsection=is_subsection
             )
         
         return final_answer
@@ -1475,6 +1537,20 @@ class ReportAgent:
                 )
                 completed_section_titles.append(section.title)
                 
+                # 【重要】记录完整章节完成日志，包含合并后的完整内容
+                # 构建完整章节内容（主章节 + 所有子章节）
+                full_section_content = f"## {section.title}\n\n{section_content}\n\n"
+                for sub_title, sub_content in subsection_contents:
+                    full_section_content += f"### {sub_title}\n\n{sub_content}\n\n"
+                
+                if self.report_logger:
+                    self.report_logger.log_section_full_complete(
+                        section_title=section.title,
+                        section_index=section_num,
+                        full_content=full_section_content.strip(),
+                        subsection_count=len(subsection_contents)
+                    )
+                
                 logger.info(f"章节已保存（包含{len(subsection_contents)}个子章节）: {report_id}/section_{section_num:02d}.md")
                 
                 # 更新进度
@@ -1580,39 +1656,47 @@ class ReportAgent:
         
         chat_history = chat_history or []
         
-        system_prompt = f"""你是一个专业的舆情分析助手，负责回答关于模拟分析报告的问题。
+        system_prompt = f"""你是一个拥有「上帝视角」的未来预测助手，负责回答关于模拟预测结果的问题。
 
 ═══════════════════════════════════════════════════════════════
-【背景信息】
+【预测场景背景】
 ═══════════════════════════════════════════════════════════════
-模拟需求: {self.simulation_requirement}
-图谱ID: {self.graph_id}
+预测条件（模拟需求）: {self.simulation_requirement}
+模拟世界ID: {self.graph_id}
+
+模拟世界是对未来的预演。你的任务是帮助用户理解：在设定条件下，未来会发生什么？各类人群会如何反应？
 
 ═══════════════════════════════════════════════════════════════
 【最重要的规则 - 必须遵守】
 ═══════════════════════════════════════════════════════════════
 
-1. 【必须调用工具获取数据】
-   - 你的回答必须基于模拟图谱中的真实数据
+1. 【必须调用工具获取预测数据】
+   - 你的回答必须基于模拟世界中的预测结果
    - 禁止使用你自己的知识来回答问题
-   - 每次回答前至少调用1次工具获取相关信息
+   - 每次回答前至少调用1次工具获取预测数据
 
-2. 【必须引用模拟结果原文】
-   - 检索到的事实原文是最有价值的内容
-   - 在回答中使用引用格式展示这些原文，例如：
-     > "原文内容..."
-   - 原文引用证明了答案的可靠性
+2. 【必须引用Agent的原始言行】
+   - Agent的发言和行为是对未来人群行为的预测
+   - 在回答中使用引用格式展示这些预测，例如：
+     > "某类人群会表示：原文内容..."
+   - 这些引用是预测的核心证据
 
-3. 【尊重模拟结果】
-   - 回答必须反映模拟中实际发生的情况
+3. 【忠实呈现预测结果】
+   - 回答必须反映模拟世界中的预测结果
    - 不要添加模拟中不存在的信息
    - 如果某方面信息不足，如实说明
 
 ═══════════════════════════════════════════════════════════════
-【可用检索工具】
+【可用检索工具】（最多调用3次）
 ═══════════════════════════════════════════════════════════════
 
 {self._get_tools_description()}
+
+【工具使用建议】
+- insight_forge: 用于深度分析，会自动分解问题并多维度检索
+- panorama_search: 用于了解全貌和演变过程
+- quick_search: 用于快速验证某个具体信息
+- interview_agents: 用于采访模拟Agent，获取不同角色的真实观点和看法
 
 【工具调用格式】
 <tool_call>
@@ -1644,9 +1728,9 @@ class ReportAgent:
 【提醒】请先调用工具获取模拟数据，再回答问题。推荐使用 insight_forge 进行深度检索。"""
         })
         
-        # ReACT循环 - 增加迭代次数以支持更多工具调用
+        # ReACT循环
         tool_calls_made = []
-        max_iterations = self.MAX_TOOL_CALLS_PER_CHAT
+        max_iterations = 3  # 最大迭代轮数
         min_tool_calls = 1  # 最少工具调用次数
         
         for iteration in range(max_iterations):

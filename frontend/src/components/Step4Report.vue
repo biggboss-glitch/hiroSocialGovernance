@@ -4,7 +4,12 @@
     <div class="status-bar">
       <div class="status-left">
         <div class="report-badge">
-          <span class="badge-icon">📊</span>
+          <svg class="badge-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+          </svg>
           <span class="badge-text">Report Agent</span>
         </div>
         <div class="status-indicator" :class="statusClass">
@@ -16,258 +21,295 @@
       <div class="status-right">
         <div class="stats-group" v-if="reportOutline">
           <span class="stat-item">
-            <span class="stat-label">章节</span>
+            <span class="stat-label">Sections</span>
             <span class="stat-value mono">{{ completedSections }}/{{ totalSections }}</span>
           </span>
           <span class="stat-item">
-            <span class="stat-label">工具调用</span>
+            <span class="stat-label">Tools</span>
             <span class="stat-value mono">{{ totalToolCalls }}</span>
           </span>
           <span class="stat-item">
-            <span class="stat-label">耗时</span>
+            <span class="stat-label">Time</span>
             <span class="stat-value mono">{{ formatElapsedTime }}</span>
           </span>
         </div>
       </div>
     </div>
 
-    <!-- Main Content: Agent Workflow -->
-    <div class="main-content-area" ref="mainContent">
-      <!-- Report Outline Card (显示在顶部) -->
-      <div v-if="reportOutline" class="outline-card">
-        <div class="outline-header">
-          <div class="outline-title-wrapper">
-            <svg class="outline-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-              <polyline points="10 9 9 9 8 9"></polyline>
-            </svg>
-            <h2 class="outline-title">{{ reportOutline.title }}</h2>
-          </div>
-          <span class="outline-badge">大纲已生成</span>
+    <!-- Main Split Layout -->
+    <div class="main-split-layout">
+      <!-- LEFT PANEL: Progress & Content -->
+      <div class="left-panel" ref="leftPanel">
+        <div class="panel-header">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 11l3 3L22 4"></path>
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+          </svg>
+          <span>Report Progress</span>
         </div>
-        <p class="outline-summary">{{ reportOutline.summary }}</p>
-        <div class="outline-sections">
+
+        <!-- Outline Overview -->
+        <div v-if="reportOutline" class="outline-overview">
+          <h2 class="report-title">{{ reportOutline.title }}</h2>
+          <p class="report-summary">{{ reportOutline.summary }}</p>
+          
+          <!-- Progress Bar -->
+          <div class="progress-wrapper">
+            <div class="progress-bar">
+              <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+            </div>
+            <span class="progress-text">{{ progressPercent }}%</span>
+          </div>
+        </div>
+
+        <!-- Sections List with Content -->
+        <div class="sections-container" v-if="reportOutline">
           <div 
             v-for="(section, idx) in reportOutline.sections" 
             :key="idx"
-            class="outline-section-item"
+            class="section-card"
             :class="{ 
               'completed': isSectionCompleted(idx + 1),
               'current': currentSectionIndex === idx + 1,
-              'expanded': expandedSections.has(idx)
+              'pending': !isSectionCompleted(idx + 1) && currentSectionIndex !== idx + 1
             }"
-            @click="toggleSection(idx)"
           >
-            <div class="section-header">
-              <span class="section-num">{{ String(idx + 1).padStart(2, '0') }}</span>
-              <span class="section-title">{{ section.title }}</span>
-              <span class="section-status">
-                <svg v-if="isSectionCompleted(idx + 1)" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3">
+            <div class="section-card-header" @click="toggleSectionContent(idx)">
+              <div class="section-indicator">
+                <svg v-if="isSectionCompleted(idx + 1)" class="check-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3">
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
-                <span v-else-if="currentSectionIndex === idx + 1" class="generating-dot"></span>
-              </span>
-              <span class="section-toggle" v-if="generatedSections[idx + 1]">
-                {{ expandedSections.has(idx) ? '−' : '+' }}
+                <div v-else-if="currentSectionIndex === idx + 1" class="generating-spinner"></div>
+                <span v-else class="section-number">{{ idx + 1 }}</span>
+              </div>
+              <span class="section-name">{{ section.title }}</span>
+              <span v-if="generatedSections[idx + 1]" class="expand-btn">
+                {{ expandedContent.has(idx) ? '−' : '+' }}
               </span>
             </div>
-            <!-- 已生成的章节内容预览 -->
-            <div v-if="expandedSections.has(idx) && generatedSections[idx + 1]" class="section-content-preview">
-              <div class="content-markdown" v-html="renderMarkdown(generatedSections[idx + 1])"></div>
-            </div>
+            
+            <!-- Section Content Preview -->
+            <Transition name="slide-content">
+              <div v-if="expandedContent.has(idx) && generatedSections[idx + 1]" class="section-content">
+                <div class="content-body" v-html="renderMarkdown(generatedSections[idx + 1])"></div>
+              </div>
+            </Transition>
           </div>
+        </div>
+
+        <!-- Waiting State -->
+        <div v-if="!reportOutline" class="waiting-placeholder">
+          <div class="waiting-animation">
+            <div class="waiting-ring"></div>
+            <div class="waiting-ring"></div>
+            <div class="waiting-ring"></div>
+          </div>
+          <span class="waiting-text">Waiting for Report Agent...</span>
         </div>
       </div>
 
-      <!-- Agent Action Feed -->
-      <div class="action-feed">
-        <div class="feed-header" v-if="agentLogs.length > 0">
-          <span class="feed-title">Agent 工作流</span>
-          <span class="feed-count">{{ agentLogs.length }} 条记录</span>
+      <!-- RIGHT PANEL: Workflow Timeline -->
+      <div class="right-panel" ref="rightPanel">
+        <div class="panel-header">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          <span>Agent Workflow</span>
+          <span class="log-count" v-if="agentLogs.length > 0">{{ agentLogs.length }}</span>
         </div>
 
-        <div class="feed-timeline">
-          <TransitionGroup name="feed-item">
+        <div class="workflow-timeline">
+          <TransitionGroup name="timeline-item">
             <div 
               v-for="(log, idx) in displayLogs" 
               :key="log.timestamp + '-' + idx"
-              class="feed-item"
-              :class="getLogClass(log)"
+              class="timeline-item"
+              :class="getTimelineItemClass(log)"
             >
-              <div class="item-marker">
-                <div class="marker-icon" :class="getMarkerClass(log)">
-                  <component :is="getLogIcon(log)" />
-                </div>
+              <!-- Timeline Connector -->
+              <div class="timeline-connector">
+                <div class="connector-dot" :class="getConnectorClass(log)"></div>
+                <div class="connector-line" v-if="idx < displayLogs.length - 1"></div>
               </div>
               
-              <div class="item-content">
-                <div class="item-header">
-                  <span class="item-action">{{ getActionLabel(log.action) }}</span>
-                  <span class="item-stage" :class="log.stage">{{ log.stage }}</span>
-                  <span class="item-time">{{ formatTime(log.timestamp) }}</span>
+              <!-- Timeline Content -->
+              <div class="timeline-content">
+                <div class="timeline-header">
+                  <span class="action-label">{{ getActionLabel(log.action) }}</span>
+                  <span class="action-time">{{ formatTime(log.timestamp) }}</span>
                 </div>
                 
-                <!-- 根据不同 action 类型展示不同内容 -->
-                <div class="item-body">
-                  <!-- report_start -->
+                <!-- Action Body - Different for each type -->
+                <div class="timeline-body" :class="{ 'collapsed': isLogCollapsed(log) }" @click="toggleLogExpand(log)">
+                  
+                  <!-- Report Start -->
                   <template v-if="log.action === 'report_start'">
-                    <div class="info-block">
-                      <span class="info-label">Simulation:</span>
-                      <span class="info-value mono">{{ log.details?.simulation_id }}</span>
+                    <div class="info-row">
+                      <span class="info-key">Simulation</span>
+                      <span class="info-val mono">{{ log.details?.simulation_id }}</span>
                     </div>
-                    <div class="info-block" v-if="log.details?.simulation_requirement">
-                      <span class="info-label">需求:</span>
-                      <span class="info-value">{{ log.details.simulation_requirement }}</span>
+                    <div class="info-row" v-if="log.details?.simulation_requirement">
+                      <span class="info-key">Requirement</span>
+                      <span class="info-val">{{ log.details.simulation_requirement }}</span>
                     </div>
                   </template>
 
-                  <!-- planning_start / planning_complete -->
+                  <!-- Planning -->
                   <template v-if="log.action === 'planning_start'">
-                    <div class="message-text">{{ log.details?.message }}</div>
+                    <div class="status-message planning">{{ log.details?.message }}</div>
                   </template>
                   <template v-if="log.action === 'planning_complete'">
-                    <div class="message-text success">{{ log.details?.message }}</div>
-                    <div class="outline-mini" v-if="log.details?.outline">
-                      <span class="mini-label">共 {{ log.details.outline.sections?.length || 0 }} 个章节</span>
+                    <div class="status-message success">{{ log.details?.message }}</div>
+                    <div class="outline-badge" v-if="log.details?.outline">
+                      {{ log.details.outline.sections?.length || 0 }} sections planned
                     </div>
                   </template>
 
-                  <!-- section_start -->
+                  <!-- Section Start -->
                   <template v-if="log.action === 'section_start'">
-                    <div class="section-info">
-                      <span class="section-badge">章节 {{ log.section_index }}</span>
-                      <span class="section-name">{{ log.section_title }}</span>
+                    <div class="section-tag">
+                      <span class="tag-num">#{{ log.section_index }}</span>
+                      <span class="tag-title">{{ log.section_title }}</span>
                     </div>
                   </template>
-
-                  <!-- tool_call -->
-                  <template v-if="log.action === 'tool_call'">
-                    <div class="tool-call-block">
-                      <div class="tool-name">
-                        <svg class="tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
-                        </svg>
-                        {{ log.details?.tool_name }}
-                      </div>
-                      <div class="tool-params" v-if="log.details?.parameters">
-                        <pre>{{ formatParams(log.details.parameters) }}</pre>
-                      </div>
+                  
+                  <!-- Section/Subsection Content Generated (内容生成完成，但整个章节可能还没完成) -->
+                  <template v-if="log.action === 'section_content' || log.action === 'subsection_content'">
+                    <div class="section-tag content-ready" :class="{ 'is-subsection': log.action === 'subsection_content' }">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 20h9"></path>
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                      </svg>
+                      <span class="tag-title">{{ log.section_title }}</span>
+                      <span v-if="log.action === 'subsection_content'" class="tag-sub">(subsection)</span>
                     </div>
                   </template>
-
-                  <!-- tool_result -->
-                  <template v-if="log.action === 'tool_result'">
-                    <div class="tool-result-block" :class="'tool-' + log.details?.tool_name">
-                      <div class="result-header">
-                        <span class="result-tool">{{ getToolDisplayName(log.details?.tool_name) }}</span>
-                        <span class="result-length">{{ log.details?.result_length }} chars</span>
-                        <button 
-                          class="toggle-raw-btn" 
-                          @click.stop="toggleRawResult(log.timestamp)"
-                        >
-                          {{ showRawResult[log.timestamp] ? '收起原文' : '查看原文' }}
-                        </button>
-                      </div>
-                      
-                      <!-- 结构化展示 -->
-                      <div class="result-structured" v-if="!showRawResult[log.timestamp] && log.details?.result">
-                        <!-- insight_forge 深度洞察 -->
-                        <template v-if="log.details?.tool_name === 'insight_forge'">
-                          <InsightForgeResult :result="parseInsightForge(log.details.result)" />
-                        </template>
-                        
-                        <!-- panorama_search 广度搜索 -->
-                        <template v-else-if="log.details?.tool_name === 'panorama_search'">
-                          <PanoramaResult :result="parsePanorama(log.details.result)" />
-                        </template>
-                        
-                        <!-- interview_agents 深度采访 -->
-                        <template v-else-if="log.details?.tool_name === 'interview_agents'">
-                          <InterviewResult :result="parseInterview(log.details.result)" />
-                        </template>
-                        
-                        <!-- quick_search 简单搜索 -->
-                        <template v-else-if="log.details?.tool_name === 'quick_search'">
-                          <QuickSearchResult :result="parseQuickSearch(log.details.result)" />
-                        </template>
-                        
-                        <!-- 其他工具 - 显示原文 -->
-                        <template v-else>
-                          <div class="result-content">
-                            <pre>{{ log.details.result }}</pre>
-                          </div>
-                        </template>
-                      </div>
-                      
-                      <!-- 原文展示 -->
-                      <div class="result-raw" v-if="showRawResult[log.timestamp] && log.details?.result">
-                        <pre>{{ log.details.result }}</pre>
-                      </div>
-                    </div>
-                  </template>
-
-                  <!-- llm_response -->
-                  <template v-if="log.action === 'llm_response'">
-                    <div class="llm-response-block">
-                      <div class="response-meta">
-                        <span class="meta-item" v-if="log.details?.iteration">
-                          迭代 #{{ log.details.iteration }}
-                        </span>
-                        <span class="meta-item" :class="{ active: log.details?.has_tool_calls }">
-                          工具调用: {{ log.details?.has_tool_calls ? '是' : '否' }}
-                        </span>
-                        <span class="meta-item" :class="{ active: log.details?.has_final_answer }">
-                          最终答案: {{ log.details?.has_final_answer ? '是' : '否' }}
-                        </span>
-                      </div>
-                      <div class="response-content" v-if="log.details?.response">
-                        <pre>{{ log.details.response }}</pre>
-                      </div>
-                    </div>
-                  </template>
-
-                  <!-- section_complete -->
+                  
+                  <!-- Section Complete (完整章节生成完成，含所有子章节) -->
                   <template v-if="log.action === 'section_complete'">
-                    <div class="complete-info">
-                      <svg class="complete-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    <div class="section-tag completed">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="20 6 9 17 4 12"></polyline>
                       </svg>
-                      <span>章节「{{ log.section_title }}」生成完成</span>
+                      <span class="tag-title">{{ log.section_title }}</span>
+                      <span v-if="log.details?.subsection_count > 0" class="tag-sub">(+{{ log.details.subsection_count }} subsections)</span>
                     </div>
                   </template>
 
-                  <!-- report_complete -->
+                  <!-- Tool Call -->
+                  <template v-if="log.action === 'tool_call'">
+                    <div class="tool-badge">
+                      <svg class="tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                      </svg>
+                      {{ getToolDisplayName(log.details?.tool_name) }}
+                    </div>
+                    <div v-if="log.details?.parameters && expandedLogs.has(log.timestamp)" class="tool-params">
+                      <pre>{{ formatParams(log.details.parameters) }}</pre>
+                    </div>
+                    <button v-if="log.details?.parameters" class="expand-toggle" @click.stop="toggleLogExpand(log)">
+                      {{ expandedLogs.has(log.timestamp) ? 'Hide Params' : 'Show Params' }}
+                    </button>
+                  </template>
+
+                  <!-- Tool Result -->
+                  <template v-if="log.action === 'tool_result'">
+                    <div class="result-wrapper" :class="'result-' + log.details?.tool_name">
+                      <div class="result-meta">
+                        <span class="result-tool">{{ getToolDisplayName(log.details?.tool_name) }}</span>
+                        <span class="result-size">{{ formatResultSize(log.details?.result_length) }}</span>
+                      </div>
+                      
+                      <!-- Structured Result Display -->
+                      <div v-if="!showRawResult[log.timestamp]" class="result-structured">
+                        <!-- Interview Agents - Special Display -->
+                        <template v-if="log.details?.tool_name === 'interview_agents'">
+                          <InterviewDisplay :result="parseInterview(log.details.result)" />
+                        </template>
+                        
+                        <!-- Insight Forge -->
+                        <template v-else-if="log.details?.tool_name === 'insight_forge'">
+                          <InsightDisplay :result="parseInsightForge(log.details.result)" />
+                        </template>
+                        
+                        <!-- Panorama Search -->
+                        <template v-else-if="log.details?.tool_name === 'panorama_search'">
+                          <PanoramaDisplay :result="parsePanorama(log.details.result)" />
+                        </template>
+                        
+                        <!-- Quick Search -->
+                        <template v-else-if="log.details?.tool_name === 'quick_search'">
+                          <QuickSearchDisplay :result="parseQuickSearch(log.details.result)" />
+                        </template>
+                        
+                        <!-- Default -->
+                        <template v-else>
+                          <pre class="raw-preview">{{ truncateText(log.details?.result, 300) }}</pre>
+                        </template>
+                      </div>
+                      
+                      <!-- Raw Result -->
+                      <div v-else class="result-raw">
+                        <pre>{{ log.details?.result }}</pre>
+                      </div>
+                      
+                      <button class="toggle-raw" @click.stop="toggleRawResult(log.timestamp)">
+                        {{ showRawResult[log.timestamp] ? 'Structured View' : 'Raw Output' }}
+                      </button>
+                    </div>
+                  </template>
+
+                  <!-- LLM Response -->
+                  <template v-if="log.action === 'llm_response'">
+                    <div class="llm-meta">
+                      <span class="meta-tag">Iteration {{ log.details?.iteration }}</span>
+                      <span class="meta-tag" :class="{ active: log.details?.has_tool_calls }">
+                        Tools: {{ log.details?.has_tool_calls ? 'Yes' : 'No' }}
+                      </span>
+                      <span class="meta-tag" :class="{ active: log.details?.has_final_answer, 'final-answer': log.details?.has_final_answer }">
+                        Final: {{ log.details?.has_final_answer ? 'Yes' : 'No' }}
+                      </span>
+                    </div>
+                    <!-- 当是最终答案时，显示特殊提示 -->
+                    <div v-if="log.details?.has_final_answer" class="final-answer-hint">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                      </svg>
+                      <span>Section "{{ log.section_title }}" content generated</span>
+                    </div>
+                    <div v-if="expandedLogs.has(log.timestamp) && log.details?.response" class="llm-content">
+                      <pre>{{ log.details.response }}</pre>
+                    </div>
+                    <button v-if="log.details?.response" class="expand-toggle" @click.stop="toggleLogExpand(log)">
+                      {{ expandedLogs.has(log.timestamp) ? 'Hide Response' : 'Show Response' }}
+                    </button>
+                  </template>
+
+                  <!-- Report Complete -->
                   <template v-if="log.action === 'report_complete'">
-                    <div class="complete-info success">
-                      <svg class="complete-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                    <div class="complete-banner">
+                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                         <polyline points="22 4 12 14.01 9 11.01"></polyline>
                       </svg>
-                      <span>报告生成完成！</span>
+                      <span>Report Generation Complete</span>
                     </div>
-                  </template>
-
-                  <!-- 通用消息 -->
-                  <template v-if="!['report_start', 'planning_start', 'planning_complete', 'section_start', 'tool_call', 'tool_result', 'llm_response', 'section_complete', 'report_complete'].includes(log.action)">
-                    <div class="message-text">{{ log.details?.message || log.action }}</div>
                   </template>
                 </div>
 
-                <div class="item-footer" v-if="log.elapsed_seconds">
-                  <span class="elapsed">+{{ log.elapsed_seconds.toFixed(2) }}s</span>
+                <!-- Elapsed Time -->
+                <div class="timeline-footer" v-if="log.elapsed_seconds">
+                  <span class="elapsed-badge">+{{ log.elapsed_seconds.toFixed(1) }}s</span>
                 </div>
               </div>
             </div>
           </TransitionGroup>
 
-          <!-- 等待状态 -->
-          <div v-if="agentLogs.length === 0 && !isComplete" class="waiting-state">
-            <div class="pulse-ring"></div>
-            <span>等待 Report Agent 启动...</span>
+          <!-- Empty State -->
+          <div v-if="agentLogs.length === 0 && !isComplete" class="workflow-empty">
+            <div class="empty-pulse"></div>
+            <span>Waiting for agent activity...</span>
           </div>
         </div>
       </div>
@@ -307,39 +349,66 @@ const agentLogLine = ref(0)
 const consoleLogLine = ref(0)
 const reportOutline = ref(null)
 const currentSectionIndex = ref(null)
-const generatedSections = ref({}) // { sectionIndex: content }
-const expandedSections = ref(new Set())
+const generatedSections = ref({})
+const expandedContent = ref(new Set())
+const expandedLogs = ref(new Set())
 const isComplete = ref(false)
 const startTime = ref(null)
-const mainContent = ref(null)
+const leftPanel = ref(null)
+const rightPanel = ref(null)
 const logContent = ref(null)
-const showRawResult = reactive({}) // 控制显示原文
+const showRawResult = reactive({})
 
-// 切换显示原文
+// Toggle functions
 const toggleRawResult = (timestamp) => {
   showRawResult[timestamp] = !showRawResult[timestamp]
 }
 
-// 工具显示名称
+const toggleSectionContent = (idx) => {
+  if (!generatedSections.value[idx + 1]) return
+  const newSet = new Set(expandedContent.value)
+  if (newSet.has(idx)) {
+    newSet.delete(idx)
+  } else {
+    newSet.add(idx)
+  }
+  expandedContent.value = newSet
+}
+
+const toggleLogExpand = (log) => {
+  const newSet = new Set(expandedLogs.value)
+  if (newSet.has(log.timestamp)) {
+    newSet.delete(log.timestamp)
+  } else {
+    newSet.add(log.timestamp)
+  }
+  expandedLogs.value = newSet
+}
+
+const isLogCollapsed = (log) => {
+  if (['tool_call', 'tool_result', 'llm_response'].includes(log.action)) {
+    return !expandedLogs.value.has(log.timestamp)
+  }
+  return false
+}
+
+// Tool display names (without emojis)
 const getToolDisplayName = (toolName) => {
   const names = {
-    'insight_forge': '🔍 深度洞察检索',
-    'panorama_search': '🌐 广度搜索',
-    'interview_agents': '🎤 深度采访',
-    'quick_search': '⚡ 快速检索',
-    'get_graph_statistics': '📊 图谱统计',
-    'get_entities_by_type': '👥 实体查询'
+    'insight_forge': 'Deep Insight',
+    'panorama_search': 'Panorama Search',
+    'interview_agents': 'Agent Interview',
+    'quick_search': 'Quick Search',
+    'get_graph_statistics': 'Graph Stats',
+    'get_entities_by_type': 'Entity Query'
   }
   return names[toolName] || toolName
 }
 
-// ========== 工具结果解析器 ==========
-
-// 解析 insight_forge 结果
+// Parse functions
 const parseInsightForge = (text) => {
   const result = {
     query: '',
-    requirement: '',
     stats: { facts: 0, entities: 0, relationships: 0 },
     subQueries: [],
     facts: [],
@@ -348,15 +417,9 @@ const parseInsightForge = (text) => {
   }
   
   try {
-    // 提取原始问题
     const queryMatch = text.match(/原始问题:\s*(.+?)(?:\n|$)/)
     if (queryMatch) result.query = queryMatch[1].trim()
     
-    // 提取模拟需求
-    const reqMatch = text.match(/模拟需求:\s*(.+?)(?:\n|$)/)
-    if (reqMatch) result.requirement = reqMatch[1].trim()
-    
-    // 提取统计
     const factMatch = text.match(/相关事实:\s*(\d+)/)
     const entityMatch = text.match(/涉及实体:\s*(\d+)/)
     const relMatch = text.match(/关系链:\s*(\d+)/)
@@ -364,41 +427,33 @@ const parseInsightForge = (text) => {
     if (entityMatch) result.stats.entities = parseInt(entityMatch[1])
     if (relMatch) result.stats.relationships = parseInt(relMatch[1])
     
-    // 提取子问题
     const subQSection = text.match(/### 分析的子问题\n([\s\S]*?)(?=###|\n\n###|$)/)
     if (subQSection) {
       const lines = subQSection[1].split('\n').filter(l => l.match(/^\d+\./))
       result.subQueries = lines.map(l => l.replace(/^\d+\.\s*/, '').trim())
     }
     
-    // 提取关键事实
     const factsSection = text.match(/### 【关键事实】[\s\S]*?\n([\s\S]*?)(?=###|$)/)
     if (factsSection) {
       const lines = factsSection[1].split('\n').filter(l => l.match(/^\d+\./))
       result.facts = lines.map(l => {
         const match = l.match(/^\d+\.\s*"?(.+?)"?\s*$/)
         return match ? match[1].replace(/^"|"$/g, '') : l.replace(/^\d+\.\s*/, '').trim()
-      }).slice(0, 15) // 限制显示数量
+      }).slice(0, 10)
     }
     
-    // 提取核心实体
     const entitySection = text.match(/### 【核心实体】\n([\s\S]*?)(?=###|$)/)
     if (entitySection) {
       const entityBlocks = entitySection[1].split(/\n- \*\*/).slice(1)
       result.entities = entityBlocks.map(block => {
         const nameMatch = block.match(/^(.+?)\*\*\s*\((.+?)\)/)
-        const summaryMatch = block.match(/摘要:\s*"?(.+?)"?\n/)
-        const factsMatch = block.match(/相关事实:\s*(\d+)/)
         return {
           name: nameMatch ? nameMatch[1].trim() : '',
-          type: nameMatch ? nameMatch[2].trim() : '',
-          summary: summaryMatch ? summaryMatch[1].trim() : '',
-          factCount: factsMatch ? parseInt(factsMatch[1]) : 0
+          type: nameMatch ? nameMatch[2].trim() : ''
         }
-      }).filter(e => e.name).slice(0, 10)
+      }).filter(e => e.name).slice(0, 8)
     }
     
-    // 提取关系链
     const relSection = text.match(/### 【关系链】\n([\s\S]*?)(?=###|$)/)
     if (relSection) {
       const lines = relSection[1].split('\n').filter(l => l.startsWith('-'))
@@ -408,16 +463,15 @@ const parseInsightForge = (text) => {
           return { source: match[1].trim(), relation: match[2].trim(), target: match[3].trim() }
         }
         return null
-      }).filter(Boolean).slice(0, 10)
+      }).filter(Boolean).slice(0, 6)
     }
   } catch (e) {
-    console.warn('解析 insight_forge 结果失败:', e)
+    console.warn('Parse insight_forge failed:', e)
   }
   
   return result
 }
 
-// 解析 panorama_search 结果
 const parsePanorama = (text) => {
   const result = {
     query: '',
@@ -428,11 +482,9 @@ const parsePanorama = (text) => {
   }
   
   try {
-    // 提取查询
     const queryMatch = text.match(/查询:\s*(.+?)(?:\n|$)/)
     if (queryMatch) result.query = queryMatch[1].trim()
     
-    // 提取统计
     const nodesMatch = text.match(/总节点数:\s*(\d+)/)
     const edgesMatch = text.match(/总边数:\s*(\d+)/)
     const activeMatch = text.match(/当前有效事实:\s*(\d+)/)
@@ -442,32 +494,12 @@ const parsePanorama = (text) => {
     if (activeMatch) result.stats.activeFacts = parseInt(activeMatch[1])
     if (histMatch) result.stats.historicalFacts = parseInt(histMatch[1])
     
-    // 提取当前有效事实
     const activeSection = text.match(/### 【当前有效事实】[\s\S]*?\n([\s\S]*?)(?=###|$)/)
     if (activeSection) {
       const lines = activeSection[1].split('\n').filter(l => l.match(/^\d+\./))
-      result.activeFacts = lines.map(l => {
-        const match = l.match(/^\d+\.\s*"?(.+?)"?\s*$/)
-        return match ? match[1].replace(/^"|"$/g, '') : l.replace(/^\d+\.\s*/, '').trim()
-      }).slice(0, 15)
+      result.activeFacts = lines.map(l => l.replace(/^\d+\.\s*/, '').replace(/^"|"$/g, '').trim()).slice(0, 8)
     }
     
-    // 提取历史事实
-    const histSection = text.match(/### 【历史\/过期事实】[\s\S]*?\n([\s\S]*?)(?=###|$)/)
-    if (histSection) {
-      const lines = histSection[1].split('\n').filter(l => l.match(/^\d+\./))
-      result.historicalFacts = lines.map(l => {
-        const content = l.replace(/^\d+\.\s*/, '').trim()
-        // 提取时间范围
-        const timeMatch = content.match(/^\[(.+?)\s*-\s*(.+?)\]\s*(.+)$/)
-        if (timeMatch) {
-          return { timeRange: `${timeMatch[1]} - ${timeMatch[2]}`, content: timeMatch[3].replace(/^"|"$/g, '') }
-        }
-        return { timeRange: '', content: content.replace(/^"|"$/g, '') }
-      }).slice(0, 10)
-    }
-    
-    // 提取涉及实体
     const entitySection = text.match(/### 【涉及实体】\n([\s\S]*?)(?=###|$)/)
     if (entitySection) {
       const lines = entitySection[1].split('\n').filter(l => l.startsWith('-'))
@@ -475,41 +507,31 @@ const parsePanorama = (text) => {
         const match = l.match(/^-\s*\*\*(.+?)\*\*\s*\((.+?)\)/)
         if (match) return { name: match[1].trim(), type: match[2].trim() }
         return null
-      }).filter(Boolean).slice(0, 15)
+      }).filter(Boolean).slice(0, 10)
     }
   } catch (e) {
-    console.warn('解析 panorama_search 结果失败:', e)
+    console.warn('Parse panorama failed:', e)
   }
   
   return result
 }
 
-// 解析 interview_agents 结果
 const parseInterview = (text) => {
   const result = {
     topic: '',
     agentCount: '',
-    selectionReason: '',
     interviews: [],
     summary: ''
   }
   
   try {
-    // 提取采访主题
     const topicMatch = text.match(/\*\*采访主题:\*\*\s*(.+?)(?:\n|$)/)
     if (topicMatch) result.topic = topicMatch[1].trim()
     
-    // 提取采访人数
     const countMatch = text.match(/\*\*采访人数:\*\*\s*(.+?)(?:\n|$)/)
     if (countMatch) result.agentCount = countMatch[1].trim()
     
-    // 提取选择理由
-    const reasonSection = text.match(/### 采访对象选择理由\n([\s\S]*?)(?=---|###|$)/)
-    if (reasonSection) {
-      result.selectionReason = reasonSection[1].trim().substring(0, 300) + '...'
-    }
-    
-    // 提取采访实录
+    // Extract interview records
     const interviewMatches = text.matchAll(/#### 采访 #(\d+):\s*(.+?)\n\*\*(.+?)\*\*\s*\((.+?)\)\n_简介:\s*(.+?)_\n\n\*\*Q:\*\*\s*([\s\S]*?)\n\n\*\*A:\*\*\s*([\s\S]*?)(?=\*\*关键引言|\n---|\n####|$)/g)
     
     for (const match of interviewMatches) {
@@ -518,13 +540,13 @@ const parseInterview = (text) => {
         title: match[2].trim(),
         name: match[3].trim(),
         role: match[4].trim(),
-        bio: match[5].trim().substring(0, 100) + '...',
-        question: match[6].trim().split('\n')[0].substring(0, 150) + '...',
-        answer: match[7].trim().substring(0, 500) + '...',
+        bio: match[5].trim(),
+        question: match[6].trim(),
+        answer: match[7].trim(),
         quotes: []
       }
       
-      // 提取关键引言
+      // Extract key quotes
       const quoteSection = text.match(new RegExp(`#### 采访 #${match[1]}[\\s\\S]*?\\*\\*关键引言:\\*\\*\\n([\\s\\S]*?)(?=\\n---)`))
       if (quoteSection) {
         const quotes = quoteSection[1].match(/> "(.+?)"/g)
@@ -536,19 +558,17 @@ const parseInterview = (text) => {
       result.interviews.push(interview)
     }
     
-    // 提取采访摘要
     const summarySection = text.match(/### 采访摘要与核心观点\n([\s\S]*?)$/)
     if (summarySection) {
-      result.summary = summarySection[1].trim().substring(0, 500) + '...'
+      result.summary = summarySection[1].trim().substring(0, 400)
     }
   } catch (e) {
-    console.warn('解析 interview_agents 结果失败:', e)
+    console.warn('Parse interview failed:', e)
   }
   
   return result
 }
 
-// 解析 quick_search 结果
 const parseQuickSearch = (text) => {
   const result = {
     query: '',
@@ -566,245 +586,206 @@ const parseQuickSearch = (text) => {
     const factsSection = text.match(/### 相关事实:\n([\s\S]*)$/)
     if (factsSection) {
       const lines = factsSection[1].split('\n').filter(l => l.match(/^\d+\./))
-      result.facts = lines.map(l => l.replace(/^\d+\.\s*/, '').trim()).slice(0, 20)
+      result.facts = lines.map(l => l.replace(/^\d+\.\s*/, '').trim()).slice(0, 10)
     }
   } catch (e) {
-    console.warn('解析 quick_search 结果失败:', e)
+    console.warn('Parse quick_search failed:', e)
   }
   
   return result
 }
 
-// ========== 子组件定义 ==========
+// ========== Sub Components ==========
 
-// InsightForge 结果展示组件
-const InsightForgeResult = {
+// Insight Display Component
+const InsightDisplay = {
   props: ['result'],
   setup(props) {
-    const expanded = ref({ facts: true, entities: false, relations: false, subQueries: false })
-    const toggleSection = (section) => { expanded.value[section] = !expanded.value[section] }
-    return () => h('div', { class: 'insight-result' }, [
-      // 统计卡片
-      h('div', { class: 'stats-cards' }, [
-        h('div', { class: 'stat-card facts' }, [
+    const expanded = ref(false)
+    return () => h('div', { class: 'insight-display' }, [
+      // Stats
+      h('div', { class: 'stat-row' }, [
+        h('div', { class: 'stat-box' }, [
           h('span', { class: 'stat-num' }, props.result.stats.facts),
-          h('span', { class: 'stat-name' }, '相关事实')
+          h('span', { class: 'stat-label' }, 'Facts')
         ]),
-        h('div', { class: 'stat-card entities' }, [
+        h('div', { class: 'stat-box' }, [
           h('span', { class: 'stat-num' }, props.result.stats.entities),
-          h('span', { class: 'stat-name' }, '涉及实体')
+          h('span', { class: 'stat-label' }, 'Entities')
         ]),
-        h('div', { class: 'stat-card relations' }, [
+        h('div', { class: 'stat-box' }, [
           h('span', { class: 'stat-num' }, props.result.stats.relationships),
-          h('span', { class: 'stat-name' }, '关系链')
+          h('span', { class: 'stat-label' }, 'Relations')
         ])
       ]),
-      
-      // 子问题
-      props.result.subQueries.length > 0 && h('div', { class: 'collapsible-section' }, [
-        h('div', { class: 'section-title', onClick: () => toggleSection('subQueries') }, [
-          h('span', {}, '📋 分析的子问题'),
-          h('span', { class: 'toggle-icon' }, expanded.value.subQueries ? '−' : '+')
-        ]),
-        expanded.value.subQueries && h('div', { class: 'sub-queries' },
-          props.result.subQueries.map((q, i) => h('div', { class: 'sub-query', key: i }, [
-            h('span', { class: 'query-num' }, i + 1),
-            h('span', { class: 'query-text' }, q)
-          ]))
-        )
-      ]),
-      
-      // 关键事实
-      props.result.facts.length > 0 && h('div', { class: 'collapsible-section' }, [
-        h('div', { class: 'section-title', onClick: () => toggleSection('facts') }, [
-          h('span', {}, `📌 关键事实 (${props.result.facts.length})`),
-          h('span', { class: 'toggle-icon' }, expanded.value.facts ? '−' : '+')
-        ]),
-        expanded.value.facts && h('div', { class: 'facts-list' },
-          props.result.facts.map((fact, i) => h('div', { class: 'fact-item', key: i }, [
-            h('span', { class: 'fact-num' }, i + 1),
+      // Query
+      props.result.query && h('div', { class: 'query-display' }, props.result.query),
+      // Expandable content
+      h('button', { 
+        class: 'expand-details',
+        onClick: () => { expanded.value = !expanded.value }
+      }, expanded.value ? 'Hide Details' : `Show ${props.result.facts.length} Facts`),
+      expanded.value && h('div', { class: 'detail-content' }, [
+        props.result.facts.length > 0 && h('div', { class: 'facts-section' }, [
+          h('div', { class: 'section-label' }, 'Key Facts'),
+          ...props.result.facts.map((fact, i) => h('div', { class: 'fact-row', key: i }, [
+            h('span', { class: 'fact-idx' }, i + 1),
             h('span', { class: 'fact-text' }, fact)
           ]))
-        )
-      ]),
-      
-      // 核心实体
-      props.result.entities.length > 0 && h('div', { class: 'collapsible-section' }, [
-        h('div', { class: 'section-title', onClick: () => toggleSection('entities') }, [
-          h('span', {}, `👥 核心实体 (${props.result.entities.length})`),
-          h('span', { class: 'toggle-icon' }, expanded.value.entities ? '−' : '+')
         ]),
-        expanded.value.entities && h('div', { class: 'entities-grid' },
-          props.result.entities.map((e, i) => h('div', { class: 'entity-card', key: i }, [
-            h('div', { class: 'entity-header' }, [
-              h('span', { class: 'entity-name' }, e.name),
-              h('span', { class: 'entity-type' }, e.type)
-            ]),
-            e.summary && h('div', { class: 'entity-summary' }, e.summary.substring(0, 100) + '...')
-          ]))
-        )
-      ]),
-      
-      // 关系链
-      props.result.relations.length > 0 && h('div', { class: 'collapsible-section' }, [
-        h('div', { class: 'section-title', onClick: () => toggleSection('relations') }, [
-          h('span', {}, `🔗 关系链 (${props.result.relations.length})`),
-          h('span', { class: 'toggle-icon' }, expanded.value.relations ? '−' : '+')
+        props.result.entities.length > 0 && h('div', { class: 'entities-section' }, [
+          h('div', { class: 'section-label' }, 'Core Entities'),
+          h('div', { class: 'entity-chips' },
+            props.result.entities.map((e, i) => h('span', { class: 'entity-chip', key: i }, [
+              h('span', { class: 'chip-name' }, e.name),
+              h('span', { class: 'chip-type' }, e.type)
+            ]))
+          )
         ]),
-        expanded.value.relations && h('div', { class: 'relations-list' },
-          props.result.relations.map((r, i) => h('div', { class: 'relation-item', key: i }, [
-            h('span', { class: 'rel-source' }, r.source),
-            h('span', { class: 'rel-arrow' }, '→'),
-            h('span', { class: 'rel-type' }, r.relation),
-            h('span', { class: 'rel-arrow' }, '→'),
-            h('span', { class: 'rel-target' }, r.target)
+        props.result.relations.length > 0 && h('div', { class: 'relations-section' }, [
+          h('div', { class: 'section-label' }, 'Relationships'),
+          ...props.result.relations.map((r, i) => h('div', { class: 'relation-row', key: i }, [
+            h('span', { class: 'rel-node' }, r.source),
+            h('span', { class: 'rel-edge' }, r.relation),
+            h('span', { class: 'rel-node' }, r.target)
           ]))
-        )
+        ])
       ])
     ])
   }
 }
 
-// PanoramaResult 展示组件
-const PanoramaResult = {
+// Panorama Display Component
+const PanoramaDisplay = {
   props: ['result'],
   setup(props) {
-    const expanded = ref({ active: true, history: false, entities: false })
-    const toggleSection = (section) => { expanded.value[section] = !expanded.value[section] }
-    return () => h('div', { class: 'panorama-result' }, [
-      // 统计卡片
-      h('div', { class: 'stats-cards' }, [
-        h('div', { class: 'stat-card nodes' }, [
+    const expanded = ref(false)
+    return () => h('div', { class: 'panorama-display' }, [
+      h('div', { class: 'stat-row' }, [
+        h('div', { class: 'stat-box' }, [
           h('span', { class: 'stat-num' }, props.result.stats.nodes),
-          h('span', { class: 'stat-name' }, '总节点')
+          h('span', { class: 'stat-label' }, 'Nodes')
         ]),
-        h('div', { class: 'stat-card edges' }, [
+        h('div', { class: 'stat-box' }, [
           h('span', { class: 'stat-num' }, props.result.stats.edges),
-          h('span', { class: 'stat-name' }, '总边数')
+          h('span', { class: 'stat-label' }, 'Edges')
         ]),
-        h('div', { class: 'stat-card active' }, [
+        h('div', { class: 'stat-box highlight' }, [
           h('span', { class: 'stat-num' }, props.result.stats.activeFacts),
-          h('span', { class: 'stat-name' }, '有效事实')
+          h('span', { class: 'stat-label' }, 'Active')
         ]),
-        h('div', { class: 'stat-card history' }, [
+        h('div', { class: 'stat-box muted' }, [
           h('span', { class: 'stat-num' }, props.result.stats.historicalFacts),
-          h('span', { class: 'stat-name' }, '历史事实')
+          h('span', { class: 'stat-label' }, 'Historical')
         ])
       ]),
-      
-      // 当前有效事实
-      props.result.activeFacts.length > 0 && h('div', { class: 'collapsible-section' }, [
-        h('div', { class: 'section-title active', onClick: () => toggleSection('active') }, [
-          h('span', {}, `✅ 当前有效事实 (${props.result.activeFacts.length})`),
-          h('span', { class: 'toggle-icon' }, expanded.value.active ? '−' : '+')
-        ]),
-        expanded.value.active && h('div', { class: 'facts-list' },
-          props.result.activeFacts.map((fact, i) => h('div', { class: 'fact-item active', key: i }, [
-            h('span', { class: 'fact-num' }, i + 1),
+      props.result.query && h('div', { class: 'query-display' }, props.result.query),
+      h('button', { 
+        class: 'expand-details',
+        onClick: () => { expanded.value = !expanded.value }
+      }, expanded.value ? 'Hide Details' : `Show ${props.result.activeFacts.length} Active Facts`),
+      expanded.value && h('div', { class: 'detail-content' }, [
+        props.result.activeFacts.length > 0 && h('div', { class: 'facts-section' }, [
+          h('div', { class: 'section-label' }, 'Active Facts'),
+          ...props.result.activeFacts.map((fact, i) => h('div', { class: 'fact-row active', key: i }, [
+            h('span', { class: 'fact-idx' }, i + 1),
             h('span', { class: 'fact-text' }, fact)
           ]))
-        )
-      ]),
-      
-      // 历史事实
-      props.result.historicalFacts.length > 0 && h('div', { class: 'collapsible-section' }, [
-        h('div', { class: 'section-title history', onClick: () => toggleSection('history') }, [
-          h('span', {}, `📜 历史/过期事实 (${props.result.historicalFacts.length})`),
-          h('span', { class: 'toggle-icon' }, expanded.value.history ? '−' : '+')
         ]),
-        expanded.value.history && h('div', { class: 'facts-list' },
-          props.result.historicalFacts.map((fact, i) => h('div', { class: 'fact-item history', key: i }, [
-            h('span', { class: 'fact-num' }, i + 1),
-            h('div', { class: 'fact-content' }, [
-              fact.timeRange && h('span', { class: 'time-range' }, fact.timeRange),
-              h('span', { class: 'fact-text' }, fact.content)
-            ])
-          ]))
-        )
-      ]),
-      
-      // 涉及实体
-      props.result.entities.length > 0 && h('div', { class: 'collapsible-section' }, [
-        h('div', { class: 'section-title', onClick: () => toggleSection('entities') }, [
-          h('span', {}, `👥 涉及实体 (${props.result.entities.length})`),
-          h('span', { class: 'toggle-icon' }, expanded.value.entities ? '−' : '+')
-        ]),
-        expanded.value.entities && h('div', { class: 'entity-tags' },
-          props.result.entities.map((e, i) => h('span', { class: 'entity-tag', key: i }, [
-            h('span', { class: 'tag-name' }, e.name),
-            h('span', { class: 'tag-type' }, e.type)
-          ]))
-        )
+        props.result.entities.length > 0 && h('div', { class: 'entities-section' }, [
+          h('div', { class: 'section-label' }, 'Related Entities'),
+          h('div', { class: 'entity-chips' },
+            props.result.entities.map((e, i) => h('span', { class: 'entity-chip', key: i }, [
+              h('span', { class: 'chip-name' }, e.name),
+              h('span', { class: 'chip-type' }, e.type)
+            ]))
+          )
+        ])
       ])
     ])
   }
 }
 
-// InterviewResult 展示组件
-const InterviewResult = {
+// Interview Display Component - Beautiful Interview Style
+const InterviewDisplay = {
   props: ['result'],
   setup(props) {
-    const expandedInterview = ref(0)
-    return () => h('div', { class: 'interview-result' }, [
-      // 采访信息
+    const activeIndex = ref(0)
+    return () => h('div', { class: 'interview-display' }, [
+      // Header
       h('div', { class: 'interview-header' }, [
-        h('div', { class: 'interview-topic' }, props.result.topic),
-        h('div', { class: 'interview-count' }, props.result.agentCount)
+        h('div', { class: 'interview-topic' }, props.result.topic || 'Agent Interview'),
+        h('div', { class: 'interview-meta' }, props.result.agentCount)
       ]),
-      
-      // 采访列表
-      props.result.interviews.length > 0 && h('div', { class: 'interviews-list' },
+      // Interview Cards
+      props.result.interviews.length > 0 && h('div', { class: 'interview-carousel' }, 
         props.result.interviews.map((interview, i) => h('div', { 
-          class: ['interview-card', { expanded: expandedInterview.value === i }],
+          class: ['interview-card', { active: activeIndex.value === i }],
           key: i,
-          onClick: () => { expandedInterview.value = expandedInterview.value === i ? -1 : i }
+          onClick: () => { activeIndex.value = i }
         }, [
-          h('div', { class: 'interview-card-header' }, [
-            h('span', { class: 'interview-num' }, `#${interview.num}`),
-            h('span', { class: 'interview-name' }, interview.name),
-            h('span', { class: 'interview-role' }, interview.role),
-            h('span', { class: 'expand-icon' }, expandedInterview.value === i ? '−' : '+')
-          ]),
-          expandedInterview.value === i && h('div', { class: 'interview-card-body' }, [
-            h('div', { class: 'interview-bio' }, interview.bio),
-            h('div', { class: 'interview-qa' }, [
-              h('div', { class: 'qa-question' }, [
-                h('span', { class: 'qa-label' }, 'Q:'),
-                h('span', {}, interview.question)
-              ]),
-              h('div', { class: 'qa-answer' }, [
-                h('span', { class: 'qa-label' }, 'A:'),
-                h('span', {}, interview.answer)
-              ])
+          // Interviewee Info
+          h('div', { class: 'interviewee' }, [
+            h('div', { class: 'avatar' }, interview.name.charAt(0)),
+            h('div', { class: 'info' }, [
+              h('span', { class: 'name' }, interview.name),
+              h('span', { class: 'role' }, interview.role)
             ]),
-            interview.quotes.length > 0 && h('div', { class: 'interview-quotes' },
-              interview.quotes.map((q, qi) => h('div', { class: 'quote-item', key: qi }, `"${q}"`))
+            h('span', { class: 'interview-idx' }, `#${interview.num}`)
+          ]),
+          // Bio
+          interview.bio && h('div', { class: 'bio' }, interview.bio.length > 80 ? interview.bio.substring(0, 80) + '...' : interview.bio),
+          // Q&A Section
+          activeIndex.value === i && h('div', { class: 'qa-section' }, [
+            h('div', { class: 'question' }, [
+              h('div', { class: 'q-label' }, 'Q'),
+              h('div', { class: 'q-text' }, interview.question.length > 200 ? interview.question.substring(0, 200) + '...' : interview.question)
+            ]),
+            h('div', { class: 'answer' }, [
+              h('div', { class: 'a-label' }, 'A'),
+              h('div', { class: 'a-text' }, interview.answer.length > 400 ? interview.answer.substring(0, 400) + '...' : interview.answer)
+            ]),
+            // Key Quotes
+            interview.quotes.length > 0 && h('div', { class: 'quotes' },
+              interview.quotes.map((q, qi) => h('blockquote', { class: 'quote', key: qi }, `"${q.length > 100 ? q.substring(0, 100) + '...' : q}"`))
             )
           ])
         ]))
       ),
-      
-      // 摘要
+      // Navigation dots
+      props.result.interviews.length > 1 && h('div', { class: 'carousel-dots' },
+        props.result.interviews.map((_, i) => h('span', {
+          class: ['dot', { active: activeIndex.value === i }],
+          key: i,
+          onClick: () => { activeIndex.value = i }
+        }))
+      ),
+      // Summary
       props.result.summary && h('div', { class: 'interview-summary' }, [
-        h('div', { class: 'summary-title' }, '📋 核心观点摘要'),
-        h('div', { class: 'summary-content' }, props.result.summary)
+        h('div', { class: 'summary-label' }, 'Summary'),
+        h('div', { class: 'summary-text' }, props.result.summary)
       ])
     ])
   }
 }
 
-// QuickSearchResult 展示组件
-const QuickSearchResult = {
+// Quick Search Display Component
+const QuickSearchDisplay = {
   props: ['result'],
   setup(props) {
-    return () => h('div', { class: 'quick-search-result' }, [
-      h('div', { class: 'search-header' }, [
+    const expanded = ref(false)
+    return () => h('div', { class: 'quick-search-display' }, [
+      h('div', { class: 'search-meta' }, [
         h('span', { class: 'search-query' }, props.result.query),
-        h('span', { class: 'search-count' }, `${props.result.count} 条结果`)
+        h('span', { class: 'search-count' }, `${props.result.count} results`)
       ]),
-      props.result.facts.length > 0 && h('div', { class: 'search-facts' },
-        props.result.facts.map((fact, i) => h('div', { class: 'search-fact-item', key: i }, [
-          h('span', { class: 'fact-num' }, i + 1),
+      h('button', { 
+        class: 'expand-details',
+        onClick: () => { expanded.value = !expanded.value }
+      }, expanded.value ? 'Hide Results' : 'Show Results'),
+      expanded.value && props.result.facts.length > 0 && h('div', { class: 'search-results' },
+        props.result.facts.map((fact, i) => h('div', { class: 'search-fact', key: i }, [
+          h('span', { class: 'fact-idx' }, i + 1),
           h('span', { class: 'fact-text' }, fact)
         ]))
       )
@@ -820,9 +801,9 @@ const statusClass = computed(() => {
 })
 
 const statusText = computed(() => {
-  if (isComplete.value) return '已完成'
-  if (agentLogs.value.length > 0) return '生成中...'
-  return '等待中'
+  if (isComplete.value) return 'Completed'
+  if (agentLogs.value.length > 0) return 'Generating...'
+  return 'Waiting'
 })
 
 const totalSections = computed(() => {
@@ -831,6 +812,11 @@ const totalSections = computed(() => {
 
 const completedSections = computed(() => {
   return Object.keys(generatedSections.value).length
+})
+
+const progressPercent = computed(() => {
+  if (totalSections.value === 0) return 0
+  return Math.round((completedSections.value / totalSections.value) * 100)
 })
 
 const totalToolCalls = computed(() => {
@@ -847,26 +833,13 @@ const formatElapsedTime = computed(() => {
   return `${mins}m ${secs}s`
 })
 
-// 只显示最近的重要日志，避免列表过长
 const displayLogs = computed(() => {
-  // 显示所有日志，但可以根据需要过滤
   return agentLogs.value
 })
 
 // Methods
 const addLog = (msg) => {
   emit('add-log', msg)
-}
-
-const toggleSection = (idx) => {
-  if (!generatedSections.value[idx + 1]) return
-  const newSet = new Set(expandedSections.value)
-  if (newSet.has(idx)) {
-    newSet.delete(idx)
-  } else {
-    newSet.add(idx)
-  }
-  expandedSections.value = newSet
 }
 
 const isSectionCompleted = (sectionIndex) => {
@@ -896,95 +869,109 @@ const formatParams = (params) => {
   }
 }
 
-const renderMarkdown = (content) => {
-  if (!content) return ''
-  // 简单的 markdown 渲染：转换换行为 <br>，处理标题
-  return content
-    .replace(/^### (.+)$/gm, '<h4>$1</h4>')
-    .replace(/^## (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^# (.+)$/gm, '<h2>$1</h2>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/\n/g, '<br>')
+const formatResultSize = (length) => {
+  if (!length) return ''
+  if (length < 1000) return `${length} chars`
+  return `${(length / 1000).toFixed(1)}k chars`
 }
 
-const getLogClass = (log) => {
+const truncateText = (text, maxLen) => {
+  if (!text) return ''
+  if (text.length <= maxLen) return text
+  return text.substring(0, maxLen) + '...'
+}
+
+const renderMarkdown = (content) => {
+  if (!content) return ''
+  
+  // 处理代码块
+  let html = content.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>')
+  
+  // 处理行内代码
+  html = html.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
+  
+  // 处理标题
+  html = html.replace(/^#### (.+)$/gm, '<h5 class="md-h5">$1</h5>')
+  html = html.replace(/^### (.+)$/gm, '<h4 class="md-h4">$1</h4>')
+  html = html.replace(/^## (.+)$/gm, '<h3 class="md-h3">$1</h3>')
+  html = html.replace(/^# (.+)$/gm, '<h2 class="md-h2">$1</h2>')
+  
+  // 处理引用块
+  html = html.replace(/^> (.+)$/gm, '<blockquote class="md-quote">$1</blockquote>')
+  
+  // 处理无序列表
+  html = html.replace(/^- (.+)$/gm, '<li class="md-li">$1</li>')
+  html = html.replace(/(<li class="md-li">[\s\S]*?<\/li>)(\s*<li)/g, '$1$2')
+  html = html.replace(/(<li class="md-li">.*<\/li>)+/g, '<ul class="md-ul">$&</ul>')
+  
+  // 处理有序列表
+  html = html.replace(/^\d+\. (.+)$/gm, '<li class="md-oli">$1</li>')
+  html = html.replace(/(<li class="md-oli">.*<\/li>)+/g, '<ol class="md-ol">$&</ol>')
+  
+  // 处理粗体和斜体
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
+  html = html.replace(/_(.+?)_/g, '<em>$1</em>')
+  
+  // 处理分隔线
+  html = html.replace(/^---$/gm, '<hr class="md-hr">')
+  
+  // 处理换行 - 空行变成段落分隔，单换行变成 <br>
+  html = html.replace(/\n\n/g, '</p><p class="md-p">')
+  html = html.replace(/\n/g, '<br>')
+  
+  // 包装在段落中
+  html = '<p class="md-p">' + html + '</p>'
+  
+  // 清理空段落
+  html = html.replace(/<p class="md-p"><\/p>/g, '')
+  html = html.replace(/<p class="md-p">(<h[2-5])/g, '$1')
+  html = html.replace(/(<\/h[2-5]>)<\/p>/g, '$1')
+  html = html.replace(/<p class="md-p">(<ul|<ol|<blockquote|<pre|<hr)/g, '$1')
+  html = html.replace(/(<\/ul>|<\/ol>|<\/blockquote>|<\/pre>)<\/p>/g, '$1')
+  
+  return html
+}
+
+const getTimelineItemClass = (log) => {
   return {
     'is-tool': log.action === 'tool_call' || log.action === 'tool_result',
-    'is-section': log.action === 'section_start' || log.action === 'section_complete',
+    'is-section': log.action === 'section_start' || log.action === 'section_complete' || log.action === 'section_content' || log.action === 'subsection_content',
     'is-complete': log.action === 'report_complete',
     'is-planning': log.action === 'planning_start' || log.action === 'planning_complete'
   }
 }
 
-const getMarkerClass = (log) => {
+const getConnectorClass = (log) => {
   const classes = {
-    'report_start': 'marker-start',
-    'planning_start': 'marker-planning',
-    'planning_complete': 'marker-planning',
-    'section_start': 'marker-section',
-    'section_complete': 'marker-section-done',
-    'tool_call': 'marker-tool',
-    'tool_result': 'marker-tool-result',
-    'llm_response': 'marker-llm',
-    'report_complete': 'marker-complete'
+    'report_start': 'dot-start',
+    'planning_start': 'dot-planning',
+    'planning_complete': 'dot-planning',
+    'section_start': 'dot-section',
+    'section_content': 'dot-section-content',
+    'subsection_content': 'dot-subsection-content',
+    'section_complete': 'dot-section-done',
+    'tool_call': 'dot-tool',
+    'tool_result': 'dot-result',
+    'llm_response': 'dot-llm',
+    'report_complete': 'dot-complete'
   }
-  return classes[log.action] || 'marker-default'
-}
-
-const getLogIcon = (log) => {
-  const icons = {
-    'report_start': () => h('svg', { viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-      h('circle', { cx: 12, cy: 12, r: 10 }),
-      h('polygon', { points: '10 8 16 12 10 16 10 8' })
-    ]),
-    'planning_start': () => h('svg', { viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-      h('line', { x1: 8, y1: 6, x2: 21, y2: 6 }),
-      h('line', { x1: 8, y1: 12, x2: 21, y2: 12 }),
-      h('line', { x1: 8, y1: 18, x2: 21, y2: 18 }),
-      h('line', { x1: 3, y1: 6, x2: 3.01, y2: 6 }),
-      h('line', { x1: 3, y1: 12, x2: 3.01, y2: 12 }),
-      h('line', { x1: 3, y1: 18, x2: 3.01, y2: 18 })
-    ]),
-    'planning_complete': () => h('svg', { viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-      h('polyline', { points: '20 6 9 17 4 12' })
-    ]),
-    'section_start': () => h('svg', { viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-      h('path', { d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' }),
-      h('polyline', { points: '14 2 14 8 20 8' })
-    ]),
-    'section_complete': () => h('svg', { viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-      h('path', { d: 'M22 11.08V12a10 10 0 1 1-5.93-9.14' }),
-      h('polyline', { points: '22 4 12 14.01 9 11.01' })
-    ]),
-    'tool_call': () => h('svg', { viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-      h('path', { d: 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z' })
-    ]),
-    'tool_result': () => h('svg', { viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-      h('polyline', { points: '22 12 18 12 15 21 9 3 6 12 2 12' })
-    ]),
-    'llm_response': () => h('svg', { viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-      h('path', { d: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' })
-    ]),
-    'report_complete': () => h('svg', { viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-      h('path', { d: 'M22 11.08V12a10 10 0 1 1-5.93-9.14' }),
-      h('polyline', { points: '22 4 12 14.01 9 11.01' })
-    ])
-  }
-  return icons[log.action] || icons['report_start']
+  return classes[log.action] || 'dot-default'
 }
 
 const getActionLabel = (action) => {
   const labels = {
-    'report_start': '报告启动',
-    'planning_start': '开始规划',
-    'planning_complete': '规划完成',
-    'section_start': '章节开始',
-    'section_complete': '章节完成',
-    'tool_call': '工具调用',
-    'tool_result': '工具返回',
-    'llm_response': 'LLM 响应',
-    'report_complete': '报告完成'
+    'report_start': 'Report Started',
+    'planning_start': 'Planning',
+    'planning_complete': 'Plan Complete',
+    'section_start': 'Section Start',
+    'section_content': 'Content Ready',
+    'subsection_content': 'Subsection Ready',
+    'section_complete': 'Section Done',
+    'tool_call': 'Tool Call',
+    'tool_result': 'Tool Result',
+    'llm_response': 'LLM Response',
+    'report_complete': 'Complete'
   }
   return labels[action] || action
 }
@@ -992,7 +979,7 @@ const getActionLabel = (action) => {
 const getLogLevelClass = (log) => {
   if (log.includes('ERROR') || log.includes('错误')) return 'error'
   if (log.includes('WARNING') || log.includes('警告')) return 'warning'
-  if (log.includes('✓') || log.includes('完成')) return 'success'
+  // INFO 使用默认颜色，不标记为 success
   return ''
 }
 
@@ -1010,37 +997,41 @@ const fetchAgentLog = async () => {
       const newLogs = res.data.logs || []
       
       if (newLogs.length > 0) {
-        // 处理新日志
         newLogs.forEach(log => {
           agentLogs.value.push(log)
           
-          // 提取大纲
           if (log.action === 'planning_complete' && log.details?.outline) {
             reportOutline.value = log.details.outline
           }
           
-          // 追踪当前章节
           if (log.action === 'section_start') {
             currentSectionIndex.value = log.section_index
           }
           
-          // 记录已完成章节（简单标记，实际内容需要从其他地方获取）
+          // section_content / subsection_content - 表示内容生成完成（但整个章节可能还没完成）
+          // 这里不更新 generatedSections，只记录进度
+          if (log.action === 'section_content' || log.action === 'subsection_content') {
+            // 可以用于显示进度，但不更新左侧面板的内容
+            // 因为完整内容会在 section_complete 时一次性提供
+          }
+          
+          // section_complete - 表示完整章节（含所有子章节）生成完成
+          // details.content 包含合并后的完整内容
           if (log.action === 'section_complete') {
-            // 这里简单标记为完成，实际内容可能需要另外获取
-            if (!generatedSections.value[log.section_index]) {
-              generatedSections.value[log.section_index] = `## ${log.section_title}\n\n章节内容已生成。`
+            if (log.details?.content) {
+              generatedSections.value[log.section_index] = log.details.content
+              // 自动展开刚生成的章节
+              expandedContent.value.add(log.section_index - 1)
             }
             currentSectionIndex.value = null
           }
           
-          // 检测报告完成
           if (log.action === 'report_complete') {
             isComplete.value = true
             emit('update-status', 'completed')
             stopPolling()
           }
           
-          // 记录开始时间
           if (log.action === 'report_start') {
             startTime.value = new Date(log.timestamp)
           }
@@ -1048,17 +1039,61 @@ const fetchAgentLog = async () => {
         
         agentLogLine.value = res.data.from_line + newLogs.length
         
-        // 滚动到底部
         nextTick(() => {
-          if (mainContent.value) {
-            mainContent.value.scrollTop = mainContent.value.scrollHeight
+          if (rightPanel.value) {
+            rightPanel.value.scrollTop = rightPanel.value.scrollHeight
           }
         })
       }
     }
   } catch (err) {
-    console.warn('获取 Agent 日志失败:', err)
+    console.warn('Failed to fetch agent log:', err)
   }
+}
+
+// 提取最终答案内容 - 从 LLM response 中提取章节内容
+const extractFinalContent = (response) => {
+  if (!response) return null
+  
+  // 尝试提取 <final_answer> 标签内的内容
+  const finalAnswerTagMatch = response.match(/<final_answer>([\s\S]*?)<\/final_answer>/)
+  if (finalAnswerTagMatch) {
+    return finalAnswerTagMatch[1].trim()
+  }
+  
+  // 尝试找 Final Answer: 后面的内容（支持多种格式）
+  // 格式1: Final Answer:\n\n内容
+  // 格式2: Final Answer: 内容
+  const finalAnswerMatch = response.match(/Final\s*Answer:\s*\n*([\s\S]*)$/i)
+  if (finalAnswerMatch) {
+    return finalAnswerMatch[1].trim()
+  }
+  
+  // 尝试找 最终答案: 后面的内容
+  const chineseFinalMatch = response.match(/最终答案[:：]\s*\n*([\s\S]*)$/i)
+  if (chineseFinalMatch) {
+    return chineseFinalMatch[1].trim()
+  }
+  
+  // 如果以 ## 或 # 或 > 开头，可能是直接的 markdown 内容
+  const trimmedResponse = response.trim()
+  if (trimmedResponse.match(/^[#>]/)) {
+    return trimmedResponse
+  }
+  
+  // 如果内容较长且包含markdown格式，尝试移除思考过程后返回
+  if (response.length > 300 && (response.includes('**') || response.includes('>'))) {
+    // 移除 Thought: 开头的思考过程
+    const thoughtMatch = response.match(/^Thought:[\s\S]*?(?=\n\n[^T]|\n\n$)/i)
+    if (thoughtMatch) {
+      const afterThought = response.substring(thoughtMatch[0].length).trim()
+      if (afterThought.length > 100) {
+        return afterThought
+      }
+    }
+  }
+  
+  return null
 }
 
 const fetchConsoleLog = async () => {
@@ -1074,7 +1109,6 @@ const fetchConsoleLog = async () => {
         consoleLogs.value.push(...newLogs)
         consoleLogLine.value = res.data.from_line + newLogs.length
         
-        // 滚动到底部
         nextTick(() => {
           if (logContent.value) {
             logContent.value.scrollTop = logContent.value.scrollHeight
@@ -1083,18 +1117,16 @@ const fetchConsoleLog = async () => {
       }
     }
   } catch (err) {
-    console.warn('获取控制台日志失败:', err)
+    console.warn('Failed to fetch console log:', err)
   }
 }
 
 const startPolling = () => {
   if (agentLogTimer || consoleLogTimer) return
   
-  // 立即获取一次
   fetchAgentLog()
   fetchConsoleLog()
   
-  // 开始轮询
   agentLogTimer = setInterval(fetchAgentLog, 2000)
   consoleLogTimer = setInterval(fetchConsoleLog, 1500)
 }
@@ -1113,7 +1145,7 @@ const stopPolling = () => {
 // Lifecycle
 onMounted(() => {
   if (props.reportId) {
-    addLog(`Report Agent 初始化: ${props.reportId}`)
+    addLog(`Report Agent initialized: ${props.reportId}`)
     startPolling()
   }
 })
@@ -1122,10 +1154,8 @@ onUnmounted(() => {
   stopPolling()
 })
 
-// Watch for reportId changes
 watch(() => props.reportId, (newId) => {
   if (newId) {
-    // 重置状态
     agentLogs.value = []
     consoleLogs.value = []
     agentLogLine.value = 0
@@ -1133,7 +1163,8 @@ watch(() => props.reportId, (newId) => {
     reportOutline.value = null
     currentSectionIndex.value = null
     generatedSections.value = {}
-    expandedSections.value = new Set()
+    expandedContent.value = new Set()
+    expandedLogs.value = new Set()
     isComplete.value = false
     startTime.value = null
     
@@ -1147,19 +1178,19 @@ watch(() => props.reportId, (newId) => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #FFFFFF;
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #F8F9FA;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   overflow: hidden;
 }
 
 /* Status Bar */
 .status-bar {
-  background: #FFF;
-  padding: 16px 24px;
+  background: #FFFFFF;
+  padding: 14px 24px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid #EAEAEA;
+  border-bottom: 1px solid #E5E7EB;
   flex-shrink: 0;
 }
 
@@ -1173,21 +1204,21 @@ watch(() => props.reportId, (newId) => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 6px 14px;
+  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
   border-radius: 20px;
   color: #FFF;
 }
 
 .badge-icon {
-  font-size: 14px;
+  flex-shrink: 0;
 }
 
 .badge-text {
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
 }
 
 .status-indicator {
@@ -1195,25 +1226,28 @@ watch(() => props.reportId, (newId) => {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: #666;
+  color: #6B7280;
 }
 
 .status-indicator .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #CCC;
+  background: #D1D5DB;
 }
 
-.status-indicator.pending .dot { background: #999; }
-.status-indicator.processing .dot { background: #FF9800; animation: pulse 1s infinite; }
-.status-indicator.completed .dot { background: #4CAF50; }
+.status-indicator.pending .dot { background: #9CA3AF; }
+.status-indicator.processing .dot { background: #F59E0B; animation: pulse 1.2s infinite; }
+.status-indicator.completed .dot { background: #10B981; }
 
-@keyframes pulse { 50% { opacity: 0.5; } }
+@keyframes pulse { 
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.1); } 
+}
 
 .stats-group {
   display: flex;
-  gap: 20px;
+  gap: 24px;
 }
 
 .stat-item {
@@ -1225,7 +1259,7 @@ watch(() => props.reportId, (newId) => {
 
 .stat-label {
   font-size: 10px;
-  color: #999;
+  color: #9CA3AF;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -1233,393 +1267,645 @@ watch(() => props.reportId, (newId) => {
 .stat-value {
   font-size: 14px;
   font-weight: 600;
-  color: #333;
+  color: #374151;
 }
 
 .mono {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
 }
 
-/* Main Content */
-.main-content-area {
+/* Main Split Layout */
+.main-split-layout {
   flex: 1;
-  overflow-y: auto;
-  padding: 24px;
-  background: #FAFAFA;
-}
-
-/* Outline Card */
-.outline-card {
-  background: #FFF;
-  border: 1px solid #E0E0E0;
-  border-radius: 12px;
-  padding: 20px 24px;
-  margin-bottom: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-}
-
-.outline-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
+  overflow: hidden;
 }
 
-.outline-title-wrapper {
+/* Panel Headers */
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  background: #FFFFFF;
+  border-bottom: 1px solid #E5E7EB;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.panel-header svg {
+  color: #6366F1;
+}
+
+.log-count {
+  margin-left: auto;
+  background: #EEF2FF;
+  color: #4F46E5;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+/* Left Panel */
+.left-panel {
+  width: 45%;
+  min-width: 350px;
+  background: #FFFFFF;
+  border-right: 1px solid #E5E7EB;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.outline-overview {
+  padding: 20px;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.report-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+
+.report-summary {
+  font-size: 13px;
+  color: #6B7280;
+  line-height: 1.6;
+  margin: 0 0 16px;
+}
+
+.progress-wrapper {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.outline-icon {
-  color: #667eea;
+.progress-bar {
+  flex: 1;
+  height: 6px;
+  background: #E5E7EB;
+  border-radius: 3px;
+  overflow: hidden;
 }
 
-.outline-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: #1a1a1a;
-  margin: 0;
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4F46E5 0%, #7C3AED 100%);
+  border-radius: 3px;
+  transition: width 0.5s ease;
 }
 
-.outline-badge {
-  font-size: 11px;
+.progress-text {
+  font-size: 12px;
   font-weight: 600;
-  padding: 4px 10px;
-  background: #E8F5E9;
-  color: #2E7D32;
-  border-radius: 12px;
+  color: #4F46E5;
+  min-width: 36px;
+  text-align: right;
 }
 
-.outline-summary {
-  font-size: 14px;
-  color: #666;
-  line-height: 1.6;
-  margin: 0 0 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #F0F0F0;
-}
-
-.outline-sections {
+/* Section Cards */
+.sections-container {
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
-.outline-section-item {
+.section-card {
   background: #FAFAFA;
-  border: 1px solid #EAEAEA;
-  border-radius: 8px;
-  transition: all 0.2s;
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.section-card:hover {
+  border-color: #D1D5DB;
+}
+
+.section-card.current {
+  border-color: #F59E0B;
+  background: #FFFBEB;
+}
+
+.section-card.completed {
+  border-color: #10B981;
+  background: #ECFDF5;
+}
+
+.section-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
   cursor: pointer;
 }
 
-.outline-section-item:hover {
-  background: #F5F5F5;
-  border-color: #DDD;
-}
-
-.outline-section-item.current {
-  border-color: #FF9800;
-  background: #FFF8E1;
-}
-
-.outline-section-item.completed {
-  border-color: #4CAF50;
-  background: #F1F8E9;
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-}
-
-.section-num {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  font-weight: 600;
-  color: #999;
-  min-width: 24px;
-}
-
-.section-title {
-  flex: 1;
-  font-size: 14px;
-  font-weight: 500;
-  color: #333;
-}
-
-.section-status {
-  width: 20px;
-  height: 20px;
+.section-indicator {
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.section-status svg {
-  color: #4CAF50;
-}
-
-.generating-dot {
-  width: 8px;
-  height: 8px;
-  background: #FF9800;
   border-radius: 50%;
-  animation: pulse 1s infinite;
+  background: #E5E7EB;
+  flex-shrink: 0;
 }
 
-.section-toggle {
+.section-card.completed .section-indicator {
+  background: #10B981;
+}
+
+.section-card.current .section-indicator {
+  background: #F59E0B;
+}
+
+.check-icon {
+  color: #FFFFFF;
+}
+
+.generating-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #FFFFFF;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.section-number {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6B7280;
+}
+
+.section-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.expand-btn {
   width: 24px;
   height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #E0E0E0;
-  border-radius: 4px;
+  background: #E5E7EB;
+  border-radius: 6px;
   font-size: 14px;
   font-weight: 600;
-  color: #666;
+  color: #6B7280;
+  transition: all 0.2s;
 }
 
-.section-content-preview {
-  padding: 0 16px 16px;
-  border-top: 1px solid #EAEAEA;
-  margin-top: 8px;
+.section-card.completed .expand-btn {
+  background: #D1FAE5;
+  color: #059669;
 }
 
-.content-markdown {
+.section-card:hover .expand-btn {
+  background: #D1D5DB;
+}
+
+.section-card.completed:hover .expand-btn {
+  background: #A7F3D0;
+}
+
+.section-content {
+  border-top: 1px solid #E5E7EB;
+  padding: 20px;
+  background: #FFFFFF;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.section-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.section-content::-webkit-scrollbar-track {
+  background: #F3F4F6;
+  border-radius: 3px;
+}
+
+.section-content::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 3px;
+}
+
+.section-content::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+.content-body {
   font-size: 13px;
   line-height: 1.7;
-  color: #444;
+  color: #4B5563;
 }
 
-.content-markdown :deep(h1),
-.content-markdown :deep(h2),
-.content-markdown :deep(h3) {
-  margin-top: 16px;
-  margin-bottom: 8px;
-  color: #1a1a1a;
+.content-body :deep(.md-h2) {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin: 20px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #E5E7EB;
 }
 
-.content-markdown :deep(p) {
-  margin-bottom: 12px;
+.content-body :deep(.md-h3) {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1F2937;
+  margin: 16px 0 10px;
 }
 
-.content-markdown :deep(ul),
-.content-markdown :deep(ol) {
-  padding-left: 20px;
-  margin-bottom: 12px;
+.content-body :deep(.md-h4) {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin: 14px 0 8px;
 }
 
-/* Action Feed */
-.action-feed {
-  background: #FFF;
-  border: 1px solid #E0E0E0;
-  border-radius: 12px;
+.content-body :deep(.md-h5) {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4B5563;
+  margin: 12px 0 6px;
+}
+
+.content-body :deep(.md-p) {
+  margin: 10px 0;
+}
+
+.content-body :deep(.md-quote) {
+  margin: 12px 0;
+  padding: 10px 16px;
+  border-left: 3px solid #6366F1;
+  background: #F3F4F6;
+  color: #4B5563;
+  font-style: italic;
+}
+
+.content-body :deep(.md-ul),
+.content-body :deep(.md-ol) {
+  margin: 10px 0;
+  padding-left: 24px;
+}
+
+.content-body :deep(.md-li),
+.content-body :deep(.md-oli) {
+  margin: 6px 0;
+  line-height: 1.6;
+}
+
+.content-body :deep(.md-hr) {
+  border: none;
+  border-top: 1px solid #E5E7EB;
+  margin: 16px 0;
+}
+
+.content-body :deep(.code-block) {
+  background: #1F2937;
+  color: #E5E7EB;
+  padding: 12px 16px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  margin: 12px 0;
+}
+
+.content-body :deep(.inline-code) {
+  background: #F3F4F6;
+  color: #DC2626;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+
+.content-body :deep(strong) {
+  color: #111827;
+  font-weight: 600;
+}
+
+.content-body :deep(em) {
+  color: #4B5563;
+}
+
+/* Slide Content Transition */
+.slide-content-enter-active {
+  transition: all 0.4s ease-out;
   overflow: hidden;
 }
 
-.feed-header {
+.slide-content-leave-active {
+  transition: all 0.3s ease-in;
+  overflow: hidden;
+}
+
+.slide-content-enter-from {
+  max-height: 0;
+  opacity: 0;
+  padding: 0 20px;
+}
+
+.slide-content-enter-to {
+  max-height: 500px;
+  opacity: 1;
+}
+
+.slide-content-leave-from {
+  max-height: 500px;
+  opacity: 1;
+}
+
+.slide-content-leave-to {
+  max-height: 0;
+  opacity: 0;
+  padding: 0 20px;
+}
+
+/* Waiting Placeholder */
+.waiting-placeholder {
+  flex: 1;
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
-  padding: 14px 20px;
-  background: #FAFAFA;
-  border-bottom: 1px solid #EAEAEA;
+  justify-content: center;
+  gap: 20px;
+  padding: 40px;
+  color: #9CA3AF;
 }
 
-.feed-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #333;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.waiting-animation {
+  position: relative;
+  width: 48px;
+  height: 48px;
 }
 
-.feed-count {
-  font-size: 12px;
-  color: #999;
-  font-family: 'JetBrains Mono', monospace;
+.waiting-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 2px solid #E5E7EB;
+  border-radius: 50%;
+  animation: ripple 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
-.feed-timeline {
-  padding: 16px 20px;
+.waiting-ring:nth-child(2) {
+  animation-delay: 0.4s;
 }
 
-.feed-item {
+.waiting-ring:nth-child(3) {
+  animation-delay: 0.8s;
+}
+
+@keyframes ripple {
+  0% { transform: scale(0.5); opacity: 1; }
+  100% { transform: scale(2); opacity: 0; }
+}
+
+.waiting-text {
+  font-size: 14px;
+}
+
+/* Right Panel */
+.right-panel {
+  flex: 1;
+  background: #F8F9FA;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Workflow Timeline */
+.workflow-timeline {
+  padding: 20px;
+  flex: 1;
+}
+
+.timeline-item {
   display: flex;
   gap: 16px;
-  padding: 12px 0;
-  border-bottom: 1px solid #F5F5F5;
-  transition: background 0.2s;
+  margin-bottom: 4px;
 }
 
-.feed-item:last-child {
-  border-bottom: none;
-}
-
-.feed-item:hover {
-  background: #FAFAFA;
-  margin: 0 -20px;
-  padding: 12px 20px;
-}
-
-.item-marker {
+.timeline-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 24px;
   flex-shrink: 0;
 }
 
-.marker-icon {
-  width: 28px;
-  height: 28px;
+.connector-dot {
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #F0F0F0;
-  color: #666;
+  background: #D1D5DB;
+  border: 2px solid #F8F9FA;
+  z-index: 1;
 }
 
-.marker-start { background: #E3F2FD; color: #1976D2; }
-.marker-planning { background: #FFF3E0; color: #F57C00; }
-.marker-section { background: #E8F5E9; color: #388E3C; }
-.marker-section-done { background: #C8E6C9; color: #2E7D32; }
-.marker-tool { background: #F3E5F5; color: #7B1FA2; }
-.marker-tool-result { background: #FCE4EC; color: #C2185B; }
-.marker-llm { background: #E0F7FA; color: #00838F; }
-.marker-complete { background: #C8E6C9; color: #1B5E20; }
-
-.item-content {
+.connector-line {
+  width: 2px;
   flex: 1;
-  min-width: 0;
+  background: #E5E7EB;
+  margin-top: -2px;
 }
 
-.item-header {
+/* Dot colors */
+.dot-start { background: #3B82F6; }
+.dot-planning { background: #F59E0B; }
+.dot-section { background: #10B981; }
+.dot-section-content { background: #34D399; }
+.dot-subsection-content { background: #6EE7B7; }
+.dot-section-done { background: #059669; box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.2); }
+.dot-tool { background: #8B5CF6; }
+.dot-result { background: #EC4899; }
+.dot-llm { background: #06B6D4; }
+.dot-complete { background: #10B981; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2); }
+
+.timeline-content {
+  flex: 1;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  transition: all 0.2s ease;
+}
+
+.timeline-content:hover {
+  border-color: #D1D5DB;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.timeline-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
-.item-action {
-  font-size: 13px;
+.action-label {
+  font-size: 12px;
   font-weight: 600;
-  color: #333;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
-.item-stage {
-  font-size: 10px;
-  font-weight: 500;
+.action-time {
+  font-size: 11px;
+  color: #9CA3AF;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.timeline-body {
+  font-size: 13px;
+  color: #4B5563;
+}
+
+.timeline-footer {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #F3F4F6;
+}
+
+.elapsed-badge {
+  font-size: 11px;
+  color: #6B7280;
+  background: #F3F4F6;
   padding: 2px 8px;
   border-radius: 10px;
-  background: #F0F0F0;
-  color: #666;
-  text-transform: uppercase;
-}
-
-.item-stage.pending { background: #FFF3E0; color: #E65100; }
-.item-stage.planning { background: #E3F2FD; color: #1565C0; }
-.item-stage.generating { background: #F3E5F5; color: #7B1FA2; }
-.item-stage.completed { background: #E8F5E9; color: #2E7D32; }
-
-.item-time {
-  font-size: 11px;
-  color: #999;
-  font-family: 'JetBrains Mono', monospace;
-  margin-left: auto;
-}
-
-.item-body {
-  font-size: 13px;
-  color: #555;
-  line-height: 1.5;
-}
-
-.item-footer {
-  margin-top: 8px;
-}
-
-.elapsed {
-  font-size: 11px;
-  color: #999;
   font-family: 'JetBrains Mono', monospace;
 }
 
-/* Item Body Blocks */
-.info-block {
+/* Timeline Body Elements */
+.info-row {
   display: flex;
   gap: 8px;
   margin-bottom: 6px;
 }
 
-.info-label {
-  color: #888;
-  font-size: 12px;
-}
-
-.info-value {
-  color: #333;
-}
-
-.message-text {
-  color: #555;
-}
-
-.message-text.success {
-  color: #2E7D32;
-  font-weight: 500;
-}
-
-.outline-mini {
-  margin-top: 8px;
-  padding: 8px 12px;
-  background: #F5F5F5;
-  border-radius: 6px;
-}
-
-.mini-label {
-  font-size: 12px;
-  color: #666;
-}
-
-.section-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.section-badge {
+.info-key {
   font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
-  background: #667eea;
-  color: #FFF;
-  border-radius: 4px;
+  color: #9CA3AF;
+  min-width: 80px;
 }
 
-.section-name {
-  font-weight: 500;
-  color: #333;
+.info-val {
+  color: #374151;
 }
 
-.tool-call-block {
-  background: #F8F8F8;
-  border: 1px solid #EAEAEA;
+.status-message {
+  padding: 8px 12px;
   border-radius: 6px;
-  overflow: hidden;
+  font-size: 13px;
 }
 
-.tool-name {
-  display: flex;
+.status-message.planning {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.status-message.success {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.outline-badge {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 10px;
+  background: #EEF2FF;
+  color: #4338CA;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.section-tag {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
-  background: #F3E5F5;
-  font-weight: 600;
+  padding: 6px 12px;
+  background: #EEF2FF;
+  border-radius: 6px;
+}
+
+.section-tag.content-ready {
+  background: #ECFDF5;
+  border: 1px dashed #34D399;
+}
+
+.section-tag.content-ready svg {
+  color: #34D399;
+}
+
+.section-tag.content-ready.is-subsection {
+  background: #F0FDF4;
+  border-color: #6EE7B7;
+}
+
+.section-tag.completed {
+  background: #D1FAE5;
+  border: 1px solid #059669;
+}
+
+.section-tag.completed svg {
+  color: #059669;
+}
+
+.tag-num {
+  font-size: 11px;
+  font-weight: 700;
+  color: #4F46E5;
+}
+
+.section-tag.completed .tag-num {
+  color: #059669;
+}
+
+.tag-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.tag-sub {
+  font-size: 11px;
+  color: #6B7280;
+  margin-left: 4px;
+}
+
+.tool-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #F3E8FF;
+  color: #7C3AED;
+  border-radius: 6px;
   font-size: 12px;
-  color: #7B1FA2;
+  font-weight: 600;
 }
 
 .tool-icon {
@@ -1627,161 +1913,682 @@ watch(() => props.reportId, (newId) => {
 }
 
 .tool-params {
-  padding: 10px 12px;
-  font-size: 11px;
+  margin-top: 10px;
+  background: #F9FAFB;
+  border-radius: 6px;
+  padding: 10px;
+  overflow-x: auto;
 }
 
 .tool-params pre {
   margin: 0;
   font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #4B5563;
   white-space: pre-wrap;
   word-break: break-all;
-  color: #555;
 }
 
-.tool-result-block {
-  background: #FFF8E1;
-  border: 1px solid #FFE082;
-  border-radius: 6px;
-  padding: 10px 12px;
+.expand-toggle {
+  margin-top: 8px;
+  background: transparent;
+  border: none;
+  color: #6366F1;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
 }
 
-.result-header {
+.expand-toggle:hover {
+  text-decoration: underline;
+}
+
+/* Result Wrapper */
+.result-wrapper {
+  background: #F9FAFB;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.result-wrapper.result-insight_forge {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+}
+
+.result-wrapper.result-panorama_search {
+  background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
+}
+
+.result-wrapper.result-interview_agents {
+  background: linear-gradient(135deg, #F3E8FF 0%, #E9D5FF 100%);
+}
+
+.result-wrapper.result-quick_search {
+  background: linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%);
+}
+
+.result-meta {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .result-tool {
-  font-weight: 600;
   font-size: 12px;
-  color: #F57C00;
+  font-weight: 600;
+  color: #374151;
 }
 
-.result-length {
+.result-size {
   font-size: 10px;
-  color: #999;
+  color: #6B7280;
   font-family: 'JetBrains Mono', monospace;
 }
 
-.result-content {
-  font-size: 12px;
-  color: #555;
-  line-height: 1.6;
+.result-raw {
+  margin-top: 10px;
+  max-height: 300px;
+  overflow-y: auto;
 }
 
-.result-content pre {
+.result-raw pre {
   margin: 0;
   font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
   white-space: pre-wrap;
   word-break: break-word;
-  background: rgba(0, 0, 0, 0.03);
-  padding: 12px;
+  color: #374151;
+  background: rgba(255,255,255,0.5);
+  padding: 10px;
+  border-radius: 6px;
+}
+
+.raw-preview {
+  margin: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #6B7280;
+}
+
+.toggle-raw {
+  margin-top: 10px;
+  background: rgba(255,255,255,0.7);
+  border: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #6B7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-raw:hover {
+  background: rgba(255,255,255,0.9);
+  color: #374151;
+}
+
+/* LLM Response */
+.llm-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.meta-tag {
+  font-size: 11px;
+  padding: 3px 8px;
+  background: #F3F4F6;
+  color: #6B7280;
   border-radius: 4px;
 }
 
-.llm-response-block {
-  background: #E0F7FA;
-  border: 1px solid #B2EBF2;
-  border-radius: 6px;
-  padding: 10px 12px;
+.meta-tag.active {
+  background: #DBEAFE;
+  color: #1E40AF;
 }
 
-.response-meta {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
-.meta-item {
-  font-size: 11px;
-  color: #666;
-}
-
-.meta-item.active {
-  color: #00838F;
+.meta-tag.final-answer {
+  background: #D1FAE5;
+  color: #059669;
   font-weight: 600;
 }
 
-.response-content {
-  font-size: 12px;
-  color: #444;
-  line-height: 1.6;
-}
-
-.response-content pre {
-  margin: 0;
-  font-family: 'JetBrains Mono', monospace;
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: rgba(0, 0, 0, 0.03);
-  padding: 12px;
-  border-radius: 4px;
-}
-
-.complete-info {
+.final-answer-hint {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #2E7D32;
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%);
+  border-radius: 6px;
+  color: #065F46;
+  font-size: 12px;
   font-weight: 500;
 }
 
-.complete-info.success {
-  font-size: 15px;
-}
-
-.complete-icon {
+.final-answer-hint svg {
   flex-shrink: 0;
 }
 
-/* Waiting State */
-.waiting-state {
+.llm-content {
+  margin-top: 10px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.llm-content pre {
+  margin: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #4B5563;
+  background: #F3F4F6;
+  padding: 10px;
+  border-radius: 6px;
+}
+
+/* Complete Banner */
+.complete-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%);
+  border-radius: 8px;
+  color: #065F46;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* Workflow Empty */
+.workflow-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding: 48px;
-  color: #999;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #9CA3AF;
   font-size: 13px;
 }
 
-.pulse-ring {
-  width: 32px;
-  height: 32px;
+.empty-pulse {
+  width: 24px;
+  height: 24px;
+  background: #E5E7EB;
   border-radius: 50%;
-  border: 1px solid #EAEAEA;
-  animation: ripple 2s infinite;
+  margin-bottom: 16px;
+  animation: pulse-ring 1.5s infinite;
 }
 
-@keyframes ripple {
-  0% { transform: scale(0.8); opacity: 1; border-color: #CCC; }
-  100% { transform: scale(2.5); opacity: 0; border-color: #EAEAEA; }
+@keyframes pulse-ring {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.5; }
 }
 
-/* Animation */
-.feed-item-enter-active,
-.feed-item-leave-active {
-  transition: all 0.3s ease;
+/* Timeline Transitions */
+.timeline-item-enter-active {
+  transition: all 0.4s ease;
 }
 
-.feed-item-enter-from {
+.timeline-item-enter-from {
   opacity: 0;
-  transform: translateY(-10px);
+  transform: translateX(-20px);
 }
 
-.feed-item-leave-to {
-  opacity: 0;
+/* ========== Structured Result Display Components ========== */
+
+/* Common Styles */
+.stat-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
-/* Console Logs */
+.stat-box {
+  flex: 1;
+  background: rgba(255,255,255,0.8);
+  border-radius: 6px;
+  padding: 8px;
+  text-align: center;
+}
+
+.stat-box .stat-num {
+  display: block;
+  font-size: 18px;
+  font-weight: 700;
+  color: #374151;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.stat-box .stat-label {
+  display: block;
+  font-size: 10px;
+  color: #6B7280;
+  margin-top: 2px;
+}
+
+.stat-box.highlight {
+  background: rgba(16, 185, 129, 0.2);
+}
+
+.stat-box.highlight .stat-num {
+  color: #059669;
+}
+
+.stat-box.muted {
+  background: rgba(107, 114, 128, 0.1);
+}
+
+.stat-box.muted .stat-num {
+  color: #6B7280;
+}
+
+.query-display {
+  background: rgba(255,255,255,0.6);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #4B5563;
+  margin-bottom: 10px;
+  border-left: 3px solid #6366F1;
+}
+
+.expand-details {
+  background: rgba(255,255,255,0.7);
+  border: 1px solid rgba(0,0,0,0.1);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #4B5563;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.expand-details:hover {
+  background: rgba(255,255,255,0.9);
+}
+
+.detail-content {
+  margin-top: 12px;
+  background: rgba(255,255,255,0.5);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6B7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+
+/* Facts Section */
+.facts-section {
+  margin-bottom: 12px;
+}
+
+.fact-row {
+  display: flex;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+.fact-row:last-child {
+  border-bottom: none;
+}
+
+.fact-row.active {
+  background: rgba(16, 185, 129, 0.1);
+  margin: 0 -8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+
+.fact-idx {
+  min-width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #E5E7EB;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #6B7280;
+  flex-shrink: 0;
+}
+
+.fact-text {
+  font-size: 12px;
+  color: #4B5563;
+  line-height: 1.5;
+}
+
+/* Entities Section */
+.entities-section {
+  margin-bottom: 12px;
+}
+
+.entity-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.entity-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255,255,255,0.8);
+  border: 1px solid rgba(0,0,0,0.1);
+  border-radius: 20px;
+  padding: 4px 10px;
+}
+
+.chip-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.chip-type {
+  font-size: 9px;
+  color: #9CA3AF;
+}
+
+/* Relations Section */
+.relations-section {
+  margin-bottom: 12px;
+}
+
+.relation-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  flex-wrap: wrap;
+}
+
+.rel-node {
+  font-size: 11px;
+  font-weight: 500;
+  color: #374151;
+  background: #E5E7EB;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.rel-edge {
+  font-size: 10px;
+  color: #FFFFFF;
+  background: #6366F1;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+/* Interview Display */
+.interview-display {
+  padding: 4px 0;
+}
+
+.interview-header {
+  margin-bottom: 12px;
+}
+
+.interview-topic {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+.interview-meta {
+  font-size: 11px;
+  color: #6B7280;
+}
+
+.interview-carousel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.interview-card {
+  background: rgba(255,255,255,0.9);
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 10px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.interview-card:hover {
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.interview-card.active {
+  border-color: #8B5CF6;
+  box-shadow: 0 2px 12px rgba(139, 92, 246, 0.15);
+}
+
+.interviewee {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%);
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 50%;
+}
+
+.interviewee .info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.interviewee .name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.interviewee .role {
+  font-size: 11px;
+  color: #6B7280;
+}
+
+.interview-idx {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8B5CF6;
+  background: #F3E8FF;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.bio {
+  font-size: 11px;
+  color: #6B7280;
+  font-style: italic;
+  margin-bottom: 10px;
+  padding: 8px;
+  background: rgba(0,0,0,0.03);
+  border-radius: 6px;
+}
+
+.qa-section {
+  border-top: 1px solid rgba(0,0,0,0.08);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
+.question, .answer {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.q-label, .a-label {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.q-label {
+  background: #EEF2FF;
+  color: #4F46E5;
+}
+
+.a-label {
+  background: #D1FAE5;
+  color: #059669;
+}
+
+.q-text, .a-text {
+  font-size: 12px;
+  color: #4B5563;
+  line-height: 1.6;
+}
+
+.q-text {
+  font-weight: 500;
+}
+
+.quotes {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(0,0,0,0.1);
+}
+
+.quote {
+  font-size: 11px;
+  color: #6B7280;
+  font-style: italic;
+  padding: 6px 12px;
+  margin: 4px 0;
+  border-left: 2px solid #A78BFA;
+  background: rgba(167, 139, 250, 0.08);
+}
+
+.carousel-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.carousel-dots .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.15);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.carousel-dots .dot.active {
+  background: #8B5CF6;
+  width: 20px;
+  border-radius: 4px;
+}
+
+.interview-summary {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(255,255,255,0.6);
+  border-radius: 8px;
+}
+
+.summary-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6B7280;
+  margin-bottom: 6px;
+}
+
+.summary-text {
+  font-size: 12px;
+  color: #4B5563;
+  line-height: 1.6;
+}
+
+/* Quick Search Display */
+.quick-search-display {
+  padding: 4px 0;
+}
+
+.search-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.search-query {
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.search-count {
+  font-size: 10px;
+  color: #059669;
+  background: rgba(16, 185, 129, 0.15);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.search-results {
+  margin-top: 10px;
+  background: rgba(255,255,255,0.5);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.search-fact {
+  display: flex;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+.search-fact:last-child {
+  border-bottom: none;
+}
+
+/* Console Logs - 与 Step3Simulation.vue 保持一致 */
 .console-logs {
-  background: #1a1a1a;
+  background: #000;
   color: #DDD;
   padding: 16px;
   font-family: 'JetBrains Mono', monospace;
-  border-top: 1px solid #333;
+  border-top: 1px solid #222;
   flex-shrink: 0;
 }
 
@@ -1803,8 +2610,8 @@ watch(() => props.reportId, (newId) => {
 .log-content {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  max-height: 100px;
+  gap: 4px;
+  height: 120px;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -1818,568 +2625,11 @@ watch(() => props.reportId, (newId) => {
 }
 
 .log-msg {
-  color: #AAA;
+  color: #BBB;
   word-break: break-all;
 }
 
 .log-msg.error { color: #EF5350; }
 .log-msg.warning { color: #FFA726; }
 .log-msg.success { color: #66BB6A; }
-
-/* ========== 工具结果结构化展示样式 ========== */
-
-/* 切换原文按钮 */
-.toggle-raw-btn {
-  background: transparent;
-  border: 1px solid #DDD;
-  border-radius: 4px;
-  padding: 2px 8px;
-  font-size: 10px;
-  color: #666;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.toggle-raw-btn:hover {
-  background: #F5F5F5;
-  border-color: #CCC;
-}
-
-/* 原文展示 */
-.result-raw {
-  margin-top: 10px;
-}
-
-.result-raw pre {
-  margin: 0;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: rgba(0, 0, 0, 0.03);
-  padding: 12px;
-  border-radius: 4px;
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-/* 工具类型特定背景 */
-.tool-result-block.tool-insight_forge {
-  background: linear-gradient(135deg, #FFF8E1 0%, #FFF3E0 100%);
-  border-color: #FFE082;
-}
-
-.tool-result-block.tool-panorama_search {
-  background: linear-gradient(135deg, #E3F2FD 0%, #E1F5FE 100%);
-  border-color: #90CAF9;
-}
-
-.tool-result-block.tool-interview_agents {
-  background: linear-gradient(135deg, #F3E5F5 0%, #FCE4EC 100%);
-  border-color: #CE93D8;
-}
-
-.tool-result-block.tool-quick_search {
-  background: linear-gradient(135deg, #E8F5E9 0%, #F1F8E9 100%);
-  border-color: #A5D6A7;
-}
-
-/* 统计卡片 */
-.stats-cards {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-
-.stat-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 8px 12px;
-  background: #FFF;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-  min-width: 60px;
-}
-
-.stat-card .stat-num {
-  font-size: 18px;
-  font-weight: 700;
-  color: #333;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-.stat-card .stat-name {
-  font-size: 10px;
-  color: #888;
-  margin-top: 2px;
-}
-
-.stat-card.facts .stat-num { color: #E65100; }
-.stat-card.entities .stat-num { color: #7B1FA2; }
-.stat-card.relations .stat-num { color: #1565C0; }
-.stat-card.nodes .stat-num { color: #1976D2; }
-.stat-card.edges .stat-num { color: #00838F; }
-.stat-card.active .stat-num { color: #2E7D32; }
-.stat-card.history .stat-num { color: #795548; }
-
-/* 可折叠区块 */
-.collapsible-section {
-  margin-top: 10px;
-  background: rgba(255,255,255,0.7);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.section-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  background: rgba(0,0,0,0.03);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  color: #555;
-  transition: background 0.2s;
-}
-
-.section-title:hover {
-  background: rgba(0,0,0,0.06);
-}
-
-.section-title.active { color: #2E7D32; }
-.section-title.history { color: #795548; }
-
-.toggle-icon {
-  width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0,0,0,0.08);
-  border-radius: 4px;
-  font-size: 14px;
-}
-
-/* 子问题列表 */
-.sub-queries {
-  padding: 8px 12px;
-}
-
-.sub-query {
-  display: flex;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px dashed #EEE;
-}
-
-.sub-query:last-child {
-  border-bottom: none;
-}
-
-.query-num {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #E3F2FD;
-  color: #1565C0;
-  border-radius: 50%;
-  font-size: 11px;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.query-text {
-  font-size: 12px;
-  color: #444;
-  line-height: 1.5;
-}
-
-/* 事实列表 */
-.facts-list {
-  padding: 8px 12px;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.fact-item {
-  display: flex;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px solid #F0F0F0;
-}
-
-.fact-item:last-child {
-  border-bottom: none;
-}
-
-.fact-item.active {
-  background: rgba(46, 125, 50, 0.05);
-  margin: 0 -12px;
-  padding: 6px 12px;
-}
-
-.fact-item.history {
-  background: rgba(121, 85, 72, 0.05);
-  margin: 0 -12px;
-  padding: 6px 12px;
-}
-
-.fact-num {
-  min-width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #F5F5F5;
-  color: #888;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.fact-text {
-  font-size: 12px;
-  color: #444;
-  line-height: 1.5;
-}
-
-.fact-content {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.time-range {
-  font-size: 10px;
-  color: #888;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-/* 实体网格 */
-.entities-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 8px;
-  padding: 8px 12px;
-}
-
-.entity-card {
-  background: #FFF;
-  border: 1px solid #EEE;
-  border-radius: 6px;
-  padding: 8px 10px;
-}
-
-.entity-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.entity-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: #333;
-}
-
-.entity-type {
-  font-size: 10px;
-  color: #7B1FA2;
-  background: #F3E5F5;
-  padding: 2px 6px;
-  border-radius: 10px;
-}
-
-.entity-summary {
-  font-size: 11px;
-  color: #666;
-  line-height: 1.4;
-}
-
-/* 实体标签 */
-.entity-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 12px;
-}
-
-.entity-tag {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: #FFF;
-  border: 1px solid #EEE;
-  border-radius: 15px;
-  padding: 4px 10px;
-}
-
-.tag-name {
-  font-size: 11px;
-  font-weight: 500;
-  color: #333;
-}
-
-.tag-type {
-  font-size: 9px;
-  color: #888;
-}
-
-/* 关系链 */
-.relations-list {
-  padding: 8px 12px;
-}
-
-.relation-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 0;
-  border-bottom: 1px solid #F0F0F0;
-  flex-wrap: wrap;
-}
-
-.relation-item:last-child {
-  border-bottom: none;
-}
-
-.rel-source, .rel-target {
-  font-size: 11px;
-  font-weight: 500;
-  color: #333;
-  background: #E3F2FD;
-  padding: 2px 8px;
-  border-radius: 4px;
-}
-
-.rel-arrow {
-  font-size: 12px;
-  color: #999;
-}
-
-.rel-type {
-  font-size: 10px;
-  color: #FFF;
-  background: #1565C0;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-/* 采访结果 */
-.interview-result {
-  padding: 8px 0;
-}
-
-.interview-header {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px 12px;
-  background: rgba(255,255,255,0.7);
-  border-radius: 6px;
-  margin-bottom: 10px;
-}
-
-.interview-topic {
-  font-size: 13px;
-  font-weight: 600;
-  color: #333;
-}
-
-.interview-count {
-  font-size: 11px;
-  color: #7B1FA2;
-}
-
-.interviews-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.interview-card {
-  background: #FFF;
-  border: 1px solid #EEE;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.interview-card:hover {
-  border-color: #DDD;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-
-.interview-card.expanded {
-  border-color: #CE93D8;
-}
-
-.interview-card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-}
-
-.interview-num {
-  font-size: 11px;
-  font-weight: 600;
-  color: #7B1FA2;
-  background: #F3E5F5;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.interview-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: #333;
-}
-
-.interview-role {
-  font-size: 10px;
-  color: #888;
-  background: #F5F5F5;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-.expand-icon {
-  margin-left: auto;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #F5F5F5;
-  border-radius: 4px;
-  font-size: 14px;
-  color: #666;
-}
-
-.interview-card-body {
-  padding: 0 12px 12px;
-  border-top: 1px solid #F0F0F0;
-}
-
-.interview-bio {
-  font-size: 11px;
-  color: #888;
-  font-style: italic;
-  padding: 8px 0;
-}
-
-.interview-qa {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.qa-question, .qa-answer {
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.qa-label {
-  font-weight: 600;
-  color: #7B1FA2;
-  margin-right: 4px;
-}
-
-.qa-question {
-  color: #555;
-  background: #FAFAFA;
-  padding: 6px 8px;
-  border-radius: 4px;
-}
-
-.qa-answer {
-  color: #333;
-}
-
-.interview-quotes {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed #EEE;
-}
-
-.quote-item {
-  font-size: 11px;
-  color: #666;
-  font-style: italic;
-  padding: 4px 0 4px 12px;
-  border-left: 2px solid #CE93D8;
-  margin-bottom: 4px;
-}
-
-.interview-summary {
-  margin-top: 10px;
-  background: rgba(255,255,255,0.7);
-  border-radius: 6px;
-  padding: 10px 12px;
-}
-
-.summary-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #555;
-  margin-bottom: 6px;
-}
-
-.summary-content {
-  font-size: 11px;
-  color: #666;
-  line-height: 1.5;
-}
-
-/* 快速搜索结果 */
-.quick-search-result {
-  padding: 8px 0;
-}
-
-.search-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  background: rgba(255,255,255,0.7);
-  border-radius: 6px;
-  margin-bottom: 10px;
-}
-
-.search-query {
-  font-size: 12px;
-  font-weight: 600;
-  color: #333;
-}
-
-.search-count {
-  font-size: 11px;
-  color: #2E7D32;
-  background: #E8F5E9;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-.search-facts {
-  padding: 0 12px;
-}
-
-.search-fact-item {
-  display: flex;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px solid #F0F0F0;
-}
-
-.search-fact-item:last-child {
-  border-bottom: none;
-}
 </style>
