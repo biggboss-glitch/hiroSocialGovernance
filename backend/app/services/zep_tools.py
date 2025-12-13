@@ -1009,37 +1009,47 @@ class ZepToolsService:
         result.semantic_facts = all_facts
         result.total_facts = len(all_facts)
         
-        # Step 3: 提取相关实体并获取详细信息
-        all_nodes = self.get_all_nodes(graph_id)
-        node_map = {n.uuid: n for n in all_nodes}
-        
-        # 从边中提取涉及的实体
+        # Step 3: 从边中提取相关实体UUID，只获取这些实体的信息（不获取全部节点）
         entity_uuids = set()
         for edge_data in all_edges:
             if isinstance(edge_data, dict):
-                entity_uuids.add(edge_data.get('source_node_uuid', ''))
-                entity_uuids.add(edge_data.get('target_node_uuid', ''))
+                source_uuid = edge_data.get('source_node_uuid', '')
+                target_uuid = edge_data.get('target_node_uuid', '')
+                if source_uuid:
+                    entity_uuids.add(source_uuid)
+                if target_uuid:
+                    entity_uuids.add(target_uuid)
         
-        # 获取实体详情
+        # 只获取相关实体的详情（限制数量，避免获取过多）
         entity_insights = []
-        for uuid in list(entity_uuids)[:30]:  # 限制数量
-            if uuid in node_map:
-                node = node_map[uuid]
-                entity_type = next((l for l in node.labels if l not in ["Entity", "Node"]), "实体")
-                
-                # 获取该实体相关的事实
-                related_facts = [
-                    f for f in all_facts 
-                    if node.name.lower() in f.lower()
-                ]
-                
-                entity_insights.append({
-                    "uuid": node.uuid,
-                    "name": node.name,
-                    "type": entity_type,
-                    "summary": node.summary,
-                    "related_facts": related_facts[:5]
-                })
+        node_map = {}  # 用于后续关系链构建
+        
+        for uuid in list(entity_uuids)[:50]:  # 最多30个实体
+            if not uuid:
+                continue
+            try:
+                # 单独获取每个相关节点的信息
+                node = self.get_node_detail(uuid)
+                if node:
+                    node_map[uuid] = node
+                    entity_type = next((l for l in node.labels if l not in ["Entity", "Node"]), "实体")
+                    
+                    # 获取该实体相关的事实
+                    related_facts = [
+                        f for f in all_facts 
+                        if node.name.lower() in f.lower()
+                    ]
+                    
+                    entity_insights.append({
+                        "uuid": node.uuid,
+                        "name": node.name,
+                        "type": entity_type,
+                        "summary": node.summary,
+                        "related_facts": related_facts[:5]
+                    })
+            except Exception as e:
+                logger.debug(f"获取节点 {uuid} 失败: {e}")
+                continue
         
         result.entity_insights = entity_insights
         result.total_entities = len(entity_insights)

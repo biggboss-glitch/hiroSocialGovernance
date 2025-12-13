@@ -603,6 +603,11 @@ class ReportAgent:
         logger.info(f"ReACT生成章节: {section.title}")
         
         # 构建系统prompt - 优化后强调工具使用和引用原文
+        # 确定当前章节的标题级别
+        section_level = 2  # 默认为二级标题（##）
+        sub_heading_level = 3  # 子标题使用三级（###）
+        sub_sub_heading_level = 4  # 更小的子标题使用四级（####）
+        
         system_prompt = f"""你是一个专业的舆情分析报告撰写专家，正在撰写报告的一个章节。
 
 报告标题: {outline.title}
@@ -631,6 +636,44 @@ class ReportAgent:
    - 报告内容必须反映模拟中实际发生的情况
    - 不要添加模拟中不存在的信息
    - 如果某方面信息不足，如实说明
+
+═══════════════════════════════════════════════════════════════
+【⚠️ 格式规范 - 极其重要！】
+═══════════════════════════════════════════════════════════════
+
+【一个章节 = 最小内容单位】
+- 每个章节是报告的最小分块单位
+- ❌ 禁止在章节内使用任何 Markdown 标题（#、##、###、#### 等）
+- ❌ 禁止在内容开头添加章节主标题
+- ✅ 章节标题由系统自动添加，你只需撰写纯正文内容
+- ✅ 使用**粗体**、段落分隔、引用、列表来组织内容，但不要用标题
+
+【正确示例】
+```
+本章节分析了事件的舆论传播态势。通过对模拟数据的深入分析，我们发现...
+
+**首发引爆阶段**
+
+微博作为舆情的第一现场，承担了信息首发的核心功能：
+
+> "微博贡献了68%的首发声量..."
+
+**情绪放大阶段**
+
+抖音平台进一步放大了事件影响力：
+
+- 视觉冲击力强
+- 情绪共鸣度高
+```
+
+【错误示例】
+```
+## 执行摘要          ← 错误！不要添加任何标题
+### 一、首发阶段     ← 错误！不要用###分小节
+#### 1.1 详细分析   ← 错误！不要用####细分
+
+本章节分析了...
+```
 
 ═══════════════════════════════════════════════════════════════
 【可用检索工具】（建议每章节调用2-5次）
@@ -662,32 +705,65 @@ class ReportAgent:
 
 1. 内容必须基于工具检索到的模拟数据
 2. 大量引用原文来展示模拟效果
-3. 使用Markdown格式：
-   - 使用 > 引用重要原文
-   - 使用 **粗体** 强调关键信息
-   - 使用列表组织要点
-4. 保持与其他章节的逻辑连贯性
-5. 不要重复前面章节已详细描述的内容"""
+3. 使用Markdown格式（但禁止使用标题）：
+   - 使用 **粗体文字** 标记重点（代替子标题）
+   - 使用列表（-或1.2.3.）组织要点
+   - 使用空行分隔不同段落
+   - ❌ 禁止使用 #、##、###、#### 等任何标题语法
+4. 【引用格式规范 - 必须单独成段】
+   引用必须独立成段，前后各有一个空行，不能混在段落中：
+   
+   ✅ 正确格式：
+   ```
+   校方的回应被认为缺乏实质内容。
+   
+   > "校方的应对模式在瞬息万变的社交媒体环境中显得僵化和迟缓。"
+   
+   这一评价反映了公众的普遍不满。
+   ```
+   
+   ❌ 错误格式：
+   ```
+   校方的回应被认为缺乏实质内容。> "校方的应对模式..." 这一评价反映了...
+   ```
+5. 保持与其他章节的逻辑连贯性
+6. 【避免重复】仔细阅读下方已完成的章节内容，不要重复描述相同的信息
+7. 【再次强调】不要添加任何标题！用**粗体**代替小节标题"""
 
-        # 构建用户prompt - 强调必须调用工具
-        previous_content = "\n\n".join(previous_sections) if previous_sections else "（这是第一个章节）"
-        user_prompt = f"""已完成的章节内容（参考以保持连贯性）：
-{previous_content[:2000]}
+        # 构建用户prompt - 每个已完成章节各传入最大4000字
+        if previous_sections:
+            previous_parts = []
+            for sec in previous_sections:
+                # 每个章节最多4000字
+                truncated = sec[:4000] + "..." if len(sec) > 4000 else sec
+                previous_parts.append(truncated)
+            previous_content = "\n\n---\n\n".join(previous_parts)
+        else:
+            previous_content = "（这是第一个章节）"
+        
+        user_prompt = f"""已完成的章节内容（请仔细阅读，避免重复）：
+{previous_content}
 
 ═══════════════════════════════════════════════════════════════
 【当前任务】撰写章节: {section.title}
 ═══════════════════════════════════════════════════════════════
 
 【重要提醒】
-1. 开始前必须先调用工具获取模拟数据！
-2. 推荐先使用 insight_forge 进行深度检索
-3. 如需了解全貌可使用 panorama_search
+1. 仔细阅读上方已完成的章节，避免重复相同的内容！
+2. 开始前必须先调用工具获取模拟数据
+3. 推荐先使用 insight_forge 进行深度检索
 4. 报告内容必须来自检索结果，不要使用自己的知识
+
+【⚠️ 格式警告 - 必须遵守】
+- ❌ 不要写任何标题（#、##、###、####都不行）
+- ❌ 不要写"{section.title}"作为开头
+- ✅ 章节标题由系统自动添加
+- ✅ 直接写正文，用**粗体**代替小节标题
 
 请开始：
 1. 首先思考（Thought）这个章节需要什么信息
 2. 然后调用工具（Action）获取模拟数据
-3. 收集足够信息后输出 Final Answer"""
+3. 收集足够信息后输出 Final Answer（纯正文，无任何标题）"""
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -921,7 +997,7 @@ class ReportAgent:
                         f"正在生成章节: {section.title} ({section_num}/{total_sections})"
                     )
                 
-                # 生成章节内容
+                # 生成主章节内容
                 section_content = self._generate_section_react(
                     section=section,
                     outline=outline,
@@ -937,35 +1013,21 @@ class ReportAgent:
                 section.content = section_content
                 generated_sections.append(f"## {section.title}\n\n{section_content}")
                 
-                # 【关键】立即保存章节到文件
-                ReportManager.save_section(report_id, section_num, section)
-                completed_section_titles.append(section.title)
-                
-                logger.info(f"章节已保存: {report_id}/section_{section_num:02d}.md")
-                
-                # 更新进度
-                ReportManager.update_progress(
-                    report_id, "generating", 
-                    base_progress + int(70 / total_sections),
-                    f"章节 {section.title} 已完成",
-                    current_section=None,
-                    completed_sections=completed_section_titles
-                )
-                
-                # 生成并保存子章节
+                # 如果有子章节，也一并生成并合并到主章节中
+                subsection_contents = []
                 for j, subsection in enumerate(section.subsections):
                     subsection_num = j + 1
                     
                     if progress_callback:
                         progress_callback(
                             "generating",
-                            base_progress + int(((j + 1) / len(section.subsections)) * 5),
+                            base_progress + int(((j + 1) / max(len(section.subsections), 1)) * 5),
                             f"正在生成子章节: {subsection.title}"
                         )
                     
                     ReportManager.update_progress(
                         report_id, "generating",
-                        base_progress + int(((j + 1) / len(section.subsections)) * 5),
+                        base_progress + int(((j + 1) / max(len(section.subsections), 1)) * 5),
                         f"正在生成子章节: {subsection.title}",
                         current_section=subsection.title,
                         completed_sections=completed_section_titles
@@ -979,15 +1041,27 @@ class ReportAgent:
                     )
                     subsection.content = subsection_content
                     generated_sections.append(f"### {subsection.title}\n\n{subsection_content}")
-                    
-                    # 【关键】立即保存子章节到文件
-                    ReportManager.save_section(
-                        report_id, subsection_num, subsection,
-                        is_subsection=True, parent_index=section_num
-                    )
+                    subsection_contents.append((subsection.title, subsection_content))
                     completed_section_titles.append(f"  └─ {subsection.title}")
                     
-                    logger.info(f"子章节已保存: {report_id}/section_{section_num:02d}_{subsection_num:02d}.md")
+                    logger.info(f"子章节已生成: {subsection.title}")
+                
+                # 【关键】将主章节和所有子章节合并保存到一个文件
+                ReportManager.save_section_with_subsections(
+                    report_id, section_num, section, subsection_contents
+                )
+                completed_section_titles.append(section.title)
+                
+                logger.info(f"章节已保存（包含{len(subsection_contents)}个子章节）: {report_id}/section_{section_num:02d}.md")
+                
+                # 更新进度
+                ReportManager.update_progress(
+                    report_id, "generating", 
+                    base_progress + int(70 / total_sections),
+                    f"章节 {section.title} 已完成",
+                    current_section=None,
+                    completed_sections=completed_section_titles
+                )
             
             # 阶段3: 组装完整报告
             if progress_callback:
@@ -1292,7 +1366,7 @@ class ReportManager:
         parent_index: int = None
     ) -> str:
         """
-        保存单个章节
+        保存单个章节（不推荐使用，建议使用 save_section_with_subsections）
         
         在每个章节生成完成后立即调用，实现分章节输出
         
@@ -1316,10 +1390,11 @@ class ReportManager:
             level = "##"
             file_suffix = f"section_{section_index:02d}.md"
         
-        # 构建章节Markdown内容
+        # 构建章节Markdown内容 - 清理可能存在的重复标题
+        cleaned_content = cls._clean_section_content(section.content, section.title)
         md_content = f"{level} {section.title}\n\n"
-        if section.content:
-            md_content += f"{section.content}\n\n"
+        if cleaned_content:
+            md_content += f"{cleaned_content}\n\n"
         
         # 保存文件
         file_path = os.path.join(cls._get_report_folder(report_id), file_suffix)
@@ -1328,6 +1403,118 @@ class ReportManager:
         
         logger.info(f"章节已保存: {report_id}/{file_suffix}")
         return file_path
+    
+    @classmethod
+    def save_section_with_subsections(
+        cls,
+        report_id: str,
+        section_index: int,
+        section: ReportSection,
+        subsection_contents: List[tuple]
+    ) -> str:
+        """
+        保存章节及其所有子章节到一个文件
+        
+        Args:
+            report_id: 报告ID
+            section_index: 章节索引（从1开始）
+            section: 主章节对象
+            subsection_contents: 子章节列表 [(title, content), ...]
+            
+        Returns:
+            保存的文件路径
+        """
+        cls._ensure_report_folder(report_id)
+        
+        # 构建主章节Markdown内容
+        cleaned_main_content = cls._clean_section_content(section.content, section.title)
+        md_content = f"## {section.title}\n\n"
+        if cleaned_main_content:
+            md_content += f"{cleaned_main_content}\n\n"
+        
+        # 添加所有子章节内容
+        for sub_title, sub_content in subsection_contents:
+            cleaned_sub_content = cls._clean_section_content(sub_content, sub_title)
+            md_content += f"### {sub_title}\n\n"
+            if cleaned_sub_content:
+                md_content += f"{cleaned_sub_content}\n\n"
+        
+        # 保存文件
+        file_suffix = f"section_{section_index:02d}.md"
+        file_path = os.path.join(cls._get_report_folder(report_id), file_suffix)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(md_content)
+        
+        logger.info(f"章节已保存（含{len(subsection_contents)}个子章节）: {report_id}/{file_suffix}")
+        return file_path
+    
+    @classmethod
+    def _clean_section_content(cls, content: str, section_title: str) -> str:
+        """
+        清理章节内容
+        
+        1. 移除内容开头与章节标题重复的Markdown标题行
+        2. 将所有 ### 及以下级别的标题转换为粗体文本
+        
+        Args:
+            content: 原始内容
+            section_title: 章节标题
+            
+        Returns:
+            清理后的内容
+        """
+        import re
+        
+        if not content:
+            return content
+        
+        content = content.strip()
+        lines = content.split('\n')
+        cleaned_lines = []
+        skip_next_empty = False
+        
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            
+            # 检查是否是Markdown标题行
+            heading_match = re.match(r'^(#{1,6})\s+(.+)$', stripped)
+            
+            if heading_match:
+                level = len(heading_match.group(1))
+                title_text = heading_match.group(2).strip()
+                
+                # 检查是否是与章节标题重复的标题（跳过前5行内的重复）
+                if i < 5:
+                    if title_text == section_title or title_text.replace(' ', '') == section_title.replace(' ', ''):
+                        skip_next_empty = True
+                        continue
+                
+                # 将所有级别的标题（#, ##, ###, ####等）转换为粗体
+                # 因为章节标题由系统添加，内容中不应有任何标题
+                cleaned_lines.append(f"**{title_text}**")
+                cleaned_lines.append("")  # 添加空行
+                continue
+            
+            # 如果上一行是被跳过的标题，且当前行为空，也跳过
+            if skip_next_empty and stripped == '':
+                skip_next_empty = False
+                continue
+            
+            skip_next_empty = False
+            cleaned_lines.append(line)
+        
+        # 移除开头的空行
+        while cleaned_lines and cleaned_lines[0].strip() == '':
+            cleaned_lines.pop(0)
+        
+        # 移除开头的分隔线
+        while cleaned_lines and cleaned_lines[0].strip() in ['---', '***', '___']:
+            cleaned_lines.pop(0)
+            # 同时移除分隔线后的空行
+            while cleaned_lines and cleaned_lines[0].strip() == '':
+                cleaned_lines.pop(0)
+        
+        return '\n'.join(cleaned_lines)
     
     @classmethod
     def update_progress(
@@ -1408,7 +1595,7 @@ class ReportManager:
         """
         组装完整报告
         
-        从已保存的章节文件组装完整报告
+        从已保存的章节文件组装完整报告，并进行标题清理
         """
         folder = cls._get_report_folder(report_id)
         
@@ -1417,10 +1604,16 @@ class ReportManager:
         md_content += f"> {outline.summary}\n\n"
         md_content += f"---\n\n"
         
-        # 按顺序读取所有章节文件
+        # 按顺序读取所有章节文件（只读取主章节文件，不读取子章节文件）
         sections = cls.get_generated_sections(report_id)
         for section_info in sections:
+            # 跳过子章节文件（已合并到主章节中）
+            if section_info.get("is_subsection", False):
+                continue
             md_content += section_info["content"]
+        
+        # 后处理：清理整个报告的标题问题
+        md_content = cls._post_process_report(md_content, outline)
         
         # 保存完整报告
         full_path = cls._get_report_markdown_path(report_id)
@@ -1429,6 +1622,134 @@ class ReportManager:
         
         logger.info(f"完整报告已组装: {report_id}")
         return md_content
+    
+    @classmethod
+    def _post_process_report(cls, content: str, outline: ReportOutline) -> str:
+        """
+        后处理报告内容
+        
+        1. 移除重复的标题
+        2. 保留报告主标题(#)和章节标题(##)，移除其他级别的标题(###, ####等)
+        3. 清理多余的空行和分隔线
+        
+        Args:
+            content: 原始报告内容
+            outline: 报告大纲
+            
+        Returns:
+            处理后的内容
+        """
+        import re
+        
+        lines = content.split('\n')
+        processed_lines = []
+        prev_was_heading = False
+        
+        # 收集大纲中的所有章节标题
+        section_titles = set()
+        for section in outline.sections:
+            section_titles.add(section.title)
+            for sub in section.subsections:
+                section_titles.add(sub.title)
+        
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.strip()
+            
+            # 检查是否是标题行
+            heading_match = re.match(r'^(#{1,6})\s+(.+)$', stripped)
+            
+            if heading_match:
+                level = len(heading_match.group(1))
+                title = heading_match.group(2).strip()
+                
+                # 检查是否是重复标题（在连续5行内出现相同内容的标题）
+                is_duplicate = False
+                for j in range(max(0, len(processed_lines) - 5), len(processed_lines)):
+                    prev_line = processed_lines[j].strip()
+                    prev_match = re.match(r'^(#{1,6})\s+(.+)$', prev_line)
+                    if prev_match:
+                        prev_title = prev_match.group(2).strip()
+                        if prev_title == title:
+                            is_duplicate = True
+                            break
+                
+                if is_duplicate:
+                    # 跳过重复标题及其后的空行
+                    i += 1
+                    while i < len(lines) and lines[i].strip() == '':
+                        i += 1
+                    continue
+                
+                # 标题层级处理：
+                # - # (level=1) 只保留报告主标题
+                # - ## (level=2) 保留章节标题
+                # - ### 及以下 (level>=3) 转换为粗体文本
+                
+                if level == 1:
+                    if title == outline.title:
+                        # 保留报告主标题
+                        processed_lines.append(line)
+                        prev_was_heading = True
+                    elif title in section_titles:
+                        # 章节标题错误使用了#，修正为##
+                        processed_lines.append(f"## {title}")
+                        prev_was_heading = True
+                    else:
+                        # 其他一级标题转为粗体
+                        processed_lines.append(f"**{title}**")
+                        processed_lines.append("")
+                        prev_was_heading = False
+                elif level == 2:
+                    if title in section_titles or title == outline.title:
+                        # 保留章节标题
+                        processed_lines.append(line)
+                        prev_was_heading = True
+                    else:
+                        # 非章节的二级标题转为粗体
+                        processed_lines.append(f"**{title}**")
+                        processed_lines.append("")
+                        prev_was_heading = False
+                else:
+                    # ### 及以下级别的标题转换为粗体文本
+                    processed_lines.append(f"**{title}**")
+                    processed_lines.append("")
+                    prev_was_heading = False
+                
+                i += 1
+                continue
+            
+            elif stripped == '---' and prev_was_heading:
+                # 跳过标题后紧跟的分隔线
+                i += 1
+                continue
+            
+            elif stripped == '' and prev_was_heading:
+                # 标题后只保留一个空行
+                if processed_lines and processed_lines[-1].strip() != '':
+                    processed_lines.append(line)
+                prev_was_heading = False
+            
+            else:
+                processed_lines.append(line)
+                prev_was_heading = False
+            
+            i += 1
+        
+        # 清理连续的多个空行（保留最多2个）
+        result_lines = []
+        empty_count = 0
+        for line in processed_lines:
+            if line.strip() == '':
+                empty_count += 1
+                if empty_count <= 2:
+                    result_lines.append(line)
+            else:
+                empty_count = 0
+                result_lines.append(line)
+        
+        return '\n'.join(result_lines)
     
     @classmethod
     def save_report(cls, report: Report) -> None:
