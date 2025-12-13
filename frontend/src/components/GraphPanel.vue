@@ -30,6 +30,24 @@
           {{ isSimulating ? 'GraphRAG长短期记忆实时更新中' : '实时更新中...' }}
         </div>
         
+        <!-- 模拟结束后的提示 -->
+        <div v-if="showSimulationFinishedHint" class="graph-building-hint finished-hint">
+          <div class="hint-icon-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="hint-icon">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+          </div>
+          <span class="hint-text">还有少量内容处理中，建议稍后手动刷新图谱</span>
+          <button class="hint-close-btn" @click="dismissFinishedHint" title="关闭提示">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        
         <!-- 节点/边详情面板 -->
         <div v-if="selectedItem" class="detail-panel">
           <div class="detail-panel-header">
@@ -235,6 +253,22 @@ const graphSvg = ref(null)
 const selectedItem = ref(null)
 const showEdgeLabels = ref(true) // 默认显示边标签
 const expandedSelfLoops = ref(new Set()) // 展开的自环项
+const showSimulationFinishedHint = ref(false) // 模拟结束后的提示
+const wasSimulating = ref(false) // 追踪之前是否在模拟中
+
+// 关闭模拟结束提示
+const dismissFinishedHint = () => {
+  showSimulationFinishedHint.value = false
+}
+
+// 监听 isSimulating 变化，检测模拟结束
+watch(() => props.isSimulating, (newValue, oldValue) => {
+  if (wasSimulating.value && !newValue) {
+    // 从模拟中变为非模拟状态，显示结束提示
+    showSimulationFinishedHint.value = true
+  }
+  wasSimulating.value = newValue
+}, { immediate: true })
 
 // 切换自环项展开/折叠状态
 const toggleSelfLoop = (id) => {
@@ -1194,6 +1228,50 @@ input:checked + .slider:before {
 @keyframes breathe {
   0%, 100% { opacity: 0.7; transform: scale(1); filter: drop-shadow(0 0 2px rgba(76, 175, 80, 0.3)); }
   50% { opacity: 1; transform: scale(1.15); filter: drop-shadow(0 0 8px rgba(76, 175, 80, 0.6)); }
+}
+
+/* 模拟结束后的提示样式 */
+.graph-building-hint.finished-hint {
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.finished-hint .hint-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.finished-hint .hint-icon {
+  width: 18px;
+  height: 18px;
+  color: #FFF;
+}
+
+.finished-hint .hint-text {
+  flex: 1;
+  white-space: nowrap;
+}
+
+.hint-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  color: #FFF;
+  transition: all 0.2s;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.hint-close-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+  transform: scale(1.1);
 }
 
 /* Loading spinner */

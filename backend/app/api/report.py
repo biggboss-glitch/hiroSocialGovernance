@@ -105,13 +105,18 @@ def generate_report():
                 "error": "缺少模拟需求描述"
             }), 400
         
+        # 提前生成 report_id，以便立即返回给前端
+        import uuid
+        report_id = f"report_{uuid.uuid4().hex[:12]}"
+        
         # 创建异步任务
         task_manager = TaskManager()
         task_id = task_manager.create_task(
             task_type="report_generate",
             metadata={
                 "simulation_id": simulation_id,
-                "graph_id": graph_id
+                "graph_id": graph_id,
+                "report_id": report_id
             }
         )
         
@@ -140,8 +145,11 @@ def generate_report():
                         message=f"[{stage}] {message}"
                     )
                 
-                # 生成报告
-                report = agent.generate_report(progress_callback=progress_callback)
+                # 生成报告（传入预先生成的 report_id）
+                report = agent.generate_report(
+                    progress_callback=progress_callback,
+                    report_id=report_id
+                )
                 
                 # 保存报告
                 ReportManager.save_report(report)
@@ -170,6 +178,7 @@ def generate_report():
             "success": True,
             "data": {
                 "simulation_id": simulation_id,
+                "report_id": report_id,
                 "task_id": task_id,
                 "status": "generating",
                 "message": "报告生成任务已启动，请通过 /api/report/generate/status 查询进度",
@@ -732,6 +741,183 @@ def check_report_status(simulation_id: str):
         
     except Exception as e:
         logger.error(f"检查报告状态失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+# ============== Agent 日志接口 ==============
+
+@report_bp.route('/<report_id>/agent-log', methods=['GET'])
+def get_agent_log(report_id: str):
+    """
+    获取 Report Agent 的详细执行日志
+    
+    实时获取报告生成过程中的每一步动作，包括：
+    - 报告开始、规划开始/完成
+    - 每个章节的开始、工具调用、LLM响应、完成
+    - 报告完成或失败
+    
+    Query参数：
+        from_line: 从第几行开始读取（可选，默认0，用于增量获取）
+    
+    返回：
+        {
+            "success": true,
+            "data": {
+                "logs": [
+                    {
+                        "timestamp": "2025-12-13T...",
+                        "elapsed_seconds": 12.5,
+                        "report_id": "report_xxxx",
+                        "action": "tool_call",
+                        "stage": "generating",
+                        "section_title": "执行摘要",
+                        "section_index": 1,
+                        "details": {
+                            "tool_name": "insight_forge",
+                            "parameters": {...},
+                            ...
+                        }
+                    },
+                    ...
+                ],
+                "total_lines": 25,
+                "from_line": 0,
+                "has_more": false
+            }
+        }
+    """
+    try:
+        from_line = request.args.get('from_line', 0, type=int)
+        
+        log_data = ReportManager.get_agent_log(report_id, from_line=from_line)
+        
+        return jsonify({
+            "success": True,
+            "data": log_data
+        })
+        
+    except Exception as e:
+        logger.error(f"获取Agent日志失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@report_bp.route('/<report_id>/agent-log/stream', methods=['GET'])
+def stream_agent_log(report_id: str):
+    """
+    获取完整的 Agent 日志（一次性获取全部）
+    
+    返回：
+        {
+            "success": true,
+            "data": {
+                "logs": [...],
+                "count": 25
+            }
+        }
+    """
+    try:
+        logs = ReportManager.get_agent_log_stream(report_id)
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "logs": logs,
+                "count": len(logs)
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"获取Agent日志失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+# ============== 控制台日志接口 ==============
+
+@report_bp.route('/<report_id>/console-log', methods=['GET'])
+def get_console_log(report_id: str):
+    """
+    获取 Report Agent 的控制台输出日志
+    
+    实时获取报告生成过程中的控制台输出（INFO、WARNING等），
+    这与 agent-log 接口返回的结构化 JSON 日志不同，
+    是纯文本格式的控制台风格日志。
+    
+    Query参数：
+        from_line: 从第几行开始读取（可选，默认0，用于增量获取）
+    
+    返回：
+        {
+            "success": true,
+            "data": {
+                "logs": [
+                    "[19:46:14] INFO: 搜索完成: 找到 15 条相关事实",
+                    "[19:46:14] INFO: 图谱搜索: graph_id=xxx, query=...",
+                    ...
+                ],
+                "total_lines": 100,
+                "from_line": 0,
+                "has_more": false
+            }
+        }
+    """
+    try:
+        from_line = request.args.get('from_line', 0, type=int)
+        
+        log_data = ReportManager.get_console_log(report_id, from_line=from_line)
+        
+        return jsonify({
+            "success": True,
+            "data": log_data
+        })
+        
+    except Exception as e:
+        logger.error(f"获取控制台日志失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@report_bp.route('/<report_id>/console-log/stream', methods=['GET'])
+def stream_console_log(report_id: str):
+    """
+    获取完整的控制台日志（一次性获取全部）
+    
+    返回：
+        {
+            "success": true,
+            "data": {
+                "logs": [...],
+                "count": 100
+            }
+        }
+    """
+    try:
+        logs = ReportManager.get_console_log_stream(report_id)
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "logs": logs,
+                "count": len(logs)
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"获取控制台日志失败: {str(e)}")
         return jsonify({
             "success": False,
             "error": str(e),
