@@ -307,7 +307,11 @@ class AgentInterview:
     
     def to_text(self) -> str:
         text = f"**{self.agent_name}** ({self.agent_role})\n"
-        text += f"_简介: {self.agent_bio[:100]}..._\n\n"
+        # 显示完整的agent_bio，只在超过1000字符时截断
+        if len(self.agent_bio) > 1000:
+            text += f"_简介: {self.agent_bio[:1000]}..._\n\n"
+        else:
+            text += f"_简介: {self.agent_bio}_\n\n"
         text += f"**Q:** {self.question}\n\n"
         text += f"**A:** {self.response}\n"
         if self.key_quotes:
@@ -1409,7 +1413,7 @@ class ZepToolsService:
                 interview = AgentInterview(
                     agent_name=agent_name,
                     agent_role=agent_role,
-                    agent_bio=agent_bio[:150],
+                    agent_bio=agent_bio[:1000],  # 扩大bio长度限制
                     question=combined_prompt,
                     response=response_text,
                     key_quotes=key_quotes[:5]

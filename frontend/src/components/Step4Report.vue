@@ -160,12 +160,50 @@
 
                   <!-- tool_result -->
                   <template v-if="log.action === 'tool_result'">
-                    <div class="tool-result-block">
+                    <div class="tool-result-block" :class="'tool-' + log.details?.tool_name">
                       <div class="result-header">
-                        <span class="result-tool">{{ log.details?.tool_name }}</span>
+                        <span class="result-tool">{{ getToolDisplayName(log.details?.tool_name) }}</span>
                         <span class="result-length">{{ log.details?.result_length }} chars</span>
+                        <button 
+                          class="toggle-raw-btn" 
+                          @click.stop="toggleRawResult(log.timestamp)"
+                        >
+                          {{ showRawResult[log.timestamp] ? '收起原文' : '查看原文' }}
+                        </button>
                       </div>
-                      <div class="result-content" v-if="log.details?.result">
+                      
+                      <!-- 结构化展示 -->
+                      <div class="result-structured" v-if="!showRawResult[log.timestamp] && log.details?.result">
+                        <!-- insight_forge 深度洞察 -->
+                        <template v-if="log.details?.tool_name === 'insight_forge'">
+                          <InsightForgeResult :result="parseInsightForge(log.details.result)" />
+                        </template>
+                        
+                        <!-- panorama_search 广度搜索 -->
+                        <template v-else-if="log.details?.tool_name === 'panorama_search'">
+                          <PanoramaResult :result="parsePanorama(log.details.result)" />
+                        </template>
+                        
+                        <!-- interview_agents 深度采访 -->
+                        <template v-else-if="log.details?.tool_name === 'interview_agents'">
+                          <InterviewResult :result="parseInterview(log.details.result)" />
+                        </template>
+                        
+                        <!-- quick_search 简单搜索 -->
+                        <template v-else-if="log.details?.tool_name === 'quick_search'">
+                          <QuickSearchResult :result="parseQuickSearch(log.details.result)" />
+                        </template>
+                        
+                        <!-- 其他工具 - 显示原文 -->
+                        <template v-else>
+                          <div class="result-content">
+                            <pre>{{ log.details.result }}</pre>
+                          </div>
+                        </template>
+                      </div>
+                      
+                      <!-- 原文展示 -->
+                      <div class="result-raw" v-if="showRawResult[log.timestamp] && log.details?.result">
                         <pre>{{ log.details.result }}</pre>
                       </div>
                     </div>
@@ -251,7 +289,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted, nextTick, h } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick, h, reactive } from 'vue'
 import { getAgentLog, getConsoleLog } from '../api/report'
 
 const props = defineProps({
@@ -275,6 +313,504 @@ const isComplete = ref(false)
 const startTime = ref(null)
 const mainContent = ref(null)
 const logContent = ref(null)
+const showRawResult = reactive({}) // 控制显示原文
+
+// 切换显示原文
+const toggleRawResult = (timestamp) => {
+  showRawResult[timestamp] = !showRawResult[timestamp]
+}
+
+// 工具显示名称
+const getToolDisplayName = (toolName) => {
+  const names = {
+    'insight_forge': '🔍 深度洞察检索',
+    'panorama_search': '🌐 广度搜索',
+    'interview_agents': '🎤 深度采访',
+    'quick_search': '⚡ 快速检索',
+    'get_graph_statistics': '📊 图谱统计',
+    'get_entities_by_type': '👥 实体查询'
+  }
+  return names[toolName] || toolName
+}
+
+// ========== 工具结果解析器 ==========
+
+// 解析 insight_forge 结果
+const parseInsightForge = (text) => {
+  const result = {
+    query: '',
+    requirement: '',
+    stats: { facts: 0, entities: 0, relationships: 0 },
+    subQueries: [],
+    facts: [],
+    entities: [],
+    relations: []
+  }
+  
+  try {
+    // 提取原始问题
+    const queryMatch = text.match(/原始问题:\s*(.+?)(?:\n|$)/)
+    if (queryMatch) result.query = queryMatch[1].trim()
+    
+    // 提取模拟需求
+    const reqMatch = text.match(/模拟需求:\s*(.+?)(?:\n|$)/)
+    if (reqMatch) result.requirement = reqMatch[1].trim()
+    
+    // 提取统计
+    const factMatch = text.match(/相关事实:\s*(\d+)/)
+    const entityMatch = text.match(/涉及实体:\s*(\d+)/)
+    const relMatch = text.match(/关系链:\s*(\d+)/)
+    if (factMatch) result.stats.facts = parseInt(factMatch[1])
+    if (entityMatch) result.stats.entities = parseInt(entityMatch[1])
+    if (relMatch) result.stats.relationships = parseInt(relMatch[1])
+    
+    // 提取子问题
+    const subQSection = text.match(/### 分析的子问题\n([\s\S]*?)(?=###|\n\n###|$)/)
+    if (subQSection) {
+      const lines = subQSection[1].split('\n').filter(l => l.match(/^\d+\./))
+      result.subQueries = lines.map(l => l.replace(/^\d+\.\s*/, '').trim())
+    }
+    
+    // 提取关键事实
+    const factsSection = text.match(/### 【关键事实】[\s\S]*?\n([\s\S]*?)(?=###|$)/)
+    if (factsSection) {
+      const lines = factsSection[1].split('\n').filter(l => l.match(/^\d+\./))
+      result.facts = lines.map(l => {
+        const match = l.match(/^\d+\.\s*"?(.+?)"?\s*$/)
+        return match ? match[1].replace(/^"|"$/g, '') : l.replace(/^\d+\.\s*/, '').trim()
+      }).slice(0, 15) // 限制显示数量
+    }
+    
+    // 提取核心实体
+    const entitySection = text.match(/### 【核心实体】\n([\s\S]*?)(?=###|$)/)
+    if (entitySection) {
+      const entityBlocks = entitySection[1].split(/\n- \*\*/).slice(1)
+      result.entities = entityBlocks.map(block => {
+        const nameMatch = block.match(/^(.+?)\*\*\s*\((.+?)\)/)
+        const summaryMatch = block.match(/摘要:\s*"?(.+?)"?\n/)
+        const factsMatch = block.match(/相关事实:\s*(\d+)/)
+        return {
+          name: nameMatch ? nameMatch[1].trim() : '',
+          type: nameMatch ? nameMatch[2].trim() : '',
+          summary: summaryMatch ? summaryMatch[1].trim() : '',
+          factCount: factsMatch ? parseInt(factsMatch[1]) : 0
+        }
+      }).filter(e => e.name).slice(0, 10)
+    }
+    
+    // 提取关系链
+    const relSection = text.match(/### 【关系链】\n([\s\S]*?)(?=###|$)/)
+    if (relSection) {
+      const lines = relSection[1].split('\n').filter(l => l.startsWith('-'))
+      result.relations = lines.map(l => {
+        const match = l.match(/^-\s*(.+?)\s*--\[(.+?)\]-->\s*(.+)$/)
+        if (match) {
+          return { source: match[1].trim(), relation: match[2].trim(), target: match[3].trim() }
+        }
+        return null
+      }).filter(Boolean).slice(0, 10)
+    }
+  } catch (e) {
+    console.warn('解析 insight_forge 结果失败:', e)
+  }
+  
+  return result
+}
+
+// 解析 panorama_search 结果
+const parsePanorama = (text) => {
+  const result = {
+    query: '',
+    stats: { nodes: 0, edges: 0, activeFacts: 0, historicalFacts: 0 },
+    activeFacts: [],
+    historicalFacts: [],
+    entities: []
+  }
+  
+  try {
+    // 提取查询
+    const queryMatch = text.match(/查询:\s*(.+?)(?:\n|$)/)
+    if (queryMatch) result.query = queryMatch[1].trim()
+    
+    // 提取统计
+    const nodesMatch = text.match(/总节点数:\s*(\d+)/)
+    const edgesMatch = text.match(/总边数:\s*(\d+)/)
+    const activeMatch = text.match(/当前有效事实:\s*(\d+)/)
+    const histMatch = text.match(/历史\/过期事实:\s*(\d+)/)
+    if (nodesMatch) result.stats.nodes = parseInt(nodesMatch[1])
+    if (edgesMatch) result.stats.edges = parseInt(edgesMatch[1])
+    if (activeMatch) result.stats.activeFacts = parseInt(activeMatch[1])
+    if (histMatch) result.stats.historicalFacts = parseInt(histMatch[1])
+    
+    // 提取当前有效事实
+    const activeSection = text.match(/### 【当前有效事实】[\s\S]*?\n([\s\S]*?)(?=###|$)/)
+    if (activeSection) {
+      const lines = activeSection[1].split('\n').filter(l => l.match(/^\d+\./))
+      result.activeFacts = lines.map(l => {
+        const match = l.match(/^\d+\.\s*"?(.+?)"?\s*$/)
+        return match ? match[1].replace(/^"|"$/g, '') : l.replace(/^\d+\.\s*/, '').trim()
+      }).slice(0, 15)
+    }
+    
+    // 提取历史事实
+    const histSection = text.match(/### 【历史\/过期事实】[\s\S]*?\n([\s\S]*?)(?=###|$)/)
+    if (histSection) {
+      const lines = histSection[1].split('\n').filter(l => l.match(/^\d+\./))
+      result.historicalFacts = lines.map(l => {
+        const content = l.replace(/^\d+\.\s*/, '').trim()
+        // 提取时间范围
+        const timeMatch = content.match(/^\[(.+?)\s*-\s*(.+?)\]\s*(.+)$/)
+        if (timeMatch) {
+          return { timeRange: `${timeMatch[1]} - ${timeMatch[2]}`, content: timeMatch[3].replace(/^"|"$/g, '') }
+        }
+        return { timeRange: '', content: content.replace(/^"|"$/g, '') }
+      }).slice(0, 10)
+    }
+    
+    // 提取涉及实体
+    const entitySection = text.match(/### 【涉及实体】\n([\s\S]*?)(?=###|$)/)
+    if (entitySection) {
+      const lines = entitySection[1].split('\n').filter(l => l.startsWith('-'))
+      result.entities = lines.map(l => {
+        const match = l.match(/^-\s*\*\*(.+?)\*\*\s*\((.+?)\)/)
+        if (match) return { name: match[1].trim(), type: match[2].trim() }
+        return null
+      }).filter(Boolean).slice(0, 15)
+    }
+  } catch (e) {
+    console.warn('解析 panorama_search 结果失败:', e)
+  }
+  
+  return result
+}
+
+// 解析 interview_agents 结果
+const parseInterview = (text) => {
+  const result = {
+    topic: '',
+    agentCount: '',
+    selectionReason: '',
+    interviews: [],
+    summary: ''
+  }
+  
+  try {
+    // 提取采访主题
+    const topicMatch = text.match(/\*\*采访主题:\*\*\s*(.+?)(?:\n|$)/)
+    if (topicMatch) result.topic = topicMatch[1].trim()
+    
+    // 提取采访人数
+    const countMatch = text.match(/\*\*采访人数:\*\*\s*(.+?)(?:\n|$)/)
+    if (countMatch) result.agentCount = countMatch[1].trim()
+    
+    // 提取选择理由
+    const reasonSection = text.match(/### 采访对象选择理由\n([\s\S]*?)(?=---|###|$)/)
+    if (reasonSection) {
+      result.selectionReason = reasonSection[1].trim().substring(0, 300) + '...'
+    }
+    
+    // 提取采访实录
+    const interviewMatches = text.matchAll(/#### 采访 #(\d+):\s*(.+?)\n\*\*(.+?)\*\*\s*\((.+?)\)\n_简介:\s*(.+?)_\n\n\*\*Q:\*\*\s*([\s\S]*?)\n\n\*\*A:\*\*\s*([\s\S]*?)(?=\*\*关键引言|\n---|\n####|$)/g)
+    
+    for (const match of interviewMatches) {
+      const interview = {
+        num: match[1],
+        title: match[2].trim(),
+        name: match[3].trim(),
+        role: match[4].trim(),
+        bio: match[5].trim().substring(0, 100) + '...',
+        question: match[6].trim().split('\n')[0].substring(0, 150) + '...',
+        answer: match[7].trim().substring(0, 500) + '...',
+        quotes: []
+      }
+      
+      // 提取关键引言
+      const quoteSection = text.match(new RegExp(`#### 采访 #${match[1]}[\\s\\S]*?\\*\\*关键引言:\\*\\*\\n([\\s\\S]*?)(?=\\n---)`))
+      if (quoteSection) {
+        const quotes = quoteSection[1].match(/> "(.+?)"/g)
+        if (quotes) {
+          interview.quotes = quotes.map(q => q.replace(/^> "|"$/g, '')).slice(0, 2)
+        }
+      }
+      
+      result.interviews.push(interview)
+    }
+    
+    // 提取采访摘要
+    const summarySection = text.match(/### 采访摘要与核心观点\n([\s\S]*?)$/)
+    if (summarySection) {
+      result.summary = summarySection[1].trim().substring(0, 500) + '...'
+    }
+  } catch (e) {
+    console.warn('解析 interview_agents 结果失败:', e)
+  }
+  
+  return result
+}
+
+// 解析 quick_search 结果
+const parseQuickSearch = (text) => {
+  const result = {
+    query: '',
+    count: 0,
+    facts: []
+  }
+  
+  try {
+    const queryMatch = text.match(/搜索查询:\s*(.+?)(?:\n|$)/)
+    if (queryMatch) result.query = queryMatch[1].trim()
+    
+    const countMatch = text.match(/找到\s*(\d+)\s*条/)
+    if (countMatch) result.count = parseInt(countMatch[1])
+    
+    const factsSection = text.match(/### 相关事实:\n([\s\S]*)$/)
+    if (factsSection) {
+      const lines = factsSection[1].split('\n').filter(l => l.match(/^\d+\./))
+      result.facts = lines.map(l => l.replace(/^\d+\.\s*/, '').trim()).slice(0, 20)
+    }
+  } catch (e) {
+    console.warn('解析 quick_search 结果失败:', e)
+  }
+  
+  return result
+}
+
+// ========== 子组件定义 ==========
+
+// InsightForge 结果展示组件
+const InsightForgeResult = {
+  props: ['result'],
+  setup(props) {
+    const expanded = ref({ facts: true, entities: false, relations: false, subQueries: false })
+    const toggleSection = (section) => { expanded.value[section] = !expanded.value[section] }
+    return () => h('div', { class: 'insight-result' }, [
+      // 统计卡片
+      h('div', { class: 'stats-cards' }, [
+        h('div', { class: 'stat-card facts' }, [
+          h('span', { class: 'stat-num' }, props.result.stats.facts),
+          h('span', { class: 'stat-name' }, '相关事实')
+        ]),
+        h('div', { class: 'stat-card entities' }, [
+          h('span', { class: 'stat-num' }, props.result.stats.entities),
+          h('span', { class: 'stat-name' }, '涉及实体')
+        ]),
+        h('div', { class: 'stat-card relations' }, [
+          h('span', { class: 'stat-num' }, props.result.stats.relationships),
+          h('span', { class: 'stat-name' }, '关系链')
+        ])
+      ]),
+      
+      // 子问题
+      props.result.subQueries.length > 0 && h('div', { class: 'collapsible-section' }, [
+        h('div', { class: 'section-title', onClick: () => toggleSection('subQueries') }, [
+          h('span', {}, '📋 分析的子问题'),
+          h('span', { class: 'toggle-icon' }, expanded.value.subQueries ? '−' : '+')
+        ]),
+        expanded.value.subQueries && h('div', { class: 'sub-queries' },
+          props.result.subQueries.map((q, i) => h('div', { class: 'sub-query', key: i }, [
+            h('span', { class: 'query-num' }, i + 1),
+            h('span', { class: 'query-text' }, q)
+          ]))
+        )
+      ]),
+      
+      // 关键事实
+      props.result.facts.length > 0 && h('div', { class: 'collapsible-section' }, [
+        h('div', { class: 'section-title', onClick: () => toggleSection('facts') }, [
+          h('span', {}, `📌 关键事实 (${props.result.facts.length})`),
+          h('span', { class: 'toggle-icon' }, expanded.value.facts ? '−' : '+')
+        ]),
+        expanded.value.facts && h('div', { class: 'facts-list' },
+          props.result.facts.map((fact, i) => h('div', { class: 'fact-item', key: i }, [
+            h('span', { class: 'fact-num' }, i + 1),
+            h('span', { class: 'fact-text' }, fact)
+          ]))
+        )
+      ]),
+      
+      // 核心实体
+      props.result.entities.length > 0 && h('div', { class: 'collapsible-section' }, [
+        h('div', { class: 'section-title', onClick: () => toggleSection('entities') }, [
+          h('span', {}, `👥 核心实体 (${props.result.entities.length})`),
+          h('span', { class: 'toggle-icon' }, expanded.value.entities ? '−' : '+')
+        ]),
+        expanded.value.entities && h('div', { class: 'entities-grid' },
+          props.result.entities.map((e, i) => h('div', { class: 'entity-card', key: i }, [
+            h('div', { class: 'entity-header' }, [
+              h('span', { class: 'entity-name' }, e.name),
+              h('span', { class: 'entity-type' }, e.type)
+            ]),
+            e.summary && h('div', { class: 'entity-summary' }, e.summary.substring(0, 100) + '...')
+          ]))
+        )
+      ]),
+      
+      // 关系链
+      props.result.relations.length > 0 && h('div', { class: 'collapsible-section' }, [
+        h('div', { class: 'section-title', onClick: () => toggleSection('relations') }, [
+          h('span', {}, `🔗 关系链 (${props.result.relations.length})`),
+          h('span', { class: 'toggle-icon' }, expanded.value.relations ? '−' : '+')
+        ]),
+        expanded.value.relations && h('div', { class: 'relations-list' },
+          props.result.relations.map((r, i) => h('div', { class: 'relation-item', key: i }, [
+            h('span', { class: 'rel-source' }, r.source),
+            h('span', { class: 'rel-arrow' }, '→'),
+            h('span', { class: 'rel-type' }, r.relation),
+            h('span', { class: 'rel-arrow' }, '→'),
+            h('span', { class: 'rel-target' }, r.target)
+          ]))
+        )
+      ])
+    ])
+  }
+}
+
+// PanoramaResult 展示组件
+const PanoramaResult = {
+  props: ['result'],
+  setup(props) {
+    const expanded = ref({ active: true, history: false, entities: false })
+    const toggleSection = (section) => { expanded.value[section] = !expanded.value[section] }
+    return () => h('div', { class: 'panorama-result' }, [
+      // 统计卡片
+      h('div', { class: 'stats-cards' }, [
+        h('div', { class: 'stat-card nodes' }, [
+          h('span', { class: 'stat-num' }, props.result.stats.nodes),
+          h('span', { class: 'stat-name' }, '总节点')
+        ]),
+        h('div', { class: 'stat-card edges' }, [
+          h('span', { class: 'stat-num' }, props.result.stats.edges),
+          h('span', { class: 'stat-name' }, '总边数')
+        ]),
+        h('div', { class: 'stat-card active' }, [
+          h('span', { class: 'stat-num' }, props.result.stats.activeFacts),
+          h('span', { class: 'stat-name' }, '有效事实')
+        ]),
+        h('div', { class: 'stat-card history' }, [
+          h('span', { class: 'stat-num' }, props.result.stats.historicalFacts),
+          h('span', { class: 'stat-name' }, '历史事实')
+        ])
+      ]),
+      
+      // 当前有效事实
+      props.result.activeFacts.length > 0 && h('div', { class: 'collapsible-section' }, [
+        h('div', { class: 'section-title active', onClick: () => toggleSection('active') }, [
+          h('span', {}, `✅ 当前有效事实 (${props.result.activeFacts.length})`),
+          h('span', { class: 'toggle-icon' }, expanded.value.active ? '−' : '+')
+        ]),
+        expanded.value.active && h('div', { class: 'facts-list' },
+          props.result.activeFacts.map((fact, i) => h('div', { class: 'fact-item active', key: i }, [
+            h('span', { class: 'fact-num' }, i + 1),
+            h('span', { class: 'fact-text' }, fact)
+          ]))
+        )
+      ]),
+      
+      // 历史事实
+      props.result.historicalFacts.length > 0 && h('div', { class: 'collapsible-section' }, [
+        h('div', { class: 'section-title history', onClick: () => toggleSection('history') }, [
+          h('span', {}, `📜 历史/过期事实 (${props.result.historicalFacts.length})`),
+          h('span', { class: 'toggle-icon' }, expanded.value.history ? '−' : '+')
+        ]),
+        expanded.value.history && h('div', { class: 'facts-list' },
+          props.result.historicalFacts.map((fact, i) => h('div', { class: 'fact-item history', key: i }, [
+            h('span', { class: 'fact-num' }, i + 1),
+            h('div', { class: 'fact-content' }, [
+              fact.timeRange && h('span', { class: 'time-range' }, fact.timeRange),
+              h('span', { class: 'fact-text' }, fact.content)
+            ])
+          ]))
+        )
+      ]),
+      
+      // 涉及实体
+      props.result.entities.length > 0 && h('div', { class: 'collapsible-section' }, [
+        h('div', { class: 'section-title', onClick: () => toggleSection('entities') }, [
+          h('span', {}, `👥 涉及实体 (${props.result.entities.length})`),
+          h('span', { class: 'toggle-icon' }, expanded.value.entities ? '−' : '+')
+        ]),
+        expanded.value.entities && h('div', { class: 'entity-tags' },
+          props.result.entities.map((e, i) => h('span', { class: 'entity-tag', key: i }, [
+            h('span', { class: 'tag-name' }, e.name),
+            h('span', { class: 'tag-type' }, e.type)
+          ]))
+        )
+      ])
+    ])
+  }
+}
+
+// InterviewResult 展示组件
+const InterviewResult = {
+  props: ['result'],
+  setup(props) {
+    const expandedInterview = ref(0)
+    return () => h('div', { class: 'interview-result' }, [
+      // 采访信息
+      h('div', { class: 'interview-header' }, [
+        h('div', { class: 'interview-topic' }, props.result.topic),
+        h('div', { class: 'interview-count' }, props.result.agentCount)
+      ]),
+      
+      // 采访列表
+      props.result.interviews.length > 0 && h('div', { class: 'interviews-list' },
+        props.result.interviews.map((interview, i) => h('div', { 
+          class: ['interview-card', { expanded: expandedInterview.value === i }],
+          key: i,
+          onClick: () => { expandedInterview.value = expandedInterview.value === i ? -1 : i }
+        }, [
+          h('div', { class: 'interview-card-header' }, [
+            h('span', { class: 'interview-num' }, `#${interview.num}`),
+            h('span', { class: 'interview-name' }, interview.name),
+            h('span', { class: 'interview-role' }, interview.role),
+            h('span', { class: 'expand-icon' }, expandedInterview.value === i ? '−' : '+')
+          ]),
+          expandedInterview.value === i && h('div', { class: 'interview-card-body' }, [
+            h('div', { class: 'interview-bio' }, interview.bio),
+            h('div', { class: 'interview-qa' }, [
+              h('div', { class: 'qa-question' }, [
+                h('span', { class: 'qa-label' }, 'Q:'),
+                h('span', {}, interview.question)
+              ]),
+              h('div', { class: 'qa-answer' }, [
+                h('span', { class: 'qa-label' }, 'A:'),
+                h('span', {}, interview.answer)
+              ])
+            ]),
+            interview.quotes.length > 0 && h('div', { class: 'interview-quotes' },
+              interview.quotes.map((q, qi) => h('div', { class: 'quote-item', key: qi }, `"${q}"`))
+            )
+          ])
+        ]))
+      ),
+      
+      // 摘要
+      props.result.summary && h('div', { class: 'interview-summary' }, [
+        h('div', { class: 'summary-title' }, '📋 核心观点摘要'),
+        h('div', { class: 'summary-content' }, props.result.summary)
+      ])
+    ])
+  }
+}
+
+// QuickSearchResult 展示组件
+const QuickSearchResult = {
+  props: ['result'],
+  setup(props) {
+    return () => h('div', { class: 'quick-search-result' }, [
+      h('div', { class: 'search-header' }, [
+        h('span', { class: 'search-query' }, props.result.query),
+        h('span', { class: 'search-count' }, `${props.result.count} 条结果`)
+      ]),
+      props.result.facts.length > 0 && h('div', { class: 'search-facts' },
+        props.result.facts.map((fact, i) => h('div', { class: 'search-fact-item', key: i }, [
+          h('span', { class: 'fact-num' }, i + 1),
+          h('span', { class: 'fact-text' }, fact)
+        ]))
+      )
+    ])
+  }
+}
 
 // Computed
 const statusClass = computed(() => {
@@ -1289,4 +1825,561 @@ watch(() => props.reportId, (newId) => {
 .log-msg.error { color: #EF5350; }
 .log-msg.warning { color: #FFA726; }
 .log-msg.success { color: #66BB6A; }
+
+/* ========== 工具结果结构化展示样式 ========== */
+
+/* 切换原文按钮 */
+.toggle-raw-btn {
+  background: transparent;
+  border: 1px solid #DDD;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 10px;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-raw-btn:hover {
+  background: #F5F5F5;
+  border-color: #CCC;
+}
+
+/* 原文展示 */
+.result-raw {
+  margin-top: 10px;
+}
+
+.result-raw pre {
+  margin: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(0, 0, 0, 0.03);
+  padding: 12px;
+  border-radius: 4px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* 工具类型特定背景 */
+.tool-result-block.tool-insight_forge {
+  background: linear-gradient(135deg, #FFF8E1 0%, #FFF3E0 100%);
+  border-color: #FFE082;
+}
+
+.tool-result-block.tool-panorama_search {
+  background: linear-gradient(135deg, #E3F2FD 0%, #E1F5FE 100%);
+  border-color: #90CAF9;
+}
+
+.tool-result-block.tool-interview_agents {
+  background: linear-gradient(135deg, #F3E5F5 0%, #FCE4EC 100%);
+  border-color: #CE93D8;
+}
+
+.tool-result-block.tool-quick_search {
+  background: linear-gradient(135deg, #E8F5E9 0%, #F1F8E9 100%);
+  border-color: #A5D6A7;
+}
+
+/* 统计卡片 */
+.stats-cards {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 12px;
+  background: #FFF;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  min-width: 60px;
+}
+
+.stat-card .stat-num {
+  font-size: 18px;
+  font-weight: 700;
+  color: #333;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.stat-card .stat-name {
+  font-size: 10px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.stat-card.facts .stat-num { color: #E65100; }
+.stat-card.entities .stat-num { color: #7B1FA2; }
+.stat-card.relations .stat-num { color: #1565C0; }
+.stat-card.nodes .stat-num { color: #1976D2; }
+.stat-card.edges .stat-num { color: #00838F; }
+.stat-card.active .stat-num { color: #2E7D32; }
+.stat-card.history .stat-num { color: #795548; }
+
+/* 可折叠区块 */
+.collapsible-section {
+  margin-top: 10px;
+  background: rgba(255,255,255,0.7);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(0,0,0,0.03);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  transition: background 0.2s;
+}
+
+.section-title:hover {
+  background: rgba(0,0,0,0.06);
+}
+
+.section-title.active { color: #2E7D32; }
+.section-title.history { color: #795548; }
+
+.toggle-icon {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.08);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+/* 子问题列表 */
+.sub-queries {
+  padding: 8px 12px;
+}
+
+.sub-query {
+  display: flex;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px dashed #EEE;
+}
+
+.sub-query:last-child {
+  border-bottom: none;
+}
+
+.query-num {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #E3F2FD;
+  color: #1565C0;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.query-text {
+  font-size: 12px;
+  color: #444;
+  line-height: 1.5;
+}
+
+/* 事实列表 */
+.facts-list {
+  padding: 8px 12px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.fact-item {
+  display: flex;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #F0F0F0;
+}
+
+.fact-item:last-child {
+  border-bottom: none;
+}
+
+.fact-item.active {
+  background: rgba(46, 125, 50, 0.05);
+  margin: 0 -12px;
+  padding: 6px 12px;
+}
+
+.fact-item.history {
+  background: rgba(121, 85, 72, 0.05);
+  margin: 0 -12px;
+  padding: 6px 12px;
+}
+
+.fact-num {
+  min-width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F5F5F5;
+  color: #888;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.fact-text {
+  font-size: 12px;
+  color: #444;
+  line-height: 1.5;
+}
+
+.fact-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.time-range {
+  font-size: 10px;
+  color: #888;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* 实体网格 */
+.entities-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.entity-card {
+  background: #FFF;
+  border: 1px solid #EEE;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.entity-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.entity-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+}
+
+.entity-type {
+  font-size: 10px;
+  color: #7B1FA2;
+  background: #F3E5F5;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.entity-summary {
+  font-size: 11px;
+  color: #666;
+  line-height: 1.4;
+}
+
+/* 实体标签 */
+.entity-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px;
+}
+
+.entity-tag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #FFF;
+  border: 1px solid #EEE;
+  border-radius: 15px;
+  padding: 4px 10px;
+}
+
+.tag-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: #333;
+}
+
+.tag-type {
+  font-size: 9px;
+  color: #888;
+}
+
+/* 关系链 */
+.relations-list {
+  padding: 8px 12px;
+}
+
+.relation-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px solid #F0F0F0;
+  flex-wrap: wrap;
+}
+
+.relation-item:last-child {
+  border-bottom: none;
+}
+
+.rel-source, .rel-target {
+  font-size: 11px;
+  font-weight: 500;
+  color: #333;
+  background: #E3F2FD;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.rel-arrow {
+  font-size: 12px;
+  color: #999;
+}
+
+.rel-type {
+  font-size: 10px;
+  color: #FFF;
+  background: #1565C0;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* 采访结果 */
+.interview-result {
+  padding: 8px 0;
+}
+
+.interview-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.7);
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+
+.interview-topic {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.interview-count {
+  font-size: 11px;
+  color: #7B1FA2;
+}
+
+.interviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.interview-card {
+  background: #FFF;
+  border: 1px solid #EEE;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.interview-card:hover {
+  border-color: #DDD;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.interview-card.expanded {
+  border-color: #CE93D8;
+}
+
+.interview-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.interview-num {
+  font-size: 11px;
+  font-weight: 600;
+  color: #7B1FA2;
+  background: #F3E5F5;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.interview-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+}
+
+.interview-role {
+  font-size: 10px;
+  color: #888;
+  background: #F5F5F5;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.expand-icon {
+  margin-left: auto;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F5F5F5;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #666;
+}
+
+.interview-card-body {
+  padding: 0 12px 12px;
+  border-top: 1px solid #F0F0F0;
+}
+
+.interview-bio {
+  font-size: 11px;
+  color: #888;
+  font-style: italic;
+  padding: 8px 0;
+}
+
+.interview-qa {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qa-question, .qa-answer {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.qa-label {
+  font-weight: 600;
+  color: #7B1FA2;
+  margin-right: 4px;
+}
+
+.qa-question {
+  color: #555;
+  background: #FAFAFA;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+
+.qa-answer {
+  color: #333;
+}
+
+.interview-quotes {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #EEE;
+}
+
+.quote-item {
+  font-size: 11px;
+  color: #666;
+  font-style: italic;
+  padding: 4px 0 4px 12px;
+  border-left: 2px solid #CE93D8;
+  margin-bottom: 4px;
+}
+
+.interview-summary {
+  margin-top: 10px;
+  background: rgba(255,255,255,0.7);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.summary-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 6px;
+}
+
+.summary-content {
+  font-size: 11px;
+  color: #666;
+  line-height: 1.5;
+}
+
+/* 快速搜索结果 */
+.quick-search-result {
+  padding: 8px 0;
+}
+
+.search-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.7);
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+
+.search-query {
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+}
+
+.search-count {
+  font-size: 11px;
+  color: #2E7D32;
+  background: #E8F5E9;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.search-facts {
+  padding: 0 12px;
+}
+
+.search-fact-item {
+  display: flex;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #F0F0F0;
+}
+
+.search-fact-item:last-child {
+  border-bottom: none;
+}
 </style>
