@@ -484,47 +484,123 @@ const parseInterview = (text) => {
   const result = {
     topic: '',
     agentCount: '',
+    successCount: 0,
+    totalCount: 0,
+    selectionReason: '',
     interviews: [],
     summary: ''
   }
   
   try {
+    // 提取采访主题
     const topicMatch = text.match(/\*\*采访主题:\*\*\s*(.+?)(?:\n|$)/)
     if (topicMatch) result.topic = topicMatch[1].trim()
     
-    const countMatch = text.match(/\*\*采访人数:\*\*\s*(.+?)(?:\n|$)/)
-    if (countMatch) result.agentCount = countMatch[1].trim()
+    // 提取采访人数（如 "5 / 9 位模拟Agent"）
+    const countMatch = text.match(/\*\*采访人数:\*\*\s*(\d+)\s*\/\s*(\d+)/)
+    if (countMatch) {
+      result.successCount = parseInt(countMatch[1])
+      result.totalCount = parseInt(countMatch[2])
+      result.agentCount = `${countMatch[1]} / ${countMatch[2]}`
+    }
     
-    // Extract interview records
-    const interviewMatches = text.matchAll(/#### 采访 #(\d+):\s*(.+?)\n\*\*(.+?)\*\*\s*\((.+?)\)\n_简介:\s*(.+?)_\n\n\*\*Q:\*\*\s*([\s\S]*?)\n\n\*\*A:\*\*\s*([\s\S]*?)(?=\*\*关键引言|\n---|\n####|$)/g)
+    // 提取采访对象选择理由
+    const reasonMatch = text.match(/### 采访对象选择理由\n([\s\S]*?)(?=\n---\n|\n### 采访实录)/)
+    if (reasonMatch) {
+      result.selectionReason = reasonMatch[1].trim()
+    }
     
-    for (const match of interviewMatches) {
+    // 提取每个采访记录
+    const interviewBlocks = text.split(/#### 采访 #\d+:/).slice(1)
+    
+    interviewBlocks.forEach((block, index) => {
       const interview = {
-        num: match[1],
-        title: match[2].trim(),
-        name: match[3].trim(),
-        role: match[4].trim(),
-        bio: match[5].trim(),
-        question: match[6].trim(),
-        answer: match[7].trim(),
+        num: index + 1,
+        title: '',
+        name: '',
+        role: '',
+        bio: '',
+        questions: [],
+        twitterAnswer: '',
+        redditAnswer: '',
         quotes: []
       }
       
-      // Extract key quotes
-      const quoteSection = text.match(new RegExp(`#### 采访 #${match[1]}[\\s\\S]*?\\*\\*关键引言:\\*\\*\\n([\\s\\S]*?)(?=\\n---)`))
-      if (quoteSection) {
-        const quotes = quoteSection[1].match(/> "(.+?)"/g)
-        if (quotes) {
-          interview.quotes = quotes.map(q => q.replace(/^> "|"$/g, '')).slice(0, 2)
+      // 提取标题（如 "学生"、"教育从业者" 等）
+      const titleMatch = block.match(/^(.+?)\n/)
+      if (titleMatch) interview.title = titleMatch[1].trim()
+      
+      // 提取姓名和角色
+      const nameRoleMatch = block.match(/\*\*(.+?)\*\*\s*\((.+?)\)/)
+      if (nameRoleMatch) {
+        interview.name = nameRoleMatch[1].trim()
+        interview.role = nameRoleMatch[2].trim()
+      }
+      
+      // 提取简介
+      const bioMatch = block.match(/_简介:\s*([\s\S]*?)_\n/)
+      if (bioMatch) {
+        interview.bio = bioMatch[1].trim().replace(/\.\.\.$/, '...')
+      }
+      
+      // 提取问题列表
+      const qMatch = block.match(/\*\*Q:\*\*\s*([\s\S]*?)(?=\n\n\*\*A:\*\*|\*\*A:\*\*)/)
+      if (qMatch) {
+        const qText = qMatch[1].trim()
+        // 按数字编号分割问题
+        const questions = qText.split(/\n\d+\.\s+/).filter(q => q.trim())
+        if (questions.length > 0) {
+          // 如果第一个问题前面有"1."，需要特殊处理
+          const firstQ = qText.match(/^1\.\s+(.+)/)
+          if (firstQ) {
+            interview.questions = [firstQ[1].trim(), ...questions.slice(1).map(q => q.trim())]
+          } else {
+            interview.questions = questions.map(q => q.trim())
+          }
         }
       }
       
-      result.interviews.push(interview)
-    }
+      // 提取回答 - 分Twitter和Reddit
+      const answerMatch = block.match(/\*\*A:\*\*\s*([\s\S]*?)(?=\*\*关键引言|$)/)
+      if (answerMatch) {
+        const answerText = answerMatch[1].trim()
+        
+        // 分离Twitter和Reddit回答
+        const twitterMatch = answerText.match(/【Twitter平台回答】\n?([\s\S]*?)(?=【Reddit平台回答】|$)/)
+        const redditMatch = answerText.match(/【Reddit平台回答】\n?([\s\S]*?)$/)
+        
+        if (twitterMatch) {
+          interview.twitterAnswer = twitterMatch[1].trim()
+        }
+        if (redditMatch) {
+          interview.redditAnswer = redditMatch[1].trim()
+        }
+        
+        // 如果没有明确分平台，整体作为回答
+        if (!twitterMatch && !redditMatch) {
+          interview.twitterAnswer = answerText
+        }
+      }
+      
+      // 提取关键引言
+      const quotesMatch = block.match(/\*\*关键引言:\*\*\n([\s\S]*?)(?=\n---|\n####|$)/)
+      if (quotesMatch) {
+        const quotesText = quotesMatch[1]
+        const quoteMatches = quotesText.match(/> "([^"]+)"/g)
+        if (quoteMatches) {
+          interview.quotes = quoteMatches.map(q => q.replace(/^> "|"$/g, '').trim())
+        }
+      }
+      
+      if (interview.name || interview.title) {
+        result.interviews.push(interview)
+      }
+    })
     
-    const summarySection = text.match(/### 采访摘要与核心观点\n([\s\S]*?)$/)
-    if (summarySection) {
-      result.summary = summarySection[1].trim().substring(0, 400)
+    // 提取采访摘要
+    const summaryMatch = text.match(/### 采访摘要与核心观点\n([\s\S]*?)$/)
+    if (summaryMatch) {
+      result.summary = summaryMatch[1].trim()
     }
   } catch (e) {
     console.warn('Parse interview failed:', e)
@@ -670,64 +746,147 @@ const PanoramaDisplay = {
   }
 }
 
-// Interview Display Component - Beautiful Interview Style
+// Interview Display Component - Conversation Style
 const InterviewDisplay = {
   props: ['result'],
   setup(props) {
     const activeIndex = ref(0)
+    const expandedAnswers = ref(new Set())
+    const activeTab = ref('twitter') // 'twitter' or 'reddit'
+    
+    const toggleAnswer = (idx) => {
+      const newSet = new Set(expandedAnswers.value)
+      if (newSet.has(idx)) {
+        newSet.delete(idx)
+      } else {
+        newSet.add(idx)
+      }
+      expandedAnswers.value = newSet
+    }
+    
+    const formatAnswer = (text, expanded) => {
+      if (!text) return ''
+      if (expanded || text.length <= 600) return text
+      return text.substring(0, 600) + '...'
+    }
+    
     return () => h('div', { class: 'interview-display' }, [
-      // Header
+      // Header Section
       h('div', { class: 'interview-header' }, [
-        h('div', { class: 'interview-topic' }, props.result.topic || 'Agent Interview'),
-        h('div', { class: 'interview-meta' }, props.result.agentCount)
+        h('div', { class: 'header-main' }, [
+          h('div', { class: 'header-title' }, 'Agent Interview'),
+          h('div', { class: 'header-stats' }, [
+            h('span', { class: 'stat-item' }, [
+              h('span', { class: 'stat-value' }, props.result.successCount || props.result.interviews.length),
+              h('span', { class: 'stat-label' }, 'Interviewed')
+            ]),
+            props.result.totalCount > 0 && h('span', { class: 'stat-divider' }, '/'),
+            props.result.totalCount > 0 && h('span', { class: 'stat-item' }, [
+              h('span', { class: 'stat-value' }, props.result.totalCount),
+              h('span', { class: 'stat-label' }, 'Total')
+            ])
+          ])
+        ]),
+        props.result.topic && h('div', { class: 'header-topic' }, props.result.topic)
       ]),
-      // Interview Cards
-      props.result.interviews.length > 0 && h('div', { class: 'interview-carousel' }, 
-        props.result.interviews.map((interview, i) => h('div', { 
-          class: ['interview-card', { active: activeIndex.value === i }],
+      
+      // Agent Selector Tabs
+      props.result.interviews.length > 0 && h('div', { class: 'agent-tabs' }, 
+        props.result.interviews.map((interview, i) => h('button', {
+          class: ['agent-tab', { active: activeIndex.value === i }],
           key: i,
           onClick: () => { activeIndex.value = i }
         }, [
-          // Interviewee Info
-          h('div', { class: 'interviewee' }, [
-            h('div', { class: 'avatar' }, interview.name.charAt(0)),
-            h('div', { class: 'info' }, [
-              h('span', { class: 'name' }, interview.name),
-              h('span', { class: 'role' }, interview.role)
-            ]),
-            h('span', { class: 'interview-idx' }, `#${interview.num}`)
-          ]),
-          // Bio
-          interview.bio && h('div', { class: 'bio' }, interview.bio.length > 80 ? interview.bio.substring(0, 80) + '...' : interview.bio),
-          // Q&A Section
-          activeIndex.value === i && h('div', { class: 'qa-section' }, [
-            h('div', { class: 'question' }, [
-              h('div', { class: 'q-label' }, 'Q'),
-              h('div', { class: 'q-text' }, interview.question.length > 200 ? interview.question.substring(0, 200) + '...' : interview.question)
-            ]),
-            h('div', { class: 'answer' }, [
-              h('div', { class: 'a-label' }, 'A'),
-              h('div', { class: 'a-text' }, interview.answer.length > 400 ? interview.answer.substring(0, 400) + '...' : interview.answer)
-            ]),
-            // Key Quotes
-            interview.quotes.length > 0 && h('div', { class: 'quotes' },
-              interview.quotes.map((q, qi) => h('blockquote', { class: 'quote', key: qi }, `"${q.length > 100 ? q.substring(0, 100) + '...' : q}"`))
-            )
-          ])
+          h('span', { class: 'tab-avatar' }, interview.name ? interview.name.charAt(0) : (i + 1)),
+          h('span', { class: 'tab-name' }, interview.title || interview.name || `Agent ${i + 1}`)
         ]))
       ),
-      // Navigation dots
-      props.result.interviews.length > 1 && h('div', { class: 'carousel-dots' },
-        props.result.interviews.map((_, i) => h('span', {
-          class: ['dot', { active: activeIndex.value === i }],
-          key: i,
-          onClick: () => { activeIndex.value = i }
-        }))
-      ),
-      // Summary
-      props.result.summary && h('div', { class: 'interview-summary' }, [
-        h('div', { class: 'summary-label' }, 'Summary'),
-        h('div', { class: 'summary-text' }, props.result.summary)
+      
+      // Active Interview Detail
+      props.result.interviews.length > 0 && h('div', { class: 'interview-detail' }, [
+        // Agent Profile Card
+        h('div', { class: 'agent-profile' }, [
+          h('div', { class: 'profile-avatar' }, props.result.interviews[activeIndex.value]?.name?.charAt(0) || 'A'),
+          h('div', { class: 'profile-info' }, [
+            h('div', { class: 'profile-name' }, props.result.interviews[activeIndex.value]?.name || 'Agent'),
+            h('div', { class: 'profile-role' }, props.result.interviews[activeIndex.value]?.role || ''),
+            props.result.interviews[activeIndex.value]?.bio && h('div', { class: 'profile-bio' }, props.result.interviews[activeIndex.value].bio)
+          ])
+        ]),
+        
+        // Conversation Thread
+        h('div', { class: 'conversation-thread' }, [
+          // Question Block (Interviewer)
+          h('div', { class: 'message interviewer' }, [
+            h('div', { class: 'message-header' }, [
+              h('span', { class: 'message-sender' }, 'Interviewer'),
+              h('span', { class: 'message-badge' }, 'Q')
+            ]),
+            h('div', { class: 'message-content' }, [
+              props.result.interviews[activeIndex.value]?.questions?.length > 0 
+                ? h('ol', { class: 'question-list' },
+                    props.result.interviews[activeIndex.value].questions.map((q, qi) => 
+                      h('li', { key: qi, class: 'question-item' }, q)
+                    )
+                  )
+                : h('p', {}, props.result.interviews[activeIndex.value]?.question || 'No question available')
+            ])
+          ]),
+          
+          // Answer Block (Agent) - with platform tabs
+          h('div', { class: 'message agent' }, [
+            h('div', { class: 'message-header' }, [
+              h('span', { class: 'message-sender' }, props.result.interviews[activeIndex.value]?.name || 'Agent'),
+              h('span', { class: 'message-badge answer' }, 'A')
+            ]),
+            // Platform Tabs
+            (props.result.interviews[activeIndex.value]?.twitterAnswer && props.result.interviews[activeIndex.value]?.redditAnswer) && h('div', { class: 'platform-tabs' }, [
+              h('button', { 
+                class: ['platform-tab', { active: activeTab.value === 'twitter' }],
+                onClick: () => { activeTab.value = 'twitter' }
+              }, 'Twitter'),
+              h('button', { 
+                class: ['platform-tab', { active: activeTab.value === 'reddit' }],
+                onClick: () => { activeTab.value = 'reddit' }
+              }, 'Reddit')
+            ]),
+            // Answer Content
+            h('div', { class: 'message-content answer-content' }, [
+              h('div', { 
+                class: 'answer-text',
+                innerHTML: formatAnswer(
+                  activeTab.value === 'twitter' 
+                    ? props.result.interviews[activeIndex.value]?.twitterAnswer 
+                    : (props.result.interviews[activeIndex.value]?.redditAnswer || props.result.interviews[activeIndex.value]?.twitterAnswer),
+                  expandedAnswers.value.has(activeIndex.value)
+                ).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')
+              }),
+              // Expand/Collapse Button
+              ((props.result.interviews[activeIndex.value]?.twitterAnswer?.length > 600) || 
+               (props.result.interviews[activeIndex.value]?.redditAnswer?.length > 600)) && 
+              h('button', { 
+                class: 'expand-answer-btn',
+                onClick: () => toggleAnswer(activeIndex.value)
+              }, expandedAnswers.value.has(activeIndex.value) ? 'Show Less' : 'Show More')
+            ])
+          ]),
+          
+          // Key Quotes Section
+          props.result.interviews[activeIndex.value]?.quotes?.length > 0 && h('div', { class: 'quotes-section' }, [
+            h('div', { class: 'quotes-header' }, 'Key Quotes'),
+            h('div', { class: 'quotes-list' },
+              props.result.interviews[activeIndex.value].quotes.slice(0, 3).map((quote, qi) => 
+                h('blockquote', { key: qi, class: 'quote-item' }, quote.length > 200 ? quote.substring(0, 200) + '...' : quote)
+              )
+            )
+          ])
+        ])
+      ]),
+      
+      // Summary Section (Collapsible)
+      props.result.summary && h('div', { class: 'summary-section' }, [
+        h('div', { class: 'summary-header' }, 'Interview Summary'),
+        h('div', { class: 'summary-content' }, props.result.summary.length > 500 ? props.result.summary.substring(0, 500) + '...' : props.result.summary)
       ])
     ])
   }
@@ -1249,7 +1408,7 @@ watch(() => props.reportId, (newId) => {
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #4F46E5 0%, #7C3AED 100%);
+  background: #4F46E5;
   border-radius: 3px;
   transition: width 0.5s ease;
 }
@@ -1825,19 +1984,23 @@ watch(() => props.reportId, (newId) => {
 }
 
 .result-wrapper.result-insight_forge {
-  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
 }
 
 .result-wrapper.result-panorama_search {
-  background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
 }
 
 .result-wrapper.result-interview_agents {
-  background: linear-gradient(135deg, #F3E8FF 0%, #E9D5FF 100%);
+  background: #FAF5FF;
+  border: 1px solid #E9D5FF;
 }
 
 .result-wrapper.result-quick_search {
-  background: linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%);
+  background: #ECFDF5;
+  border: 1px solid #A7F3D0;
 }
 
 .result-meta {
@@ -1936,7 +2099,8 @@ watch(() => props.reportId, (newId) => {
   gap: 8px;
   margin-top: 10px;
   padding: 10px 14px;
-  background: linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%);
+  background: #ECFDF5;
+  border: 1px solid #A7F3D0;
   border-radius: 6px;
   color: #065F46;
   font-size: 12px;
@@ -1971,7 +2135,8 @@ watch(() => props.reportId, (newId) => {
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
-  background: linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%);
+  background: #ECFDF5;
+  border: 1px solid #A7F3D0;
   border-radius: 8px;
   color: #065F46;
   font-weight: 600;
@@ -2015,443 +2180,682 @@ watch(() => props.reportId, (newId) => {
 
 /* ========== Structured Result Display Components ========== */
 
-/* Common Styles */
-.stat-row {
+/* Common Styles - using :deep() for dynamic components */
+:deep(.stat-row) {
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
 }
 
-.stat-box {
+:deep(.stat-box) {
   flex: 1;
-  background: rgba(255,255,255,0.8);
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
   border-radius: 6px;
-  padding: 8px;
+  padding: 10px 8px;
   text-align: center;
 }
 
-.stat-box .stat-num {
+:deep(.stat-box .stat-num) {
   display: block;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
-  color: #374151;
+  color: #111827;
   font-family: 'JetBrains Mono', monospace;
 }
 
-.stat-box .stat-label {
+:deep(.stat-box .stat-label) {
   display: block;
   font-size: 10px;
-  color: #6B7280;
+  color: #9CA3AF;
   margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
-.stat-box.highlight {
-  background: rgba(16, 185, 129, 0.2);
+:deep(.stat-box.highlight) {
+  background: #ECFDF5;
+  border-color: #A7F3D0;
 }
 
-.stat-box.highlight .stat-num {
+:deep(.stat-box.highlight .stat-num) {
   color: #059669;
 }
 
-.stat-box.muted {
-  background: rgba(107, 114, 128, 0.1);
+:deep(.stat-box.muted) {
+  background: #F9FAFB;
+  border-color: #E5E7EB;
 }
 
-.stat-box.muted .stat-num {
+:deep(.stat-box.muted .stat-num) {
   color: #6B7280;
 }
 
-.query-display {
-  background: rgba(255,255,255,0.6);
-  padding: 8px 12px;
+:deep(.query-display) {
+  background: #FFFFFF;
+  padding: 10px 14px;
   border-radius: 6px;
   font-size: 12px;
-  color: #4B5563;
-  margin-bottom: 10px;
-  border-left: 3px solid #6366F1;
+  color: #374151;
+  margin-bottom: 12px;
+  border-left: 3px solid #4F46E5;
+  line-height: 1.5;
 }
 
-.expand-details {
-  background: rgba(255,255,255,0.7);
-  border: 1px solid rgba(0,0,0,0.1);
-  padding: 6px 12px;
+:deep(.expand-details) {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  padding: 8px 14px;
   border-radius: 6px;
   font-size: 11px;
   font-weight: 500;
-  color: #4B5563;
+  color: #6B7280;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s ease;
 }
 
-.expand-details:hover {
-  background: rgba(255,255,255,0.9);
+:deep(.expand-details:hover) {
+  border-color: #D1D5DB;
+  color: #374151;
 }
 
-.detail-content {
-  margin-top: 12px;
-  background: rgba(255,255,255,0.5);
+:deep(.detail-content) {
+  margin-top: 14px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
   border-radius: 8px;
-  padding: 12px;
+  padding: 14px;
 }
 
-.section-label {
+:deep(.section-label) {
   font-size: 11px;
   font-weight: 600;
   color: #6B7280;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #F3F4F6;
 }
 
 /* Facts Section */
-.facts-section {
-  margin-bottom: 12px;
+:deep(.facts-section) {
+  margin-bottom: 14px;
 }
 
-.fact-row {
+:deep(.fact-row) {
   display: flex;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px solid rgba(0,0,0,0.05);
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid #F3F4F6;
 }
 
-.fact-row:last-child {
+:deep(.fact-row:last-child) {
   border-bottom: none;
 }
 
-.fact-row.active {
-  background: rgba(16, 185, 129, 0.1);
-  margin: 0 -8px;
-  padding: 6px 8px;
+:deep(.fact-row.active) {
+  background: #ECFDF5;
+  margin: 0 -10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border-bottom: none;
+}
+
+:deep(.fact-idx) {
+  min-width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F3F4F6;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #6B7280;
+  flex-shrink: 0;
+}
+
+:deep(.fact-row.active .fact-idx) {
+  background: #A7F3D0;
+  color: #065F46;
+}
+
+:deep(.fact-text) {
+  font-size: 12px;
+  color: #4B5563;
+  line-height: 1.6;
+}
+
+/* Entities Section */
+:deep(.entities-section) {
+  margin-bottom: 14px;
+}
+
+:deep(.entity-chips) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+:deep(.entity-chip) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  padding: 6px 12px;
+}
+
+:deep(.chip-name) {
+  font-size: 12px;
+  font-weight: 500;
+  color: #111827;
+}
+
+:deep(.chip-type) {
+  font-size: 10px;
+  color: #9CA3AF;
+  background: #E5E7EB;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+/* Relations Section */
+:deep(.relations-section) {
+  margin-bottom: 14px;
+}
+
+:deep(.relation-row) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  flex-wrap: wrap;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+:deep(.relation-row:last-child) {
+  border-bottom: none;
+}
+
+:deep(.rel-node) {
+  font-size: 12px;
+  font-weight: 500;
+  color: #111827;
+  background: #F3F4F6;
+  padding: 4px 10px;
   border-radius: 4px;
 }
 
-.fact-idx {
-  min-width: 20px;
+:deep(.rel-edge) {
+  font-size: 10px;
+  font-weight: 600;
+  color: #FFFFFF;
+  background: #4F46E5;
+  padding: 3px 10px;
+  border-radius: 10px;
+}
+
+/* ========== Interview Display - Conversation Style ========== */
+:deep(.interview-display) {
+  padding: 0;
+}
+
+/* Header */
+:deep(.interview-display .interview-header) {
+  padding: 14px 16px;
+  background: #FFFFFF;
+  border-bottom: 1px solid #E5E7EB;
+  margin-bottom: 0;
+}
+
+:deep(.interview-display .header-main) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+:deep(.interview-display .header-title) {
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: -0.01em;
+}
+
+:deep(.interview-display .header-stats) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+:deep(.interview-display .stat-item) {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+:deep(.interview-display .stat-value) {
+  font-size: 16px;
+  font-weight: 700;
+  color: #4F46E5;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+:deep(.interview-display .stat-label) {
+  font-size: 10px;
+  color: #9CA3AF;
+  text-transform: uppercase;
+}
+
+:deep(.interview-display .stat-divider) {
+  color: #D1D5DB;
+  font-size: 12px;
+}
+
+:deep(.interview-display .header-topic) {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #6B7280;
+  line-height: 1.5;
+}
+
+/* Agent Tabs */
+:deep(.interview-display .agent-tabs) {
+  display: flex;
+  gap: 4px;
+  padding: 10px 12px;
+  background: #F9FAFB;
+  border-bottom: 1px solid #E5E7EB;
+  overflow-x: auto;
+}
+
+:deep(.interview-display .agent-tabs::-webkit-scrollbar) {
+  height: 3px;
+}
+
+:deep(.interview-display .agent-tabs::-webkit-scrollbar-thumb) {
+  background: #D1D5DB;
+  border-radius: 2px;
+}
+
+:deep(.interview-display .agent-tab) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #6B7280;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+:deep(.interview-display .agent-tab:hover) {
+  border-color: #D1D5DB;
+  color: #374151;
+}
+
+:deep(.interview-display .agent-tab.active) {
+  background: #4F46E5;
+  border-color: #4F46E5;
+  color: #FFFFFF;
+}
+
+:deep(.interview-display .tab-avatar) {
+  width: 20px;
   height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: #E5E7EB;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 600;
   color: #6B7280;
-  flex-shrink: 0;
-}
-
-.fact-text {
-  font-size: 12px;
-  color: #4B5563;
-  line-height: 1.5;
-}
-
-/* Entities Section */
-.entities-section {
-  margin-bottom: 12px;
-}
-
-.entity-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.entity-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: rgba(255,255,255,0.8);
-  border: 1px solid rgba(0,0,0,0.1);
-  border-radius: 20px;
-  padding: 4px 10px;
-}
-
-.chip-name {
-  font-size: 11px;
-  font-weight: 500;
-  color: #374151;
-}
-
-.chip-type {
-  font-size: 9px;
-  color: #9CA3AF;
-}
-
-/* Relations Section */
-.relations-section {
-  margin-bottom: 12px;
-}
-
-.relation-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 0;
-  flex-wrap: wrap;
-}
-
-.rel-node {
-  font-size: 11px;
-  font-weight: 500;
-  color: #374151;
-  background: #E5E7EB;
-  padding: 2px 8px;
-  border-radius: 4px;
-}
-
-.rel-edge {
   font-size: 10px;
-  color: #FFFFFF;
-  background: #6366F1;
-  padding: 2px 8px;
-  border-radius: 12px;
-}
-
-/* Interview Display */
-.interview-display {
-  padding: 4px 0;
-}
-
-.interview-header {
-  margin-bottom: 12px;
-}
-
-.interview-topic {
-  font-size: 13px;
-  font-weight: 600;
-  color: #374151;
-  margin-bottom: 4px;
-}
-
-.interview-meta {
-  font-size: 11px;
-  color: #6B7280;
-}
-
-.interview-carousel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.interview-card {
-  background: rgba(255,255,255,0.9);
-  border: 1px solid rgba(0,0,0,0.08);
-  border-radius: 10px;
-  padding: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.interview-card:hover {
-  border-color: rgba(139, 92, 246, 0.3);
-}
-
-.interview-card.active {
-  border-color: #8B5CF6;
-  box-shadow: 0 2px 12px rgba(139, 92, 246, 0.15);
-}
-
-.interviewee {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.avatar {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%);
-  color: #FFFFFF;
-  font-size: 14px;
   font-weight: 700;
   border-radius: 50%;
 }
 
-.interviewee .info {
+:deep(.interview-display .agent-tab.active .tab-avatar) {
+  background: rgba(255,255,255,0.2);
+  color: #FFFFFF;
+}
+
+:deep(.interview-display .tab-name) {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Interview Detail */
+:deep(.interview-display .interview-detail) {
+  padding: 16px;
+  background: #FFFFFF;
+}
+
+/* Agent Profile */
+:deep(.interview-display .agent-profile) {
+  display: flex;
+  gap: 14px;
+  padding: 14px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+:deep(.interview-display .profile-avatar) {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #4F46E5;
+  color: #FFFFFF;
+  font-size: 18px;
+  font-weight: 700;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+:deep(.interview-display .profile-info) {
   flex: 1;
-  display: flex;
-  flex-direction: column;
+  min-width: 0;
 }
 
-.interviewee .name {
-  font-size: 13px;
+:deep(.interview-display .profile-name) {
+  font-size: 14px;
   font-weight: 600;
-  color: #374151;
+  color: #111827;
+  margin-bottom: 2px;
 }
 
-.interviewee .role {
+:deep(.interview-display .profile-role) {
   font-size: 11px;
-  color: #6B7280;
-}
-
-.interview-idx {
-  font-size: 11px;
-  font-weight: 600;
-  color: #8B5CF6;
-  background: #F3E8FF;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-.bio {
-  font-size: 11px;
-  color: #6B7280;
-  font-style: italic;
-  margin-bottom: 10px;
-  padding: 8px;
-  background: rgba(0,0,0,0.03);
-  border-radius: 6px;
-}
-
-.qa-section {
-  border-top: 1px solid rgba(0,0,0,0.08);
-  padding-top: 12px;
-  margin-top: 4px;
-}
-
-.question, .answer {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.q-label, .a-label {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  font-size: 12px;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.q-label {
-  background: #EEF2FF;
-  color: #4F46E5;
-}
-
-.a-label {
-  background: #D1FAE5;
-  color: #059669;
-}
-
-.q-text, .a-text {
-  font-size: 12px;
-  color: #4B5563;
-  line-height: 1.6;
-}
-
-.q-text {
-  font-weight: 500;
-}
-
-.quotes {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed rgba(0,0,0,0.1);
-}
-
-.quote {
-  font-size: 11px;
-  color: #6B7280;
-  font-style: italic;
-  padding: 6px 12px;
-  margin: 4px 0;
-  border-left: 2px solid #A78BFA;
-  background: rgba(167, 139, 250, 0.08);
-}
-
-.carousel-dots {
-  display: flex;
-  justify-content: center;
-  gap: 6px;
-  margin-top: 12px;
-}
-
-.carousel-dots .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: rgba(0,0,0,0.15);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.carousel-dots .dot.active {
-  background: #8B5CF6;
-  width: 20px;
-  border-radius: 4px;
-}
-
-.interview-summary {
-  margin-top: 12px;
-  padding: 12px;
-  background: rgba(255,255,255,0.6);
-  border-radius: 8px;
-}
-
-.summary-label {
-  font-size: 11px;
-  font-weight: 600;
   color: #6B7280;
   margin-bottom: 6px;
 }
 
-.summary-text {
+:deep(.interview-display .profile-bio) {
+  font-size: 11px;
+  color: #9CA3AF;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Conversation Thread */
+:deep(.interview-display .conversation-thread) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+:deep(.interview-display .message) {
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+:deep(.interview-display .message.interviewer) {
+  background: #F9FAFB;
+}
+
+:deep(.interview-display .message.agent) {
+  background: #FFFFFF;
+  border-color: #4F46E5;
+  border-width: 1px 1px 1px 3px;
+}
+
+:deep(.interview-display .message-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid #E5E7EB;
+}
+
+:deep(.interview-display .message.agent .message-header) {
+  border-bottom-color: #EEF2FF;
+}
+
+:deep(.interview-display .message-sender) {
   font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+}
+
+:deep(.interview-display .message-badge) {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #E5E7EB;
+  color: #6B7280;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 50%;
+}
+
+:deep(.interview-display .message-badge.answer) {
+  background: #4F46E5;
+  color: #FFFFFF;
+}
+
+:deep(.interview-display .message-content) {
+  padding: 14px;
+}
+
+/* Question List */
+:deep(.interview-display .question-list) {
+  margin: 0;
+  padding-left: 20px;
+  list-style: decimal;
+}
+
+:deep(.interview-display .question-item) {
+  font-size: 12px;
+  color: #4B5563;
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+
+:deep(.interview-display .question-item:last-child) {
+  margin-bottom: 0;
+}
+
+/* Platform Tabs */
+:deep(.interview-display .platform-tabs) {
+  display: flex;
+  gap: 4px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #EEF2FF;
+}
+
+:deep(.interview-display .platform-tab) {
+  padding: 5px 12px;
+  background: transparent;
+  border: 1px solid #E5E7EB;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #6B7280;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+:deep(.interview-display .platform-tab:hover) {
+  border-color: #D1D5DB;
+  color: #374151;
+}
+
+:deep(.interview-display .platform-tab.active) {
+  background: #111827;
+  border-color: #111827;
+  color: #FFFFFF;
+}
+
+/* Answer Content */
+:deep(.interview-display .answer-content) {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+:deep(.interview-display .answer-content::-webkit-scrollbar) {
+  width: 4px;
+}
+
+:deep(.interview-display .answer-content::-webkit-scrollbar-thumb) {
+  background: #D1D5DB;
+  border-radius: 2px;
+}
+
+:deep(.interview-display .answer-text) {
+  font-size: 12px;
+  color: #4B5563;
+  line-height: 1.7;
+}
+
+:deep(.interview-display .answer-text strong) {
+  color: #111827;
+  font-weight: 600;
+}
+
+:deep(.interview-display .expand-answer-btn) {
+  display: block;
+  margin-top: 12px;
+  padding: 6px 12px;
+  background: #F3F4F6;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #6B7280;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+:deep(.interview-display .expand-answer-btn:hover) {
+  background: #E5E7EB;
+  color: #374151;
+}
+
+/* Quotes Section */
+:deep(.interview-display .quotes-section) {
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  padding: 14px;
+}
+
+:deep(.interview-display .quotes-header) {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6B7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}
+
+:deep(.interview-display .quotes-list) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+:deep(.interview-display .quote-item) {
+  margin: 0;
+  padding: 10px 14px;
+  background: #FFFFFF;
+  border-left: 3px solid #4F46E5;
+  border-radius: 0 6px 6px 0;
+  font-size: 11px;
+  font-style: italic;
   color: #4B5563;
   line-height: 1.6;
 }
 
-/* Quick Search Display */
-.quick-search-display {
-  padding: 4px 0;
-}
-
-.search-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.search-query {
-  font-size: 12px;
-  font-weight: 500;
-  color: #374151;
-}
-
-.search-count {
-  font-size: 10px;
-  color: #059669;
-  background: rgba(16, 185, 129, 0.15);
-  padding: 2px 8px;
+/* Summary Section */
+:deep(.interview-display .summary-section) {
+  margin-top: 16px;
+  padding: 14px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
   border-radius: 10px;
 }
 
-.search-results {
-  margin-top: 10px;
-  background: rgba(255,255,255,0.5);
-  border-radius: 6px;
-  padding: 8px;
+:deep(.interview-display .summary-header) {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6B7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
 }
 
-.search-fact {
+:deep(.interview-display .summary-content) {
+  font-size: 12px;
+  color: #4B5563;
+  line-height: 1.7;
+}
+
+/* Quick Search Display */
+:deep(.quick-search-display) {
+  padding: 4px 0;
+}
+
+:deep(.search-meta) {
   display: flex;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px solid rgba(0,0,0,0.05);
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
 }
 
-.search-fact:last-child {
+:deep(.search-query) {
+  font-size: 13px;
+  font-weight: 500;
+  color: #111827;
+}
+
+:deep(.search-count) {
+  font-size: 11px;
+  font-weight: 600;
+  color: #059669;
+  background: #ECFDF5;
+  border: 1px solid #A7F3D0;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+:deep(.search-results) {
+  margin-top: 12px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+:deep(.search-fact) {
+  display: flex;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+:deep(.search-fact:last-child) {
   border-bottom: none;
 }
 
