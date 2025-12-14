@@ -246,41 +246,35 @@ class PanoramaResult:
         }
     
     def to_text(self) -> str:
-        """转换为文本格式"""
+        """转换为文本格式（完整版本，不截断）"""
         text_parts = [
-            f"## 未来全景预测",
-            f"预测主题: {self.query}",
-            f"\n### 预测世界概览",
-            f"- 总实体数: {self.total_nodes}",
-            f"- 总关系数: {self.total_edges}",
-            f"- 当前有效预测: {self.active_count}条",
-            f"- 历史演变记录: {self.historical_count}条"
+            f"## 广度搜索结果（未来全景视图）",
+            f"查询: {self.query}",
+            f"\n### 统计信息",
+            f"- 总节点数: {self.total_nodes}",
+            f"- 总边数: {self.total_edges}",
+            f"- 当前有效事实: {self.active_count}条",
+            f"- 历史/过期事实: {self.historical_count}条"
         ]
         
-        # 当前有效的事实
+        # 当前有效的事实（完整输出，不截断）
         if self.active_facts:
             text_parts.append(f"\n### 【当前有效事实】(模拟结果原文)")
-            for i, fact in enumerate(self.active_facts[:30], 1):
+            for i, fact in enumerate(self.active_facts, 1):
                 text_parts.append(f"{i}. \"{fact}\"")
-            if len(self.active_facts) > 30:
-                text_parts.append(f"... 还有 {len(self.active_facts) - 30} 条")
         
-        # 历史/过期事实
+        # 历史/过期事实（完整输出，不截断）
         if self.historical_facts:
             text_parts.append(f"\n### 【历史/过期事实】(演变过程记录)")
-            for i, fact in enumerate(self.historical_facts[:20], 1):
+            for i, fact in enumerate(self.historical_facts, 1):
                 text_parts.append(f"{i}. \"{fact}\"")
-            if len(self.historical_facts) > 20:
-                text_parts.append(f"... 还有 {len(self.historical_facts) - 20} 条")
         
-        # 关键实体
+        # 关键实体（完整输出，不截断）
         if self.all_nodes:
             text_parts.append(f"\n### 【涉及实体】")
-            for node in self.all_nodes[:20]:
+            for node in self.all_nodes:
                 entity_type = next((l for l in node.labels if l not in ["Entity", "Node"]), "实体")
                 text_parts.append(f"- **{node.name}** ({entity_type})")
-            if len(self.all_nodes) > 20:
-                text_parts.append(f"... 还有 {len(self.all_nodes) - 20} 个实体")
         
         return "\n".join(text_parts)
 
@@ -307,11 +301,8 @@ class AgentInterview:
     
     def to_text(self) -> str:
         text = f"**{self.agent_name}** ({self.agent_role})\n"
-        # 显示完整的agent_bio，只在超过1000字符时截断
-        if len(self.agent_bio) > 1000:
-            text += f"_简介: {self.agent_bio[:1000]}..._\n\n"
-        else:
-            text += f"_简介: {self.agent_bio}_\n\n"
+        # 显示完整的agent_bio，不截断
+        text += f"_简介: {self.agent_bio}_\n\n"
         text += f"**Q:** {self.question}\n\n"
         text += f"**A:** {self.response}\n"
         if self.key_quotes:
@@ -1024,11 +1015,11 @@ class ZepToolsService:
                 if target_uuid:
                     entity_uuids.add(target_uuid)
         
-        # 只获取相关实体的详情（限制数量，避免获取过多）
+        # 获取所有相关实体的详情（不限制数量，完整输出）
         entity_insights = []
         node_map = {}  # 用于后续关系链构建
         
-        for uuid in list(entity_uuids)[:50]:  # 最多30个实体
+        for uuid in list(entity_uuids):  # 处理所有实体，不截断
             if not uuid:
                 continue
             try:
@@ -1038,7 +1029,7 @@ class ZepToolsService:
                     node_map[uuid] = node
                     entity_type = next((l for l in node.labels if l not in ["Entity", "Node"]), "实体")
                     
-                    # 获取该实体相关的事实
+                    # 获取该实体相关的所有事实（不截断）
                     related_facts = [
                         f for f in all_facts 
                         if node.name.lower() in f.lower()
@@ -1049,7 +1040,7 @@ class ZepToolsService:
                         "name": node.name,
                         "type": entity_type,
                         "summary": node.summary,
-                        "related_facts": related_facts[:5]
+                        "related_facts": related_facts  # 完整输出，不截断
                     })
             except Exception as e:
                 logger.debug(f"获取节点 {uuid} 失败: {e}")
@@ -1058,9 +1049,9 @@ class ZepToolsService:
         result.entity_insights = entity_insights
         result.total_entities = len(entity_insights)
         
-        # Step 4: 构建关系链
+        # Step 4: 构建所有关系链（不限制数量）
         relationship_chains = []
-        for edge_data in all_edges[:20]:
+        for edge_data in all_edges:  # 处理所有边，不截断
             if isinstance(edge_data, dict):
                 source_uuid = edge_data.get('source_node_uuid', '')
                 target_uuid = edge_data.get('target_node_uuid', '')
