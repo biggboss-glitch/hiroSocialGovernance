@@ -493,13 +493,13 @@ class ReportAgent:
     """
     
     # 最大工具调用次数（每个章节）
-    MAX_TOOL_CALLS_PER_SECTION = 4
+    MAX_TOOL_CALLS_PER_SECTION = 8
     
     # 最大反思轮数
-    MAX_REFLECTION_ROUNDS = 2
+    MAX_REFLECTION_ROUNDS = 3
     
     # 对话中的最大工具调用次数
-    MAX_TOOL_CALLS_PER_CHAT = 3
+    MAX_TOOL_CALLS_PER_CHAT = 5
     
     def __init__(
         self, 
@@ -702,7 +702,7 @@ class ReportAgent:
             elif tool_name == "interview_agents":
                 # 深度采访 - 调用真实的OASIS采访API获取模拟Agent的回答（双平台）
                 interview_topic = parameters.get("interview_topic", parameters.get("query", ""))
-                max_agents = parameters.get("max_agents", 5)
+                max_agents = parameters.get("max_agents", 20)
                 if isinstance(max_agents, str):
                     max_agents = int(max_agents)
                 result = self.zep_tools.interview_agents(
@@ -1170,7 +1170,7 @@ class ReportAgent:
         
         # ReACT循环
         tool_calls_count = 0
-        max_iterations = 5  # 最大迭代轮数
+        max_iterations = 8  # 最大迭代轮数
         min_tool_calls = 2  # 最少工具调用次数
         
         # 报告上下文，用于InsightForge的子问题生成
@@ -1730,7 +1730,7 @@ class ReportAgent:
         
         # ReACT循环
         tool_calls_made = []
-        max_iterations = 3  # 最大迭代轮数
+        max_iterations = 5  # 最大迭代轮数
         min_tool_calls = 1  # 最少工具调用次数
         
         for iteration in range(max_iterations):
