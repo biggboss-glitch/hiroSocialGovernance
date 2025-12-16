@@ -79,10 +79,15 @@
       <div class="right-panel" ref="rightPanel">
         <!-- Unified Action Bar - Professional Design -->
         <div class="action-bar">
-          <div class="action-bar-header">
+        <div class="action-bar-header">
+          <svg class="action-bar-icon" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <div class="action-bar-text">
             <span class="action-bar-title">Interactive Tools</span>
             <span class="action-bar-subtitle mono">{{ profiles.length }} agents available</span>
           </div>
+        </div>
           <div class="action-bar-tabs">
             <button 
               class="tab-pill"
@@ -92,7 +97,7 @@
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
               </svg>
-              <span>Report Agent</span>
+              <span>与Report Agent对话</span>
             </button>
             <div class="agent-dropdown" v-if="profiles.length > 0">
               <button 
@@ -104,7 +109,7 @@
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                   <circle cx="12" cy="7" r="4"></circle>
                 </svg>
-                <span>{{ selectedAgent ? selectedAgent.username : 'Select Agent' }}</span>
+                <span>{{ selectedAgent ? selectedAgent.username : '与世界中任意个体对话' }}</span>
                 <svg class="dropdown-arrow" :class="{ open: showAgentDropdown }" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
@@ -129,13 +134,13 @@
             <button 
               class="tab-pill survey-pill"
               :class="{ active: activeTab === 'survey' }"
-              @click="activeTab = 'survey'"
+              @click="selectSurveyTab"
             >
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M9 11l3 3L22 4"></path>
                 <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
               </svg>
-              <span>Survey</span>
+              <span>发送问卷调查到世界中</span>
             </button>
           </div>
         </div>
@@ -418,9 +423,17 @@ const selectReportAgentChat = () => {
   chatHistory.value = []
 }
 
+const selectSurveyTab = () => {
+  activeTab.value = 'survey'
+  selectedAgent.value = null
+  selectedAgentIndex.value = null
+  showAgentDropdown.value = false
+}
+
 const toggleAgentDropdown = () => {
   showAgentDropdown.value = !showAgentDropdown.value
   if (showAgentDropdown.value) {
+    activeTab.value = 'chat'
     chatTarget.value = 'agent'
   }
 }
@@ -1111,9 +1124,20 @@ watch(() => props.simulationId, (newId) => {
 
 .action-bar-header {
   display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 160px;
+}
+
+.action-bar-icon {
+  color: #1F2937;
+  flex-shrink: 0;
+}
+
+.action-bar-text {
+  display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 140px;
 }
 
 .action-bar-title {
@@ -1184,8 +1208,16 @@ watch(() => props.simulationId, (newId) => {
 }
 
 .agent-pill {
-  min-width: 120px;
+  width: 200px;
   justify-content: space-between;
+}
+
+.agent-pill span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
 }
 
 .survey-pill {
@@ -1730,12 +1762,24 @@ watch(() => props.simulationId, (newId) => {
 }
 
 .survey-setup {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   padding: 24px;
   border-bottom: 1px solid #E5E7EB;
+  overflow: hidden;
 }
 
 .setup-section {
   margin-bottom: 24px;
+}
+
+.setup-section:first-child {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .setup-section:last-child {
@@ -1765,9 +1809,10 @@ watch(() => props.simulationId, (newId) => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 10px;
-  max-height: 200px;
+  flex: 1;
   overflow-y: auto;
   padding: 4px;
+  align-content: start;
 }
 
 .agent-checkbox {
