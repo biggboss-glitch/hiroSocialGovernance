@@ -493,7 +493,7 @@ class ReportAgent:
     """
     
     # 最大工具调用次数（每个章节）
-    MAX_TOOL_CALLS_PER_SECTION = 8
+    MAX_TOOL_CALLS_PER_SECTION = 5
     
     # 最大反思轮数
     MAX_REFLECTION_ROUNDS = 3
@@ -1170,7 +1170,7 @@ class ReportAgent:
         
         # ReACT循环
         tool_calls_count = 0
-        max_iterations = 8  # 最大迭代轮数
+        max_iterations = 5  # 最大迭代轮数
         min_tool_calls = 2  # 最少工具调用次数
         
         # 报告上下文，用于InsightForge的子问题生成
