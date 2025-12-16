@@ -976,28 +976,24 @@ const InsightDisplay = {
           class: ['insight-tab', { active: activeTab.value === 'facts' }],
           onClick: () => { activeTab.value = 'facts' }
         }, [
-          h('span', { class: 'tab-icon' }, '📋'),
           h('span', { class: 'tab-label' }, `关键事实 (${props.result.facts.length})`)
         ]),
         h('button', {
           class: ['insight-tab', { active: activeTab.value === 'entities' }],
           onClick: () => { activeTab.value = 'entities' }
         }, [
-          h('span', { class: 'tab-icon' }, '👤'),
           h('span', { class: 'tab-label' }, `核心实体 (${props.result.entities.length})`)
         ]),
         h('button', {
           class: ['insight-tab', { active: activeTab.value === 'relations' }],
           onClick: () => { activeTab.value = 'relations' }
         }, [
-          h('span', { class: 'tab-icon' }, '🔗'),
           h('span', { class: 'tab-label' }, `关系链 (${props.result.relations.length})`)
         ]),
         props.result.subQueries.length > 0 && h('button', {
           class: ['insight-tab', { active: activeTab.value === 'subqueries' }],
           onClick: () => { activeTab.value = 'subqueries' }
         }, [
-          h('span', { class: 'tab-icon' }, '🔍'),
           h('span', { class: 'tab-label' }, `子问题 (${props.result.subQueries.length})`)
         ])
       ]),
@@ -1137,21 +1133,18 @@ const PanoramaDisplay = {
           class: ['panorama-tab', { active: activeTab.value === 'active' }],
           onClick: () => { activeTab.value = 'active' }
         }, [
-          h('span', { class: 'tab-icon active-icon' }, '✓'),
           h('span', { class: 'tab-label' }, `当前有效 (${props.result.activeFacts.length})`)
         ]),
         h('button', {
           class: ['panorama-tab', { active: activeTab.value === 'historical' }],
           onClick: () => { activeTab.value = 'historical' }
         }, [
-          h('span', { class: 'tab-icon historical-icon' }, '⏱'),
           h('span', { class: 'tab-label' }, `历史记录 (${props.result.historicalFacts.length})`)
         ]),
         h('button', {
           class: ['panorama-tab', { active: activeTab.value === 'entities' }],
           onClick: () => { activeTab.value = 'entities' }
         }, [
-          h('span', { class: 'tab-icon' }, '👤'),
           h('span', { class: 'tab-label' }, `涉及实体 (${props.result.entities.length})`)
         ])
       ]),
@@ -1550,21 +1543,18 @@ const QuickSearchDisplay = {
           class: ['quicksearch-tab', { active: activeTab.value === 'facts' }],
           onClick: () => { activeTab.value = 'facts' }
         }, [
-          h('span', { class: 'tab-icon' }, '📋'),
           h('span', { class: 'tab-label' }, `事实 (${props.result.facts.length})`)
         ]),
         hasEdges.value && h('button', {
           class: ['quicksearch-tab', { active: activeTab.value === 'edges' }],
           onClick: () => { activeTab.value = 'edges' }
         }, [
-          h('span', { class: 'tab-icon' }, '🔗'),
           h('span', { class: 'tab-label' }, `关系 (${props.result.edges.length})`)
         ]),
         hasNodes.value && h('button', {
           class: ['quicksearch-tab', { active: activeTab.value === 'nodes' }],
           onClick: () => { activeTab.value = 'nodes' }
         }, [
-          h('span', { class: 'tab-icon' }, '👤'),
           h('span', { class: 'tab-label' }, `节点 (${props.result.nodes.length})`)
         ])
       ]),
@@ -4208,9 +4198,6 @@ watch(() => props.reportId, (newId) => {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-:deep(.insight-tab .tab-icon) {
-  font-size: 12px;
-}
 
 :deep(.insight-content) {
   padding: 12px;
@@ -4550,17 +4537,6 @@ watch(() => props.reportId, (newId) => {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-:deep(.panorama-tab .tab-icon) {
-  font-size: 12px;
-}
-
-:deep(.panorama-tab .active-icon) {
-  color: #16A34A;
-}
-
-:deep(.panorama-tab .historical-icon) {
-  color: #9CA3AF;
-}
 
 :deep(.panorama-content) {
   padding: 12px;
@@ -4786,9 +4762,6 @@ watch(() => props.reportId, (newId) => {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-:deep(.quicksearch-tab .tab-icon) {
-  font-size: 12px;
-}
 
 :deep(.quicksearch-content) {
   padding: 12px;
