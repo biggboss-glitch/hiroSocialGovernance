@@ -8,7 +8,7 @@
           <!-- Report Header -->
           <div class="report-header-block">
             <div class="report-meta">
-              <span class="report-tag">REPORT</span>
+              <span class="report-tag">Prediction Report</span>
               <span class="report-id">ID: {{ reportId || 'REF-2024-X92' }}</span>
             </div>
             <h1 class="main-title">{{ reportOutline.title }}</h1>
@@ -1456,7 +1456,7 @@ watch(() => props.reportId, (newId) => {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  padding: 60px 50px;
+  padding: 30px 50px 60px 50px;
 }
 
 .left-panel::-webkit-scrollbar {
