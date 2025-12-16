@@ -77,21 +77,53 @@
 
       <!-- RIGHT PANEL: Interaction Interface -->
       <div class="right-panel" ref="rightPanel">
-        <!-- Tab Switcher -->
-        <div class="interaction-header">
-          <div class="tab-switcher">
+        <!-- Unified Action Bar -->
+        <div class="action-bar">
+          <div class="action-bar-left">
             <button 
-              class="tab-btn"
-              :class="{ active: activeTab === 'chat' }"
-              @click="activeTab = 'chat'"
+              class="action-btn"
+              :class="{ active: activeTab === 'chat' && chatTarget === 'report_agent' }"
+              @click="selectReportAgentChat"
             >
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
               </svg>
-              <span>单独对话</span>
+              <span>与Report Agent对话</span>
             </button>
+            <div class="agent-dropdown" v-if="profiles.length > 0">
+              <button 
+                class="action-btn agent-option"
+                :class="{ active: activeTab === 'chat' && chatTarget === 'agent' }"
+                @click="toggleAgentDropdown"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                <span>{{ selectedAgent ? `与${selectedAgent.username}对话` : '与世界中的任意个体对话' }}</span>
+                <svg class="dropdown-arrow" :class="{ open: showAgentDropdown }" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+              <div v-if="showAgentDropdown" class="dropdown-menu">
+                <div 
+                  v-for="(agent, idx) in profiles" 
+                  :key="idx"
+                  class="dropdown-item"
+                  @click="selectAgent(agent, idx)"
+                >
+                  <div class="agent-avatar">{{ (agent.username || 'A')[0] }}</div>
+                  <div class="agent-info">
+                    <span class="agent-name">{{ agent.username }}</span>
+                    <span class="agent-role">{{ agent.profession || '未知职业' }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="action-bar-right">
             <button 
-              class="tab-btn"
+              class="action-btn survey-btn"
               :class="{ active: activeTab === 'survey' }"
               @click="activeTab = 'survey'"
             >
@@ -99,55 +131,40 @@
                 <path d="M9 11l3 3L22 4"></path>
                 <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
               </svg>
-              <span>问卷调查</span>
+              <span>在世界中发放问卷</span>
             </button>
           </div>
         </div>
 
         <!-- Chat Mode -->
         <div v-if="activeTab === 'chat'" class="chat-container">
-          <!-- Target Selector -->
-          <div class="target-selector">
-            <div class="selector-label">对话对象</div>
-            <div class="selector-options">
-              <button 
-                class="target-option"
-                :class="{ active: chatTarget === 'report_agent' }"
-                @click="selectChatTarget('report_agent')"
-              >
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+
+          <!-- Agent Profile Card -->
+          <div v-if="chatTarget === 'agent' && selectedAgent" class="agent-profile-card">
+            <div class="profile-card-header">
+              <div class="profile-card-avatar">{{ (selectedAgent.username || 'A')[0] }}</div>
+              <div class="profile-card-info">
+                <div class="profile-card-name">{{ selectedAgent.username }}</div>
+                <div class="profile-card-meta">
+                  <span v-if="selectedAgent.name" class="profile-card-handle">@{{ selectedAgent.name }}</span>
+                  <span class="profile-card-profession">{{ selectedAgent.profession || '未知职业' }}</span>
+                </div>
+              </div>
+              <button class="profile-card-toggle" @click="showFullProfile = !showFullProfile">
+                <svg :class="{ 'is-expanded': showFullProfile }" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
-                <span>Report Agent</span>
               </button>
-              <div class="agent-dropdown" v-if="profiles.length > 0">
-                <button 
-                  class="target-option agent-option"
-                  :class="{ active: chatTarget === 'agent' }"
-                  @click="toggleAgentDropdown"
-                >
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="12" cy="7" r="4"></circle>
-                  </svg>
-                  <span>{{ selectedAgent ? selectedAgent.username : '选择模拟个体' }}</span>
-                  <svg class="dropdown-arrow" :class="{ open: showAgentDropdown }" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
-                </button>
-                <div v-if="showAgentDropdown" class="dropdown-menu">
-                  <div 
-                    v-for="(agent, idx) in profiles" 
-                    :key="idx"
-                    class="dropdown-item"
-                    @click="selectAgent(agent, idx)"
-                  >
-                    <div class="agent-avatar">{{ (agent.username || 'A')[0] }}</div>
-                    <div class="agent-info">
-                      <span class="agent-name">{{ agent.username }}</span>
-                      <span class="agent-role">{{ agent.profession || '未知职业' }}</span>
-                    </div>
-                  </div>
+            </div>
+            <div v-if="showFullProfile" class="profile-card-body">
+              <div v-if="selectedAgent.bio" class="profile-card-bio">
+                <div class="profile-card-label">简介</div>
+                <p>{{ selectedAgent.bio }}</p>
+              </div>
+              <div v-if="selectedAgent.interested_topics?.length" class="profile-card-topics">
+                <div class="profile-card-label">兴趣领域</div>
+                <div class="profile-topics-list">
+                  <span v-for="topic in selectedAgent.interested_topics" :key="topic" class="profile-topic-tag">{{ topic }}</span>
                 </div>
               </div>
             </div>
@@ -319,20 +336,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Bottom Console Logs -->
-    <div class="console-logs">
-      <div class="log-header">
-        <span class="log-title">INTERACTION LOG</span>
-        <span class="log-id">{{ simulationId || 'NO_SIMULATION' }}</span>
-      </div>
-      <div class="log-content" ref="logContent">
-        <div class="log-line" v-for="(log, idx) in systemLogs" :key="idx">
-          <span class="log-time">{{ log.time }}</span>
-          <span class="log-msg">{{ log.msg }}</span>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -343,8 +346,7 @@ import { interviewAgents, getSimulationProfilesRealtime } from '../api/simulatio
 
 const props = defineProps({
   reportId: String,
-  simulationId: String,
-  systemLogs: Array
+  simulationId: String
 })
 
 const emit = defineEmits(['add-log', 'update-status'])
@@ -355,6 +357,7 @@ const chatTarget = ref('report_agent')
 const showAgentDropdown = ref(false)
 const selectedAgent = ref(null)
 const selectedAgentIndex = ref(null)
+const showFullProfile = ref(true)
 
 // Chat State
 const chatInput = ref('')
@@ -384,7 +387,6 @@ const isSectionCompleted = (sectionIndex) => {
 // Refs
 const leftPanel = ref(null)
 const rightPanel = ref(null)
-const logContent = ref(null)
 
 // Methods
 const addLog = (msg) => {
@@ -407,6 +409,15 @@ const selectChatTarget = (target) => {
   if (target === 'report_agent') {
     showAgentDropdown.value = false
   }
+}
+
+const selectReportAgentChat = () => {
+  activeTab.value = 'chat'
+  chatTarget.value = 'report_agent'
+  selectedAgent.value = null
+  selectedAgentIndex.value = null
+  showAgentDropdown.value = false
+  chatHistory.value = []
 }
 
 const toggleAgentDropdown = () => {
@@ -798,7 +809,7 @@ watch(() => props.simulationId, (newId) => {
 }
 
 .report-header-block {
-  margin-bottom: 50px;
+  margin-bottom: 30px;
 }
 
 .report-meta {
@@ -1068,14 +1079,11 @@ watch(() => props.simulationId, (newId) => {
 
 @keyframes ripple {
   0% { transform: scale(0.5); opacity: 1; }
-  100% { transform: scale(1.5); opacity: 0; }
+  100% { transform: scale(2); opacity: 0; }
 }
 
 .waiting-text {
-  font-size: 12px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: 14px;
 }
 
 /* Right Panel - Interaction */
@@ -1085,6 +1093,76 @@ watch(() => props.simulationId, (newId) => {
   flex-direction: column;
   background: #FFFFFF;
   overflow: hidden;
+}
+
+/* Action Bar */
+.action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid #E5E7EB;
+  background: #FAFAFA;
+  gap: 12px;
+}
+
+.action-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-bar-right {
+  display: flex;
+  align-items: center;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #4B5563;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.action-btn:hover {
+  background: #F9FAFB;
+  border-color: #D1D5DB;
+}
+
+.action-btn.active {
+  background: #1F2937;
+  color: #FFFFFF;
+  border-color: #1F2937;
+}
+
+.action-btn svg {
+  flex-shrink: 0;
+}
+
+.survey-btn {
+  background: #F0FDF4;
+  border-color: #86EFAC;
+  color: #166534;
+}
+
+.survey-btn:hover {
+  background: #DCFCE7;
+  border-color: #4ADE80;
+}
+
+.survey-btn.active {
+  background: #166534;
+  color: #FFFFFF;
+  border-color: #166534;
 }
 
 /* Interaction Header */
@@ -1135,6 +1213,148 @@ watch(() => props.simulationId, (newId) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* Agent Profile Card */
+.agent-profile-card {
+  border-bottom: 1px solid #E5E7EB;
+  background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%);
+}
+
+.profile-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+}
+
+.profile-card-avatar {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  background: linear-gradient(135deg, #1F2937 0%, #374151 100%);
+  color: #FFFFFF;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 600;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(31, 41, 55, 0.2);
+}
+
+.profile-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-card-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1F2937;
+  margin-bottom: 2px;
+}
+
+.profile-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #6B7280;
+}
+
+.profile-card-handle {
+  color: #9CA3AF;
+}
+
+.profile-card-profession {
+  padding: 2px 8px;
+  background: #E5E7EB;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.profile-card-toggle {
+  width: 28px;
+  height: 28px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6B7280;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.profile-card-toggle:hover {
+  background: #F9FAFB;
+  border-color: #D1D5DB;
+}
+
+.profile-card-toggle svg {
+  transition: transform 0.3s ease;
+}
+
+.profile-card-toggle svg.is-expanded {
+  transform: rotate(180deg);
+}
+
+.profile-card-body {
+  padding: 0 20px 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.profile-card-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #9CA3AF;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.profile-card-bio {
+  background: #FFFFFF;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid #E5E7EB;
+}
+
+.profile-card-bio p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #4B5563;
+}
+
+.profile-card-topics {
+  background: #FFFFFF;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid #E5E7EB;
+}
+
+.profile-topics-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.profile-topic-tag {
+  padding: 4px 10px;
+  background: #F3F4F6;
+  color: #374151;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 /* Target Selector */
@@ -1232,6 +1452,8 @@ watch(() => props.simulationId, (newId) => {
 .agent-avatar {
   width: 32px;
   height: 32px;
+  min-width: 32px;
+  min-height: 32px;
   background: #1F2937;
   color: #FFFFFF;
   border-radius: 50%;
@@ -1240,6 +1462,7 @@ watch(() => props.simulationId, (newId) => {
   justify-content: center;
   font-size: 13px;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 .agent-info {
@@ -1302,6 +1525,8 @@ watch(() => props.simulationId, (newId) => {
 .message-avatar {
   width: 36px;
   height: 36px;
+  min-width: 36px;
+  min-height: 36px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -1482,7 +1707,7 @@ watch(() => props.simulationId, (newId) => {
   margin-bottom: 12px;
 }
 
-.section-title {
+.setup-section .section-header .section-title {
   font-size: 13px;
   font-weight: 600;
   color: #374151;
@@ -1531,6 +1756,8 @@ watch(() => props.simulationId, (newId) => {
 .checkbox-avatar {
   width: 28px;
   height: 28px;
+  min-width: 28px;
+  min-height: 28px;
   background: #E5E7EB;
   color: #374151;
   border-radius: 50%;
@@ -1731,6 +1958,8 @@ watch(() => props.simulationId, (newId) => {
 .result-avatar {
   width: 36px;
   height: 36px;
+  min-width: 36px;
+  min-height: 36px;
   background: #1F2937;
   color: #FFFFFF;
   border-radius: 50%;
@@ -1739,6 +1968,7 @@ watch(() => props.simulationId, (newId) => {
   justify-content: center;
   font-size: 14px;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 .result-info {
@@ -1779,61 +2009,6 @@ watch(() => props.simulationId, (newId) => {
   font-size: 14px;
   line-height: 1.7;
   color: #374151;
-}
-
-/* Console Logs */
-.console-logs {
-  background: #000;
-  color: #DDD;
-  padding: 16px;
-  font-family: 'JetBrains Mono', monospace;
-  border-top: 1px solid #222;
-  flex-shrink: 0;
-}
-
-.log-header {
-  display: flex;
-  justify-content: space-between;
-  border-bottom: 1px solid #333;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-  font-size: 10px;
-  color: #666;
-}
-
-.log-content {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  height: 80px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.log-content::-webkit-scrollbar {
-  width: 4px;
-}
-
-.log-content::-webkit-scrollbar-thumb {
-  background: #333;
-  border-radius: 2px;
-}
-
-.log-line {
-  font-size: 11px;
-  display: flex;
-  gap: 12px;
-  line-height: 1.5;
-}
-
-.log-time {
-  color: #555;
-  min-width: 75px;
-}
-
-.log-msg {
-  color: #BBB;
-  word-break: break-all;
 }
 
 /* Markdown Styles */
@@ -1878,7 +2053,9 @@ watch(() => props.simulationId, (newId) => {
   margin: 6px 0;
 }
 
-:deep(.md-quote) {
+/* 聊天/问卷区域的引用样式 */
+.chat-messages :deep(.md-quote),
+.result-answer :deep(.md-quote) {
   margin: 12px 0;
   padding: 12px 16px;
   background: #F9FAFB;

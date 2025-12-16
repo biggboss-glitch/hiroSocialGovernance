@@ -2305,7 +2305,7 @@ watch(() => props.reportId, (newId) => {
 }
 
 .report-header-block {
-  margin-bottom: 50px;
+  margin-bottom: 30px;
 }
 
 .report-meta {
