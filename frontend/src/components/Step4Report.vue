@@ -126,6 +126,15 @@
             </div>
           </div>
 
+          <!-- Next Step Button - 在完成后显示 -->
+          <button v-if="isComplete" class="next-step-btn" @click="goToInteraction">
+            <span>进入深度互动</span>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+          </button>
+
           <div class="workflow-divider"></div>
         </div>
 
@@ -383,7 +392,10 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick, h, reactive } from 'vue'
+import { useRouter } from 'vue-router'
 import { getAgentLog, getConsoleLog } from '../api/report'
+
+const router = useRouter()
 
 const props = defineProps({
   reportId: String,
@@ -392,6 +404,13 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['add-log', 'update-status'])
+
+// Navigation
+const goToInteraction = () => {
+  if (props.reportId) {
+    router.push({ name: 'Interaction', params: { reportId: props.reportId } })
+  }
+}
 
 // State
 const agentLogs = ref([])
@@ -3342,6 +3361,36 @@ watch(() => props.reportId, (newId) => {
   color: #065F46;
   font-weight: 600;
   font-size: 14px;
+}
+
+.next-step-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: calc(100% - 40px);
+  margin: 4px 20px 0 20px;
+  padding: 14px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #FFFFFF;
+  background: #1F2937;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.next-step-btn:hover {
+  background: #374151;
+}
+
+.next-step-btn svg {
+  transition: transform 0.2s ease;
+}
+
+.next-step-btn:hover svg {
+  transform: translateX(4px);
 }
 
 /* Workflow Empty */

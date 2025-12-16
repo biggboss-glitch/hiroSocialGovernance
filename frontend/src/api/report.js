@@ -41,3 +41,11 @@ export const getConsoleLog = (reportId, fromLine = 0) => {
 export const getReport = (reportId) => {
   return service.get(`/api/report/${reportId}`)
 }
+
+/**
+ * 与 Report Agent 对话
+ * @param {Object} data - { simulation_id, message, chat_history? }
+ */
+export const chatWithReport = (data) => {
+  return requestWithRetry(() => service.post('/api/report/chat', data), 3, 1000)
+}

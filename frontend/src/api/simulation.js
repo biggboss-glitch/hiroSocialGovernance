@@ -168,3 +168,11 @@ export const getEnvStatus = (data) => {
   return service.post('/api/simulation/env-status', data)
 }
 
+/**
+ * 批量采访 Agent
+ * @param {Object} data - { simulation_id, interviews: [{ agent_id, prompt }] }
+ */
+export const interviewAgents = (data) => {
+  return requestWithRetry(() => service.post('/api/simulation/interview/batch', data), 3, 1000)
+}
+
