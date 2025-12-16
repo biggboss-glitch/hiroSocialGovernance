@@ -84,7 +84,7 @@
             <circle cx="12" cy="12" r="10"></circle>
             <polyline points="12 6 12 12 16 14"></polyline>
           </svg>
-          <span>Agent Workflow</span>
+          <span>Rport Agent实时活动</span>
           <span class="log-count" v-if="agentLogs.length > 0">{{ agentLogs.length }}</span>
         </div>
 
@@ -1460,7 +1460,7 @@ watch(() => props.reportId, (newId) => {
 }
 
 .left-panel::-webkit-scrollbar {
-  width: 4px;
+  width: 6px;
 }
 
 .left-panel::-webkit-scrollbar-track {
@@ -1468,8 +1468,17 @@ watch(() => props.reportId, (newId) => {
 }
 
 .left-panel::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+  transition: background 0.3s ease;
+}
+
+.left-panel:hover::-webkit-scrollbar-thumb {
   background: rgba(0, 0, 0, 0.15);
-  border-radius: 2px;
+}
+
+.left-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
 }
 
 /* Report Header */
