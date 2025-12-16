@@ -29,7 +29,6 @@
               }"
             >
               <div class="section-header-row" @click="toggleSectionCollapse(idx)" :class="{ 'clickable': isSectionCompleted(idx + 1) }">
-                <span class="section-number">{{ String(idx + 1).padStart(2, '0') }}</span>
                 <h3 class="section-title">{{ section.title }}</h3>
                 <svg 
                   v-if="isSectionCompleted(idx + 1)" 
@@ -55,11 +54,10 @@
                   <div class="loading-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                       <circle cx="12" cy="12" r="10" stroke-width="4" stroke="#E5E7EB"></circle>
-                      <path d="M12 2a10 10 0 0 1 10 10" stroke-width="4" stroke="#8B5CF6" stroke-linecap="round"></path>
+                      <path d="M12 2a10 10 0 0 1 10 10" stroke-width="4" stroke="#4B5563" stroke-linecap="round"></path>
                     </svg>
                   </div>
                   <span class="loading-text">正在生成{{ section.title }}...</span>
-                  <span class="cursor-blink"></span>
                 </div>
               </div>
             </div>
@@ -79,13 +77,11 @@
 
       <!-- RIGHT PANEL: Workflow Timeline -->
       <div class="right-panel" ref="rightPanel">
-        <div class="panel-header">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <polyline points="12 6 12 12 16 14"></polyline>
-          </svg>
-          <span>Report Agent Workflow</span>
-          <span class="log-count" v-if="agentLogs.length > 0">{{ agentLogs.length }}</span>
+        <div class="panel-header" :class="`panel-header--${activeStep.status}`" v-if="!isComplete">
+          <span class="header-dot" v-if="activeStep.status === 'active'"></span>
+          <span class="header-index mono">{{ activeStep.noLabel }}</span>
+          <span class="header-title">{{ activeStep.title }}</span>
+          <span class="header-meta mono" v-if="activeStep.meta">{{ activeStep.meta }}</span>
         </div>
 
         <!-- Workflow Overview (flat, status-based palette) -->
@@ -1248,6 +1244,21 @@ const isFinalizing = computed(() => {
   return !isComplete.value && isPlanningDone.value && totalSections.value > 0 && completedSections.value >= totalSections.value
 })
 
+// 当前活跃的步骤（用于顶部显示）
+const activeStep = computed(() => {
+  const steps = workflowSteps.value
+  // 找到当前 active 的步骤
+  const active = steps.find(s => s.status === 'active')
+  if (active) return active
+  
+  // 如果没有 active，返回最后一个 done 的步骤
+  const doneSteps = steps.filter(s => s.status === 'done')
+  if (doneSteps.length > 0) return doneSteps[doneSteps.length - 1]
+  
+  // 否则返回第一个步骤
+  return steps[0] || { noLabel: '--', title: '等待开始', status: 'todo', meta: '' }
+})
+
 const workflowSteps = computed(() => {
   const steps = []
 
@@ -1300,6 +1311,20 @@ const isSectionCompleted = (sectionIndex) => {
   return !!generatedSections.value[sectionIndex]
 }
 
+// 从 section_index 获取主章节索引
+// 后端编号方案：主章节 1,2,3... 子章节 101,102（第1章子章节1,2）
+const getMainSectionIndex = (sectionIndex) => {
+  if (sectionIndex >= 100) {
+    return Math.floor(sectionIndex / 100)
+  }
+  return sectionIndex
+}
+
+// 判断是否是子章节
+const isSubsection = (sectionIndex) => {
+  return sectionIndex >= 100
+}
+
 const formatTime = (timestamp) => {
   if (!timestamp) return ''
   try {
@@ -1338,8 +1363,11 @@ const truncateText = (text, maxLen) => {
 const renderMarkdown = (content) => {
   if (!content) return ''
   
+  // 去掉开头的二级标题（## xxx），因为章节标题已在外层显示
+  let processedContent = content.replace(/^##\s+.+\n+/, '')
+  
   // 处理代码块
-  let html = content.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>')
+  let html = processedContent.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>')
   
   // 处理行内代码
   html = html.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
@@ -1451,31 +1479,45 @@ const fetchAgentLog = async () => {
           }
           
           if (log.action === 'section_start') {
-            currentSectionIndex.value = log.section_index
+            // 无论是主章节还是子章节开始，都映射到主章节索引
+            // 后端编号：主章节 1,2,3... 子章节 101,102（第1章子章节1,2）
+            const mainIndex = getMainSectionIndex(log.section_index)
+            currentSectionIndex.value = mainIndex
           }
           
           // section_content / subsection_content - 表示内容生成完成（但整个章节可能还没完成）
           // 这里不更新 generatedSections，只记录进度
           if (log.action === 'section_content' || log.action === 'subsection_content') {
-            // 可以用于显示进度，但不更新左侧面板的内容
+            // 子章节内容生成时，保持主章节的 loading 状态
             // 因为完整内容会在 section_complete 时一次性提供
           }
           
           // section_complete - 表示完整章节（含所有子章节）生成完成
           // details.content 包含合并后的完整内容
+          // 注意：只有主章节 complete 时才更新内容，子章节 complete 不处理
           if (log.action === 'section_complete') {
-            if (log.details?.content) {
-              generatedSections.value[log.section_index] = log.details.content
+            const mainIndex = getMainSectionIndex(log.section_index)
+            // 只有主章节完成时（section_index < 100）才更新内容和清除 loading
+            if (!isSubsection(log.section_index) && log.details?.content) {
+              generatedSections.value[mainIndex] = log.details.content
               // 自动展开刚生成的章节
-              expandedContent.value.add(log.section_index - 1)
+              expandedContent.value.add(mainIndex - 1)
+              currentSectionIndex.value = null
             }
-            currentSectionIndex.value = null
+            // 子章节完成时不清除 currentSectionIndex，继续显示 loading
           }
           
           if (log.action === 'report_complete') {
             isComplete.value = true
+            currentSectionIndex.value = null  // 确保清除 loading 状态
             emit('update-status', 'completed')
             stopPolling()
+            // 任务完成后，滚动右侧面板到顶部
+            nextTick(() => {
+              if (rightPanel.value) {
+                rightPanel.value.scrollTop = 0
+              }
+            })
           }
           
           if (log.action === 'report_start') {
@@ -1655,17 +1697,82 @@ watch(() => props.reportId, (newId) => {
   z-index: 10;
 }
 
-.panel-header svg {
-  color: #6366F1;
+.header-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1F2937;
+  box-shadow: 0 0 0 3px rgba(31, 41, 55, 0.15);
+  margin-right: 10px;
+  flex-shrink: 0;
+  animation: pulse-dot 1.5s ease-in-out infinite;
 }
 
-.log-count {
+@keyframes pulse-dot {
+  0%, 100% {
+    box-shadow: 0 0 0 3px rgba(31, 41, 55, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(31, 41, 55, 0.1);
+  }
+}
+
+.header-index {
+  font-size: 12px;
+  font-weight: 600;
+  color: #9CA3AF;
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+
+.header-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.header-meta {
   margin-left: auto;
-  background: #EEF2FF;
-  color: #4F46E5;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #6B7280;
+  flex-shrink: 0;
+}
+
+/* Panel header status variants */
+.panel-header--active {
+  background: #FAFAFA;
+  border-color: #1F2937;
+}
+
+.panel-header--active .header-index {
+  color: #1F2937;
+}
+
+.panel-header--active .header-title {
+  color: #1F2937;
+}
+
+.panel-header--active .header-meta {
+  color: #1F2937;
+}
+
+.panel-header--done {
+  background: #F9FAFB;
+}
+
+.panel-header--done .header-index {
+  color: #10B981;
+}
+
+.panel-header--todo .header-index,
+.panel-header--todo .header-title {
+  color: #9CA3AF;
 }
 
 /* Left Panel - Report Style */
@@ -2033,10 +2140,10 @@ watch(() => props.reportId, (newId) => {
   --wf-border: #E5E7EB;
   --wf-divider: #F3F4F6;
 
-  --wf-active-bg: #EFF6FF;
-  --wf-active-border: #BFDBFE;
-  --wf-active-dot: #3B82F6;
-  --wf-active-text: #1D4ED8;
+  --wf-active-bg: #FAFAFA;
+  --wf-active-border: #1F2937;
+  --wf-active-dot: #1F2937;
+  --wf-active-text: #1F2937;
 
   --wf-done-bg: #F9FAFB;
   --wf-done-border: #E5E7EB;
