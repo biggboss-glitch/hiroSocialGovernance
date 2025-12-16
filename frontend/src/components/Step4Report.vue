@@ -524,6 +524,7 @@ const getToolIcon = (toolName) => {
 const parseInsightForge = (text) => {
   const result = {
     query: '',
+    simulationRequirement: '',
     stats: { facts: 0, entities: 0, relationships: 0 },
     subQueries: [],
     facts: [],
@@ -532,53 +533,69 @@ const parseInsightForge = (text) => {
   }
   
   try {
-    const queryMatch = text.match(/原始问题:\s*(.+?)(?:\n|$)/)
+    // 提取分析问题
+    const queryMatch = text.match(/分析问题:\s*(.+?)(?:\n|$)/)
     if (queryMatch) result.query = queryMatch[1].trim()
     
-    const factMatch = text.match(/相关事实:\s*(\d+)/)
+    // 提取预测场景
+    const reqMatch = text.match(/预测场景:\s*(.+?)(?:\n|$)/)
+    if (reqMatch) result.simulationRequirement = reqMatch[1].trim()
+    
+    // 提取统计数据 - 匹配"相关预测事实: X条"格式
+    const factMatch = text.match(/相关预测事实:\s*(\d+)/)
     const entityMatch = text.match(/涉及实体:\s*(\d+)/)
     const relMatch = text.match(/关系链:\s*(\d+)/)
     if (factMatch) result.stats.facts = parseInt(factMatch[1])
     if (entityMatch) result.stats.entities = parseInt(entityMatch[1])
     if (relMatch) result.stats.relationships = parseInt(relMatch[1])
     
-    const subQSection = text.match(/### 分析的子问题\n([\s\S]*?)(?=###|\n\n###|$)/)
+    // 提取子问题 - 完整提取，不限制数量
+    const subQSection = text.match(/### 分析的子问题\n([\s\S]*?)(?=\n###|$)/)
     if (subQSection) {
       const lines = subQSection[1].split('\n').filter(l => l.match(/^\d+\./))
-      result.subQueries = lines.map(l => l.replace(/^\d+\.\s*/, '').trim())
+      result.subQueries = lines.map(l => l.replace(/^\d+\.\s*/, '').trim()).filter(Boolean)
     }
     
-    const factsSection = text.match(/### 【关键事实】[\s\S]*?\n([\s\S]*?)(?=###|$)/)
+    // 提取关键事实 - 完整提取，不限制数量
+    const factsSection = text.match(/### 【关键事实】[\s\S]*?\n([\s\S]*?)(?=\n###|$)/)
     if (factsSection) {
       const lines = factsSection[1].split('\n').filter(l => l.match(/^\d+\./))
       result.facts = lines.map(l => {
         const match = l.match(/^\d+\.\s*"?(.+?)"?\s*$/)
-        return match ? match[1].replace(/^"|"$/g, '') : l.replace(/^\d+\.\s*/, '').trim()
-      }).slice(0, 10)
+        return match ? match[1].replace(/^"|"$/g, '').trim() : l.replace(/^\d+\.\s*/, '').trim()
+      }).filter(Boolean)
     }
     
-    const entitySection = text.match(/### 【核心实体】\n([\s\S]*?)(?=###|$)/)
+    // 提取核心实体 - 完整提取，包含摘要和相关事实数
+    const entitySection = text.match(/### 【核心实体】\n([\s\S]*?)(?=\n###|$)/)
     if (entitySection) {
-      const entityBlocks = entitySection[1].split(/\n- \*\*/).slice(1)
+      const entityText = entitySection[1]
+      // 按 "- **" 分割实体块
+      const entityBlocks = entityText.split(/\n(?=- \*\*)/).filter(b => b.trim().startsWith('- **'))
       result.entities = entityBlocks.map(block => {
-        const nameMatch = block.match(/^(.+?)\*\*\s*\((.+?)\)/)
+        const nameMatch = block.match(/^-\s*\*\*(.+?)\*\*\s*\((.+?)\)/)
+        const summaryMatch = block.match(/摘要:\s*"?(.+?)"?(?:\n|$)/)
+        const relatedMatch = block.match(/相关事实:\s*(\d+)/)
         return {
           name: nameMatch ? nameMatch[1].trim() : '',
-          type: nameMatch ? nameMatch[2].trim() : ''
+          type: nameMatch ? nameMatch[2].trim() : '',
+          summary: summaryMatch ? summaryMatch[1].trim() : '',
+          relatedFactsCount: relatedMatch ? parseInt(relatedMatch[1]) : 0
         }
-      }).filter(e => e.name).slice(0, 8)
+      }).filter(e => e.name)
     }
     
-    const relSection = text.match(/### 【关系链】\n([\s\S]*?)(?=###|$)/)
+    // 提取关系链 - 完整提取，不限制数量
+    const relSection = text.match(/### 【关系链】\n([\s\S]*?)(?=\n###|$)/)
     if (relSection) {
-      const lines = relSection[1].split('\n').filter(l => l.startsWith('-'))
+      const lines = relSection[1].split('\n').filter(l => l.trim().startsWith('-'))
       result.relations = lines.map(l => {
         const match = l.match(/^-\s*(.+?)\s*--\[(.+?)\]-->\s*(.+)$/)
         if (match) {
           return { source: match[1].trim(), relation: match[2].trim(), target: match[3].trim() }
         }
         return null
-      }).filter(Boolean).slice(0, 6)
+      }).filter(Boolean)
     }
   } catch (e) {
     console.warn('Parse insight_forge failed:', e)
@@ -597,9 +614,11 @@ const parsePanorama = (text) => {
   }
   
   try {
+    // 提取查询
     const queryMatch = text.match(/查询:\s*(.+?)(?:\n|$)/)
     if (queryMatch) result.query = queryMatch[1].trim()
     
+    // 提取统计数据
     const nodesMatch = text.match(/总节点数:\s*(\d+)/)
     const edgesMatch = text.match(/总边数:\s*(\d+)/)
     const activeMatch = text.match(/当前有效事实:\s*(\d+)/)
@@ -609,20 +628,36 @@ const parsePanorama = (text) => {
     if (activeMatch) result.stats.activeFacts = parseInt(activeMatch[1])
     if (histMatch) result.stats.historicalFacts = parseInt(histMatch[1])
     
-    const activeSection = text.match(/### 【当前有效事实】[\s\S]*?\n([\s\S]*?)(?=###|$)/)
+    // 提取当前有效事实 - 完整提取，不限制数量
+    const activeSection = text.match(/### 【当前有效事实】[\s\S]*?\n([\s\S]*?)(?=\n###|$)/)
     if (activeSection) {
       const lines = activeSection[1].split('\n').filter(l => l.match(/^\d+\./))
-      result.activeFacts = lines.map(l => l.replace(/^\d+\.\s*/, '').replace(/^"|"$/g, '').trim()).slice(0, 8)
+      result.activeFacts = lines.map(l => {
+        // 移除编号和引号
+        const factText = l.replace(/^\d+\.\s*/, '').replace(/^"|"$/g, '').trim()
+        return factText
+      }).filter(Boolean)
     }
     
-    const entitySection = text.match(/### 【涉及实体】\n([\s\S]*?)(?=###|$)/)
+    // 提取历史/过期事实 - 完整提取，不限制数量
+    const histSection = text.match(/### 【历史\/过期事实】[\s\S]*?\n([\s\S]*?)(?=\n###|$)/)
+    if (histSection) {
+      const lines = histSection[1].split('\n').filter(l => l.match(/^\d+\./))
+      result.historicalFacts = lines.map(l => {
+        const factText = l.replace(/^\d+\.\s*/, '').replace(/^"|"$/g, '').trim()
+        return factText
+      }).filter(Boolean)
+    }
+    
+    // 提取涉及实体 - 完整提取，不限制数量
+    const entitySection = text.match(/### 【涉及实体】\n([\s\S]*?)(?=\n###|$)/)
     if (entitySection) {
-      const lines = entitySection[1].split('\n').filter(l => l.startsWith('-'))
+      const lines = entitySection[1].split('\n').filter(l => l.trim().startsWith('-'))
       result.entities = lines.map(l => {
         const match = l.match(/^-\s*\*\*(.+?)\*\*\s*\((.+?)\)/)
         if (match) return { name: match[1].trim(), type: match[2].trim() }
         return null
-      }).filter(Boolean).slice(0, 10)
+      }).filter(Boolean)
     }
   } catch (e) {
     console.warn('Parse panorama failed:', e)
@@ -841,20 +876,51 @@ const parseQuickSearch = (text) => {
   const result = {
     query: '',
     count: 0,
-    facts: []
+    facts: [],
+    edges: [],
+    nodes: []
   }
   
   try {
+    // 提取搜索查询
     const queryMatch = text.match(/搜索查询:\s*(.+?)(?:\n|$)/)
     if (queryMatch) result.query = queryMatch[1].trim()
     
+    // 提取结果数量
     const countMatch = text.match(/找到\s*(\d+)\s*条/)
     if (countMatch) result.count = parseInt(countMatch[1])
     
+    // 提取相关事实 - 完整提取，不限制数量
     const factsSection = text.match(/### 相关事实:\n([\s\S]*)$/)
     if (factsSection) {
       const lines = factsSection[1].split('\n').filter(l => l.match(/^\d+\./))
-      result.facts = lines.map(l => l.replace(/^\d+\.\s*/, '').trim()).slice(0, 10)
+      result.facts = lines.map(l => l.replace(/^\d+\.\s*/, '').trim()).filter(Boolean)
+    }
+    
+    // 尝试提取边信息（如果有）
+    const edgesSection = text.match(/### 相关边:\n([\s\S]*?)(?=\n###|$)/)
+    if (edgesSection) {
+      const lines = edgesSection[1].split('\n').filter(l => l.trim().startsWith('-'))
+      result.edges = lines.map(l => {
+        const match = l.match(/^-\s*(.+?)\s*--\[(.+?)\]-->\s*(.+)$/)
+        if (match) {
+          return { source: match[1].trim(), relation: match[2].trim(), target: match[3].trim() }
+        }
+        return null
+      }).filter(Boolean)
+    }
+    
+    // 尝试提取节点信息（如果有）
+    const nodesSection = text.match(/### 相关节点:\n([\s\S]*?)(?=\n###|$)/)
+    if (nodesSection) {
+      const lines = nodesSection[1].split('\n').filter(l => l.trim().startsWith('-'))
+      result.nodes = lines.map(l => {
+        const match = l.match(/^-\s*\*\*(.+?)\*\*\s*\((.+?)\)/)
+        if (match) return { name: match[1].trim(), type: match[2].trim() }
+        const simpleMatch = l.match(/^-\s*(.+)$/)
+        if (simpleMatch) return { name: simpleMatch[1].trim(), type: '' }
+        return null
+      }).filter(Boolean)
     }
   } catch (e) {
     console.warn('Parse quick_search failed:', e)
@@ -865,109 +931,303 @@ const parseQuickSearch = (text) => {
 
 // ========== Sub Components ==========
 
-// Insight Display Component
+// Insight Display Component - Enhanced with full data rendering (Interview-like style)
 const InsightDisplay = {
   props: ['result'],
   setup(props) {
-    const expanded = ref(false)
+    const activeTab = ref('facts') // 'facts', 'entities', 'relations', 'subqueries'
+    const expandedFacts = ref(false)
+    const expandedEntities = ref(false)
+    const expandedRelations = ref(false)
+    const INITIAL_SHOW_COUNT = 5
+    
     return () => h('div', { class: 'insight-display' }, [
-      // Stats
-      h('div', { class: 'stat-row' }, [
-        h('div', { class: 'stat-box' }, [
-          h('span', { class: 'stat-num' }, props.result.stats.facts),
-          h('span', { class: 'stat-label' }, 'Facts')
+      // Header Section - like interview header
+      h('div', { class: 'insight-header' }, [
+        h('div', { class: 'header-main' }, [
+          h('div', { class: 'header-title' }, 'Deep Insight'),
+          h('div', { class: 'header-stats' }, [
+            h('span', { class: 'stat-item' }, [
+              h('span', { class: 'stat-value' }, props.result.stats.facts || props.result.facts.length),
+              h('span', { class: 'stat-label' }, 'Facts')
+            ]),
+            h('span', { class: 'stat-divider' }, '/'),
+            h('span', { class: 'stat-item' }, [
+              h('span', { class: 'stat-value' }, props.result.stats.entities || props.result.entities.length),
+              h('span', { class: 'stat-label' }, 'Entities')
+            ]),
+            h('span', { class: 'stat-divider' }, '/'),
+            h('span', { class: 'stat-item' }, [
+              h('span', { class: 'stat-value' }, props.result.stats.relationships || props.result.relations.length),
+              h('span', { class: 'stat-label' }, 'Relations')
+            ])
+          ])
         ]),
-        h('div', { class: 'stat-box' }, [
-          h('span', { class: 'stat-num' }, props.result.stats.entities),
-          h('span', { class: 'stat-label' }, 'Entities')
-        ]),
-        h('div', { class: 'stat-box' }, [
-          h('span', { class: 'stat-num' }, props.result.stats.relationships),
-          h('span', { class: 'stat-label' }, 'Relations')
+        props.result.query && h('div', { class: 'header-topic' }, props.result.query),
+        props.result.simulationRequirement && h('div', { class: 'header-scenario' }, [
+          h('span', { class: 'scenario-label' }, '预测场景: '),
+          h('span', { class: 'scenario-text' }, props.result.simulationRequirement)
         ])
       ]),
-      // Query
-      props.result.query && h('div', { class: 'query-display' }, props.result.query),
-      // Expandable content
-      h('button', { 
-        class: 'expand-details',
-        onClick: () => { expanded.value = !expanded.value }
-      }, expanded.value ? 'Hide Details' : `Show ${props.result.facts.length} Facts`),
-      expanded.value && h('div', { class: 'detail-content' }, [
-        props.result.facts.length > 0 && h('div', { class: 'facts-section' }, [
-          h('div', { class: 'section-label' }, 'Key Facts'),
-          ...props.result.facts.map((fact, i) => h('div', { class: 'fact-row', key: i }, [
-            h('span', { class: 'fact-idx' }, i + 1),
-            h('span', { class: 'fact-text' }, fact)
-          ]))
+      
+      // Tab Navigation
+      h('div', { class: 'insight-tabs' }, [
+        h('button', {
+          class: ['insight-tab', { active: activeTab.value === 'facts' }],
+          onClick: () => { activeTab.value = 'facts' }
+        }, [
+          h('span', { class: 'tab-icon' }, '📋'),
+          h('span', { class: 'tab-label' }, `关键事实 (${props.result.facts.length})`)
         ]),
-        props.result.entities.length > 0 && h('div', { class: 'entities-section' }, [
-          h('div', { class: 'section-label' }, 'Core Entities'),
-          h('div', { class: 'entity-chips' },
-            props.result.entities.map((e, i) => h('span', { class: 'entity-chip', key: i }, [
-              h('span', { class: 'chip-name' }, e.name),
-              h('span', { class: 'chip-type' }, e.type)
-            ]))
+        h('button', {
+          class: ['insight-tab', { active: activeTab.value === 'entities' }],
+          onClick: () => { activeTab.value = 'entities' }
+        }, [
+          h('span', { class: 'tab-icon' }, '👤'),
+          h('span', { class: 'tab-label' }, `核心实体 (${props.result.entities.length})`)
+        ]),
+        h('button', {
+          class: ['insight-tab', { active: activeTab.value === 'relations' }],
+          onClick: () => { activeTab.value = 'relations' }
+        }, [
+          h('span', { class: 'tab-icon' }, '🔗'),
+          h('span', { class: 'tab-label' }, `关系链 (${props.result.relations.length})`)
+        ]),
+        props.result.subQueries.length > 0 && h('button', {
+          class: ['insight-tab', { active: activeTab.value === 'subqueries' }],
+          onClick: () => { activeTab.value = 'subqueries' }
+        }, [
+          h('span', { class: 'tab-icon' }, '🔍'),
+          h('span', { class: 'tab-label' }, `子问题 (${props.result.subQueries.length})`)
+        ])
+      ]),
+      
+      // Tab Content
+      h('div', { class: 'insight-content' }, [
+        // Facts Tab
+        activeTab.value === 'facts' && props.result.facts.length > 0 && h('div', { class: 'facts-panel' }, [
+          h('div', { class: 'panel-header' }, [
+            h('span', { class: 'panel-title' }, '关键事实'),
+            h('span', { class: 'panel-count' }, `共 ${props.result.facts.length} 条`)
+          ]),
+          h('div', { class: 'facts-list' },
+            (expandedFacts.value ? props.result.facts : props.result.facts.slice(0, INITIAL_SHOW_COUNT)).map((fact, i) => 
+              h('div', { class: 'fact-item', key: i }, [
+                h('span', { class: 'fact-number' }, i + 1),
+                h('div', { class: 'fact-content' }, fact)
+              ])
+            )
+          ),
+          props.result.facts.length > INITIAL_SHOW_COUNT && h('button', {
+            class: 'expand-btn',
+            onClick: () => { expandedFacts.value = !expandedFacts.value }
+          }, expandedFacts.value ? `收起 ▲` : `展开全部 ${props.result.facts.length} 条 ▼`)
+        ]),
+        
+        // Entities Tab
+        activeTab.value === 'entities' && props.result.entities.length > 0 && h('div', { class: 'entities-panel' }, [
+          h('div', { class: 'panel-header' }, [
+            h('span', { class: 'panel-title' }, '核心实体'),
+            h('span', { class: 'panel-count' }, `共 ${props.result.entities.length} 个`)
+          ]),
+          h('div', { class: 'entities-list' },
+            (expandedEntities.value ? props.result.entities : props.result.entities.slice(0, INITIAL_SHOW_COUNT)).map((entity, i) => 
+              h('div', { class: 'entity-card', key: i }, [
+                h('div', { class: 'entity-header' }, [
+                  h('div', { class: 'entity-avatar' }, entity.name ? entity.name.charAt(0) : '?'),
+                  h('div', { class: 'entity-info' }, [
+                    h('div', { class: 'entity-name' }, entity.name),
+                    h('div', { class: 'entity-type' }, entity.type)
+                  ]),
+                  entity.relatedFactsCount > 0 && h('span', { class: 'entity-fact-count' }, `${entity.relatedFactsCount} 条相关`)
+                ]),
+                entity.summary && h('div', { class: 'entity-summary' }, entity.summary)
+              ])
+            )
+          ),
+          props.result.entities.length > INITIAL_SHOW_COUNT && h('button', {
+            class: 'expand-btn',
+            onClick: () => { expandedEntities.value = !expandedEntities.value }
+          }, expandedEntities.value ? `收起 ▲` : `展开全部 ${props.result.entities.length} 个 ▼`)
+        ]),
+        
+        // Relations Tab
+        activeTab.value === 'relations' && props.result.relations.length > 0 && h('div', { class: 'relations-panel' }, [
+          h('div', { class: 'panel-header' }, [
+            h('span', { class: 'panel-title' }, '关系链'),
+            h('span', { class: 'panel-count' }, `共 ${props.result.relations.length} 条`)
+          ]),
+          h('div', { class: 'relations-list' },
+            (expandedRelations.value ? props.result.relations : props.result.relations.slice(0, INITIAL_SHOW_COUNT)).map((rel, i) => 
+              h('div', { class: 'relation-item', key: i }, [
+                h('span', { class: 'rel-source' }, rel.source),
+                h('span', { class: 'rel-arrow' }, [
+                  h('span', { class: 'rel-line' }),
+                  h('span', { class: 'rel-label' }, rel.relation),
+                  h('span', { class: 'rel-line' })
+                ]),
+                h('span', { class: 'rel-target' }, rel.target)
+              ])
+            )
+          ),
+          props.result.relations.length > INITIAL_SHOW_COUNT && h('button', {
+            class: 'expand-btn',
+            onClick: () => { expandedRelations.value = !expandedRelations.value }
+          }, expandedRelations.value ? `收起 ▲` : `展开全部 ${props.result.relations.length} 条 ▼`)
+        ]),
+        
+        // Sub-queries Tab
+        activeTab.value === 'subqueries' && props.result.subQueries.length > 0 && h('div', { class: 'subqueries-panel' }, [
+          h('div', { class: 'panel-header' }, [
+            h('span', { class: 'panel-title' }, '分析子问题'),
+            h('span', { class: 'panel-count' }, `共 ${props.result.subQueries.length} 个`)
+          ]),
+          h('div', { class: 'subqueries-list' },
+            props.result.subQueries.map((sq, i) => 
+              h('div', { class: 'subquery-item', key: i }, [
+                h('span', { class: 'subquery-number' }, `Q${i + 1}`),
+                h('div', { class: 'subquery-text' }, sq)
+              ])
+            )
           )
         ]),
-        props.result.relations.length > 0 && h('div', { class: 'relations-section' }, [
-          h('div', { class: 'section-label' }, 'Relationships'),
-          ...props.result.relations.map((r, i) => h('div', { class: 'relation-row', key: i }, [
-            h('span', { class: 'rel-node' }, r.source),
-            h('span', { class: 'rel-edge' }, r.relation),
-            h('span', { class: 'rel-node' }, r.target)
-          ]))
-        ])
+        
+        // Empty state
+        activeTab.value === 'facts' && props.result.facts.length === 0 && h('div', { class: 'empty-state' }, '暂无关键事实'),
+        activeTab.value === 'entities' && props.result.entities.length === 0 && h('div', { class: 'empty-state' }, '暂无核心实体'),
+        activeTab.value === 'relations' && props.result.relations.length === 0 && h('div', { class: 'empty-state' }, '暂无关系链')
       ])
     ])
   }
 }
 
-// Panorama Display Component
+// Panorama Display Component - Enhanced with Active/Historical tabs
 const PanoramaDisplay = {
   props: ['result'],
   setup(props) {
-    const expanded = ref(false)
+    const activeTab = ref('active') // 'active', 'historical', 'entities'
+    const expandedActive = ref(false)
+    const expandedHistorical = ref(false)
+    const expandedEntities = ref(false)
+    const INITIAL_SHOW_COUNT = 5
+    
     return () => h('div', { class: 'panorama-display' }, [
-      h('div', { class: 'stat-row' }, [
-        h('div', { class: 'stat-box' }, [
-          h('span', { class: 'stat-num' }, props.result.stats.nodes),
-          h('span', { class: 'stat-label' }, 'Nodes')
+      // Header Section
+      h('div', { class: 'panorama-header' }, [
+        h('div', { class: 'header-main' }, [
+          h('div', { class: 'header-title' }, 'Panorama Search'),
+          h('div', { class: 'header-stats' }, [
+            h('span', { class: 'stat-item' }, [
+              h('span', { class: 'stat-value' }, props.result.stats.nodes),
+              h('span', { class: 'stat-label' }, 'Nodes')
+            ]),
+            h('span', { class: 'stat-divider' }, '/'),
+            h('span', { class: 'stat-item' }, [
+              h('span', { class: 'stat-value' }, props.result.stats.edges),
+              h('span', { class: 'stat-label' }, 'Edges')
+            ])
+          ])
         ]),
-        h('div', { class: 'stat-box' }, [
-          h('span', { class: 'stat-num' }, props.result.stats.edges),
-          h('span', { class: 'stat-label' }, 'Edges')
+        props.result.query && h('div', { class: 'header-topic' }, props.result.query)
+      ]),
+      
+      // Tab Navigation
+      h('div', { class: 'panorama-tabs' }, [
+        h('button', {
+          class: ['panorama-tab', { active: activeTab.value === 'active' }],
+          onClick: () => { activeTab.value = 'active' }
+        }, [
+          h('span', { class: 'tab-icon active-icon' }, '✓'),
+          h('span', { class: 'tab-label' }, `当前有效 (${props.result.activeFacts.length})`)
         ]),
-        h('div', { class: 'stat-box highlight' }, [
-          h('span', { class: 'stat-num' }, props.result.stats.activeFacts),
-          h('span', { class: 'stat-label' }, 'Active')
+        h('button', {
+          class: ['panorama-tab', { active: activeTab.value === 'historical' }],
+          onClick: () => { activeTab.value = 'historical' }
+        }, [
+          h('span', { class: 'tab-icon historical-icon' }, '⏱'),
+          h('span', { class: 'tab-label' }, `历史记录 (${props.result.historicalFacts.length})`)
         ]),
-        h('div', { class: 'stat-box muted' }, [
-          h('span', { class: 'stat-num' }, props.result.stats.historicalFacts),
-          h('span', { class: 'stat-label' }, 'Historical')
+        h('button', {
+          class: ['panorama-tab', { active: activeTab.value === 'entities' }],
+          onClick: () => { activeTab.value = 'entities' }
+        }, [
+          h('span', { class: 'tab-icon' }, '👤'),
+          h('span', { class: 'tab-label' }, `涉及实体 (${props.result.entities.length})`)
         ])
       ]),
-      props.result.query && h('div', { class: 'query-display' }, props.result.query),
-      h('button', { 
-        class: 'expand-details',
-        onClick: () => { expanded.value = !expanded.value }
-      }, expanded.value ? 'Hide Details' : `Show ${props.result.activeFacts.length} Active Facts`),
-      expanded.value && h('div', { class: 'detail-content' }, [
-        props.result.activeFacts.length > 0 && h('div', { class: 'facts-section' }, [
-          h('div', { class: 'section-label' }, 'Active Facts'),
-          ...props.result.activeFacts.map((fact, i) => h('div', { class: 'fact-row active', key: i }, [
-            h('span', { class: 'fact-idx' }, i + 1),
-            h('span', { class: 'fact-text' }, fact)
-          ]))
+      
+      // Tab Content
+      h('div', { class: 'panorama-content' }, [
+        // Active Facts Tab
+        activeTab.value === 'active' && h('div', { class: 'facts-panel active-facts' }, [
+          h('div', { class: 'panel-header' }, [
+            h('span', { class: 'panel-title' }, '当前有效事实'),
+            h('span', { class: 'panel-count' }, `共 ${props.result.activeFacts.length} 条`)
+          ]),
+          props.result.activeFacts.length > 0 ? h('div', { class: 'facts-list' },
+            (expandedActive.value ? props.result.activeFacts : props.result.activeFacts.slice(0, INITIAL_SHOW_COUNT)).map((fact, i) => 
+              h('div', { class: 'fact-item active', key: i }, [
+                h('span', { class: 'fact-number' }, i + 1),
+                h('div', { class: 'fact-content' }, fact)
+              ])
+            )
+          ) : h('div', { class: 'empty-state' }, '暂无当前有效事实'),
+          props.result.activeFacts.length > INITIAL_SHOW_COUNT && h('button', {
+            class: 'expand-btn',
+            onClick: () => { expandedActive.value = !expandedActive.value }
+          }, expandedActive.value ? `收起 ▲` : `展开全部 ${props.result.activeFacts.length} 条 ▼`)
         ]),
-        props.result.entities.length > 0 && h('div', { class: 'entities-section' }, [
-          h('div', { class: 'section-label' }, 'Related Entities'),
-          h('div', { class: 'entity-chips' },
-            props.result.entities.map((e, i) => h('span', { class: 'entity-chip', key: i }, [
-              h('span', { class: 'chip-name' }, e.name),
-              h('span', { class: 'chip-type' }, e.type)
-            ]))
-          )
+        
+        // Historical Facts Tab
+        activeTab.value === 'historical' && h('div', { class: 'facts-panel historical-facts' }, [
+          h('div', { class: 'panel-header' }, [
+            h('span', { class: 'panel-title' }, '历史/过期事实'),
+            h('span', { class: 'panel-count' }, `共 ${props.result.historicalFacts.length} 条`)
+          ]),
+          props.result.historicalFacts.length > 0 ? h('div', { class: 'facts-list' },
+            (expandedHistorical.value ? props.result.historicalFacts : props.result.historicalFacts.slice(0, INITIAL_SHOW_COUNT)).map((fact, i) => 
+              h('div', { class: 'fact-item historical', key: i }, [
+                h('span', { class: 'fact-number' }, i + 1),
+                h('div', { class: 'fact-content' }, [
+                  // 尝试提取时间信息 [time - time]
+                  (() => {
+                    const timeMatch = fact.match(/^\[(.+?)\]\s*(.*)$/)
+                    if (timeMatch) {
+                      return [
+                        h('span', { class: 'fact-time' }, timeMatch[1]),
+                        h('span', { class: 'fact-text' }, timeMatch[2])
+                      ]
+                    }
+                    return h('span', { class: 'fact-text' }, fact)
+                  })()
+                ])
+              ])
+            )
+          ) : h('div', { class: 'empty-state' }, '暂无历史记录'),
+          props.result.historicalFacts.length > INITIAL_SHOW_COUNT && h('button', {
+            class: 'expand-btn',
+            onClick: () => { expandedHistorical.value = !expandedHistorical.value }
+          }, expandedHistorical.value ? `收起 ▲` : `展开全部 ${props.result.historicalFacts.length} 条 ▼`)
+        ]),
+        
+        // Entities Tab
+        activeTab.value === 'entities' && h('div', { class: 'entities-panel' }, [
+          h('div', { class: 'panel-header' }, [
+            h('span', { class: 'panel-title' }, '涉及实体'),
+            h('span', { class: 'panel-count' }, `共 ${props.result.entities.length} 个`)
+          ]),
+          props.result.entities.length > 0 ? h('div', { class: 'entities-grid' },
+            (expandedEntities.value ? props.result.entities : props.result.entities.slice(0, 8)).map((entity, i) => 
+              h('div', { class: 'entity-tag', key: i }, [
+                h('span', { class: 'entity-name' }, entity.name),
+                entity.type && h('span', { class: 'entity-type' }, entity.type)
+              ])
+            )
+          ) : h('div', { class: 'empty-state' }, '暂无涉及实体'),
+          props.result.entities.length > 8 && h('button', {
+            class: 'expand-btn',
+            onClick: () => { expandedEntities.value = !expandedEntities.value }
+          }, expandedEntities.value ? `收起 ▲` : `展开全部 ${props.result.entities.length} 个 ▼`)
         ])
       ])
     ])
@@ -1253,26 +1513,121 @@ const InterviewDisplay = {
   }
 }
 
-// Quick Search Display Component
+// Quick Search Display Component - Enhanced with full data rendering
 const QuickSearchDisplay = {
   props: ['result'],
   setup(props) {
-    const expanded = ref(false)
+    const activeTab = ref('facts') // 'facts', 'edges', 'nodes'
+    const expandedFacts = ref(false)
+    const INITIAL_SHOW_COUNT = 5
+    
+    // Check if there are edges or nodes to show tabs
+    const hasEdges = computed(() => props.result.edges && props.result.edges.length > 0)
+    const hasNodes = computed(() => props.result.nodes && props.result.nodes.length > 0)
+    const showTabs = computed(() => hasEdges.value || hasNodes.value)
+    
     return () => h('div', { class: 'quick-search-display' }, [
-      h('div', { class: 'search-meta' }, [
-        h('span', { class: 'search-query' }, props.result.query),
-        h('span', { class: 'search-count' }, `${props.result.count} results`)
+      // Header Section
+      h('div', { class: 'quicksearch-header' }, [
+        h('div', { class: 'header-main' }, [
+          h('div', { class: 'header-title' }, 'Quick Search'),
+          h('div', { class: 'header-stats' }, [
+            h('span', { class: 'stat-item' }, [
+              h('span', { class: 'stat-value' }, props.result.count || props.result.facts.length),
+              h('span', { class: 'stat-label' }, 'Results')
+            ])
+          ])
+        ]),
+        props.result.query && h('div', { class: 'header-query' }, [
+          h('span', { class: 'query-label' }, '搜索: '),
+          h('span', { class: 'query-text' }, props.result.query)
+        ])
       ]),
-      h('button', { 
-        class: 'expand-details',
-        onClick: () => { expanded.value = !expanded.value }
-      }, expanded.value ? 'Hide Results' : 'Show Results'),
-      expanded.value && props.result.facts.length > 0 && h('div', { class: 'search-results' },
-        props.result.facts.map((fact, i) => h('div', { class: 'search-fact', key: i }, [
-          h('span', { class: 'fact-idx' }, i + 1),
-          h('span', { class: 'fact-text' }, fact)
-        ]))
-      )
+      
+      // Tab Navigation (only show if there are edges or nodes)
+      showTabs.value && h('div', { class: 'quicksearch-tabs' }, [
+        h('button', {
+          class: ['quicksearch-tab', { active: activeTab.value === 'facts' }],
+          onClick: () => { activeTab.value = 'facts' }
+        }, [
+          h('span', { class: 'tab-icon' }, '📋'),
+          h('span', { class: 'tab-label' }, `事实 (${props.result.facts.length})`)
+        ]),
+        hasEdges.value && h('button', {
+          class: ['quicksearch-tab', { active: activeTab.value === 'edges' }],
+          onClick: () => { activeTab.value = 'edges' }
+        }, [
+          h('span', { class: 'tab-icon' }, '🔗'),
+          h('span', { class: 'tab-label' }, `关系 (${props.result.edges.length})`)
+        ]),
+        hasNodes.value && h('button', {
+          class: ['quicksearch-tab', { active: activeTab.value === 'nodes' }],
+          onClick: () => { activeTab.value = 'nodes' }
+        }, [
+          h('span', { class: 'tab-icon' }, '👤'),
+          h('span', { class: 'tab-label' }, `节点 (${props.result.nodes.length})`)
+        ])
+      ]),
+      
+      // Content Area
+      h('div', { class: ['quicksearch-content', { 'no-tabs': !showTabs.value }] }, [
+        // Facts (always show if no tabs, or when facts tab is active)
+        ((!showTabs.value) || activeTab.value === 'facts') && h('div', { class: 'facts-panel' }, [
+          !showTabs.value && h('div', { class: 'panel-header' }, [
+            h('span', { class: 'panel-title' }, '搜索结果'),
+            h('span', { class: 'panel-count' }, `共 ${props.result.facts.length} 条`)
+          ]),
+          props.result.facts.length > 0 ? h('div', { class: 'facts-list' },
+            (expandedFacts.value ? props.result.facts : props.result.facts.slice(0, INITIAL_SHOW_COUNT)).map((fact, i) => 
+              h('div', { class: 'fact-item', key: i }, [
+                h('span', { class: 'fact-number' }, i + 1),
+                h('div', { class: 'fact-content' }, fact)
+              ])
+            )
+          ) : h('div', { class: 'empty-state' }, '未找到相关结果'),
+          props.result.facts.length > INITIAL_SHOW_COUNT && h('button', {
+            class: 'expand-btn',
+            onClick: () => { expandedFacts.value = !expandedFacts.value }
+          }, expandedFacts.value ? `收起 ▲` : `展开全部 ${props.result.facts.length} 条 ▼`)
+        ]),
+        
+        // Edges Tab
+        activeTab.value === 'edges' && hasEdges.value && h('div', { class: 'edges-panel' }, [
+          h('div', { class: 'panel-header' }, [
+            h('span', { class: 'panel-title' }, '相关关系'),
+            h('span', { class: 'panel-count' }, `共 ${props.result.edges.length} 条`)
+          ]),
+          h('div', { class: 'edges-list' },
+            props.result.edges.map((edge, i) => 
+              h('div', { class: 'edge-item', key: i }, [
+                h('span', { class: 'edge-source' }, edge.source),
+                h('span', { class: 'edge-arrow' }, [
+                  h('span', { class: 'edge-line' }),
+                  h('span', { class: 'edge-label' }, edge.relation),
+                  h('span', { class: 'edge-line' })
+                ]),
+                h('span', { class: 'edge-target' }, edge.target)
+              ])
+            )
+          )
+        ]),
+        
+        // Nodes Tab
+        activeTab.value === 'nodes' && hasNodes.value && h('div', { class: 'nodes-panel' }, [
+          h('div', { class: 'panel-header' }, [
+            h('span', { class: 'panel-title' }, '相关节点'),
+            h('span', { class: 'panel-count' }, `共 ${props.result.nodes.length} 个`)
+          ]),
+          h('div', { class: 'nodes-grid' },
+            props.result.nodes.map((node, i) => 
+              h('div', { class: 'node-tag', key: i }, [
+                h('span', { class: 'node-name' }, node.name),
+                node.type && h('span', { class: 'node-type' }, node.type)
+              ])
+            )
+          )
+        ])
+      ])
     ])
   }
 }
@@ -3746,56 +4101,845 @@ watch(() => props.reportId, (newId) => {
   font-style: italic;
 }
 
-/* Quick Search Display */
-:deep(.quick-search-display) {
-  padding: 4px 0;
+/* ========== Enhanced Insight Display Styles ========== */
+:deep(.insight-display) {
+  padding: 0;
 }
 
-:deep(.search-meta) {
+:deep(.insight-header) {
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%);
+  border-radius: 8px 8px 0 0;
+  border: 1px solid #C4B5FD;
+  border-bottom: none;
+}
+
+:deep(.insight-header .header-main) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+:deep(.insight-header .header-title) {
+  font-size: 14px;
+  font-weight: 700;
+  color: #6D28D9;
+}
+
+:deep(.insight-header .header-stats) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+:deep(.insight-header .stat-item) {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+:deep(.insight-header .stat-value) {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  color: #7C3AED;
+}
+
+:deep(.insight-header .stat-label) {
+  color: #8B5CF6;
+  font-size: 10px;
+}
+
+:deep(.insight-header .stat-divider) {
+  color: #C4B5FD;
+  margin: 0 4px;
+}
+
+:deep(.insight-header .header-topic) {
+  font-size: 13px;
+  color: #5B21B6;
+  line-height: 1.5;
+}
+
+:deep(.insight-header .header-scenario) {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #7C3AED;
+}
+
+:deep(.insight-header .scenario-label) {
+  font-weight: 600;
+}
+
+:deep(.insight-tabs) {
+  display: flex;
+  gap: 2px;
+  padding: 8px 12px;
+  background: #FAFAFA;
+  border: 1px solid #E5E7EB;
+  border-top: none;
+}
+
+:deep(.insight-tab) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #6B7280;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+:deep(.insight-tab:hover) {
+  background: #F3F4F6;
+  color: #374151;
+}
+
+:deep(.insight-tab.active) {
+  background: #FFFFFF;
+  color: #7C3AED;
+  border-color: #C4B5FD;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+:deep(.insight-tab .tab-icon) {
+  font-size: 12px;
+}
+
+:deep(.insight-content) {
+  padding: 12px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+}
+
+:deep(.insight-display .panel-header) {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #F3F4F6;
 }
 
-:deep(.search-query) {
-  font-family: 'JetBrains Mono', monospace;
+:deep(.insight-display .panel-title) {
   font-size: 12px;
-  font-weight: 500;
-  color: #111827;
+  font-weight: 600;
+  color: #374151;
 }
 
-:deep(.search-count) {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  font-weight: 500;
-  color: #059669;
-  background: transparent;
-  border: none;
-  padding: 0;
+:deep(.insight-display .panel-count) {
+  font-size: 10px;
+  color: #9CA3AF;
 }
 
-:deep(.search-results) {
-  margin-top: 12px;
+:deep(.insight-display .facts-list),
+:deep(.insight-display .entities-list),
+:deep(.insight-display .relations-list),
+:deep(.insight-display .subqueries-list) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+:deep(.insight-display .fact-item) {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
   background: #F9FAFB;
   border: 1px solid #E5E7EB;
   border-radius: 6px;
-  padding: 10px 12px;
 }
 
-:deep(.search-fact) {
+:deep(.insight-display .fact-number) {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #E5E7EB;
+  border-radius: 50%;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: #6B7280;
+}
+
+:deep(.insight-display .fact-content) {
+  flex: 1;
+  font-size: 12px;
+  color: #374151;
+  line-height: 1.6;
+}
+
+/* Entity Card Styles */
+:deep(.insight-display .entity-card) {
+  padding: 12px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+}
+
+:deep(.insight-display .entity-header) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+:deep(.insight-display .entity-avatar) {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+:deep(.insight-display .entity-info) {
+  flex: 1;
+}
+
+:deep(.insight-display .entity-name) {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+}
+
+:deep(.insight-display .entity-type) {
+  font-size: 10px;
+  color: #7C3AED;
+  background: #EDE9FE;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-top: 2px;
+}
+
+:deep(.insight-display .entity-fact-count) {
+  font-size: 10px;
+  color: #9CA3AF;
+  background: #F3F4F6;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+:deep(.insight-display .entity-summary) {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #E5E7EB;
+  font-size: 11px;
+  color: #6B7280;
+  line-height: 1.5;
+}
+
+/* Relation Item Styles */
+:deep(.insight-display .relation-item) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+}
+
+:deep(.insight-display .rel-source),
+:deep(.insight-display .rel-target) {
+  padding: 4px 8px;
+  background: #FFFFFF;
+  border: 1px solid #D1D5DB;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #374151;
+}
+
+:deep(.insight-display .rel-arrow) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+:deep(.insight-display .rel-line) {
+  flex: 1;
+  height: 1px;
+  background: #D1D5DB;
+}
+
+:deep(.insight-display .rel-label) {
+  padding: 2px 6px;
+  background: #EDE9FE;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #7C3AED;
+  white-space: nowrap;
+}
+
+/* Sub-query Styles */
+:deep(.insight-display .subquery-item) {
   display: flex;
   gap: 10px;
-  padding: 6px 0;
+  padding: 10px 12px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+}
+
+:deep(.insight-display .subquery-number) {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  background: #7C3AED;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+:deep(.insight-display .subquery-text) {
+  font-size: 12px;
+  color: #374151;
+  line-height: 1.5;
+}
+
+/* Expand Button */
+:deep(.insight-display .expand-btn),
+:deep(.panorama-display .expand-btn),
+:deep(.quick-search-display .expand-btn) {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #6B7280;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+:deep(.insight-display .expand-btn:hover),
+:deep(.panorama-display .expand-btn:hover),
+:deep(.quick-search-display .expand-btn:hover) {
+  background: #F3F4F6;
+  color: #374151;
+  border-color: #D1D5DB;
+}
+
+/* Empty State */
+:deep(.insight-display .empty-state),
+:deep(.panorama-display .empty-state),
+:deep(.quick-search-display .empty-state) {
+  padding: 24px;
+  text-align: center;
+  font-size: 12px;
+  color: #9CA3AF;
+}
+
+/* ========== Enhanced Panorama Display Styles ========== */
+:deep(.panorama-display) {
+  padding: 0;
+}
+
+:deep(.panorama-header) {
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
+  border-radius: 8px 8px 0 0;
+  border: 1px solid #93C5FD;
   border-bottom: none;
 }
 
-:deep(.search-fact:last-child) {
+:deep(.panorama-header .header-main) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+:deep(.panorama-header .header-title) {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1D4ED8;
+}
+
+:deep(.panorama-header .header-stats) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+:deep(.panorama-header .stat-item) {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+:deep(.panorama-header .stat-value) {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  color: #2563EB;
+}
+
+:deep(.panorama-header .stat-label) {
+  color: #60A5FA;
+  font-size: 10px;
+}
+
+:deep(.panorama-header .stat-divider) {
+  color: #93C5FD;
+  margin: 0 4px;
+}
+
+:deep(.panorama-header .header-topic) {
+  font-size: 13px;
+  color: #1E40AF;
+  line-height: 1.5;
+}
+
+:deep(.panorama-tabs) {
+  display: flex;
+  gap: 2px;
+  padding: 8px 12px;
+  background: #FAFAFA;
+  border: 1px solid #E5E7EB;
+  border-top: none;
+}
+
+:deep(.panorama-tab) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #6B7280;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+:deep(.panorama-tab:hover) {
+  background: #F3F4F6;
+  color: #374151;
+}
+
+:deep(.panorama-tab.active) {
+  background: #FFFFFF;
+  color: #2563EB;
+  border-color: #93C5FD;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+:deep(.panorama-tab .tab-icon) {
+  font-size: 12px;
+}
+
+:deep(.panorama-tab .active-icon) {
+  color: #16A34A;
+}
+
+:deep(.panorama-tab .historical-icon) {
+  color: #9CA3AF;
+}
+
+:deep(.panorama-content) {
+  padding: 12px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+}
+
+:deep(.panorama-display .panel-header) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+:deep(.panorama-display .panel-title) {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+}
+
+:deep(.panorama-display .panel-count) {
+  font-size: 10px;
+  color: #9CA3AF;
+}
+
+:deep(.panorama-display .facts-list) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+:deep(.panorama-display .fact-item) {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+}
+
+:deep(.panorama-display .fact-item.active) {
+  background: #F0FDF4;
+  border-color: #86EFAC;
+}
+
+:deep(.panorama-display .fact-item.historical) {
+  background: #F9FAFB;
+  border-color: #E5E7EB;
+}
+
+:deep(.panorama-display .fact-number) {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #E5E7EB;
+  border-radius: 50%;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: #6B7280;
+}
+
+:deep(.panorama-display .fact-item.active .fact-number) {
+  background: #16A34A;
+  color: #FFFFFF;
+}
+
+:deep(.panorama-display .fact-item.historical .fact-number) {
+  background: #9CA3AF;
+  color: #FFFFFF;
+}
+
+:deep(.panorama-display .fact-content) {
+  flex: 1;
+  font-size: 12px;
+  color: #374151;
+  line-height: 1.6;
+}
+
+:deep(.panorama-display .fact-time) {
+  display: block;
+  font-size: 10px;
+  color: #9CA3AF;
+  margin-bottom: 4px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+:deep(.panorama-display .fact-text) {
+  display: block;
+}
+
+/* Entities Grid */
+:deep(.panorama-display .entities-grid) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+:deep(.panorama-display .entity-tag) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+}
+
+:deep(.panorama-display .entity-name) {
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+}
+
+:deep(.panorama-display .entity-type) {
+  font-size: 10px;
+  color: #2563EB;
+  background: #DBEAFE;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* ========== Enhanced Quick Search Display Styles ========== */
+:deep(.quick-search-display) {
+  padding: 0;
+}
+
+:deep(.quicksearch-header) {
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
+  border-radius: 8px 8px 0 0;
+  border: 1px solid #FDBA74;
   border-bottom: none;
+}
+
+:deep(.quicksearch-header .header-main) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+:deep(.quicksearch-header .header-title) {
+  font-size: 14px;
+  font-weight: 700;
+  color: #C2410C;
+}
+
+:deep(.quicksearch-header .header-stats) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+:deep(.quicksearch-header .stat-item) {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+:deep(.quicksearch-header .stat-value) {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  color: #EA580C;
+}
+
+:deep(.quicksearch-header .stat-label) {
+  color: #FB923C;
+  font-size: 10px;
+}
+
+:deep(.quicksearch-header .header-query) {
+  font-size: 13px;
+  color: #9A3412;
+  line-height: 1.5;
+}
+
+:deep(.quicksearch-header .query-label) {
+  font-weight: 600;
+}
+
+:deep(.quicksearch-tabs) {
+  display: flex;
+  gap: 2px;
+  padding: 8px 12px;
+  background: #FAFAFA;
+  border: 1px solid #E5E7EB;
+  border-top: none;
+}
+
+:deep(.quicksearch-tab) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #6B7280;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+:deep(.quicksearch-tab:hover) {
+  background: #F3F4F6;
+  color: #374151;
+}
+
+:deep(.quicksearch-tab.active) {
+  background: #FFFFFF;
+  color: #EA580C;
+  border-color: #FDBA74;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+:deep(.quicksearch-tab .tab-icon) {
+  font-size: 12px;
+}
+
+:deep(.quicksearch-content) {
+  padding: 12px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+}
+
+/* When there are no tabs, content connects directly to header */
+:deep(.quicksearch-content.no-tabs) {
+  border-top: none;
+}
+
+:deep(.quick-search-display .panel-header) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+:deep(.quick-search-display .panel-title) {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+}
+
+:deep(.quick-search-display .panel-count) {
+  font-size: 10px;
+  color: #9CA3AF;
+}
+
+:deep(.quick-search-display .facts-list) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+:deep(.quick-search-display .fact-item) {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+}
+
+:deep(.quick-search-display .fact-number) {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #FDBA74;
+  border-radius: 50%;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+:deep(.quick-search-display .fact-content) {
+  flex: 1;
+  font-size: 12px;
+  color: #374151;
+  line-height: 1.6;
+}
+
+/* Edges Panel */
+:deep(.quick-search-display .edges-list) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+:deep(.quick-search-display .edge-item) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+}
+
+:deep(.quick-search-display .edge-source),
+:deep(.quick-search-display .edge-target) {
+  padding: 4px 8px;
+  background: #FFFFFF;
+  border: 1px solid #D1D5DB;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #374151;
+}
+
+:deep(.quick-search-display .edge-arrow) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+:deep(.quick-search-display .edge-line) {
+  flex: 1;
+  height: 1px;
+  background: #D1D5DB;
+}
+
+:deep(.quick-search-display .edge-label) {
+  padding: 2px 6px;
+  background: #FFEDD5;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #C2410C;
+  white-space: nowrap;
+}
+
+/* Nodes Grid */
+:deep(.quick-search-display .nodes-grid) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+:deep(.quick-search-display .node-tag) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+}
+
+:deep(.quick-search-display .node-name) {
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+}
+
+:deep(.quick-search-display .node-type) {
+  font-size: 10px;
+  color: #EA580C;
+  background: #FFEDD5;
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 /* Console Logs - 与 Step3Simulation.vue 保持一致 */
