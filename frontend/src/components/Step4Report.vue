@@ -2,62 +2,67 @@
   <div class="report-panel">
     <!-- Main Split Layout -->
     <div class="main-split-layout">
-      <!-- LEFT PANEL: Progress & Content -->
-      <div class="left-panel" ref="leftPanel">
-        <div class="panel-header">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9 11l3 3L22 4"></path>
-            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
-          </svg>
-          <span>Report Progress</span>
-        </div>
-
-        <!-- Outline Overview -->
-        <div v-if="reportOutline" class="outline-overview">
-          <h2 class="report-title">{{ reportOutline.title }}</h2>
-          <p class="report-summary">{{ reportOutline.summary }}</p>
-          
-          <!-- Progress Bar -->
-          <div class="progress-wrapper">
-            <div class="progress-bar">
-              <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+      <!-- LEFT PANEL: Report Style -->
+      <div class="left-panel report-style" ref="leftPanel">
+        <div v-if="reportOutline" class="report-content-wrapper">
+          <!-- Report Header -->
+          <div class="report-header-block">
+            <div class="report-meta">
+              <span class="report-tag">REPORT</span>
+              <span class="report-id">ID: {{ reportId || 'REF-2024-X92' }}</span>
             </div>
-            <span class="progress-text">{{ progressPercent }}%</span>
+            <h1 class="main-title">{{ reportOutline.title }}</h1>
+            <p class="sub-title">{{ reportOutline.summary }}</p>
+            <div class="header-divider"></div>
           </div>
-        </div>
 
-        <!-- Sections List with Content -->
-        <div class="sections-container" v-if="reportOutline">
-          <div 
-            v-for="(section, idx) in reportOutline.sections" 
-            :key="idx"
-            class="section-card"
-            :class="{ 
-              'completed': isSectionCompleted(idx + 1),
-              'current': currentSectionIndex === idx + 1,
-              'pending': !isSectionCompleted(idx + 1) && currentSectionIndex !== idx + 1
-            }"
-          >
-            <div class="section-card-header" @click="toggleSectionContent(idx)">
-              <div class="section-indicator">
-                <svg v-if="isSectionCompleted(idx + 1)" class="check-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3">
-                  <polyline points="20 6 9 17 4 12"></polyline>
+          <!-- Sections List -->
+          <div class="sections-list">
+            <div 
+              v-for="(section, idx) in reportOutline.sections" 
+              :key="idx"
+              class="report-section-item"
+              :class="{ 
+                'is-active': currentSectionIndex === idx + 1,
+                'is-completed': isSectionCompleted(idx + 1),
+                'is-pending': !isSectionCompleted(idx + 1) && currentSectionIndex !== idx + 1
+              }"
+            >
+              <div class="section-header-row" @click="toggleSectionCollapse(idx)" :class="{ 'clickable': isSectionCompleted(idx + 1) }">
+                <span class="section-number">{{ String(idx + 1).padStart(2, '0') }}</span>
+                <h3 class="section-title">{{ section.title }}</h3>
+                <svg 
+                  v-if="isSectionCompleted(idx + 1)" 
+                  class="collapse-icon" 
+                  :class="{ 'is-collapsed': collapsedSections.has(idx) }"
+                  viewBox="0 0 24 24" 
+                  width="20" 
+                  height="20" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  stroke-width="2"
+                >
+                  <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
-                <div v-else-if="currentSectionIndex === idx + 1" class="generating-spinner"></div>
-                <span v-else class="section-number">{{ idx + 1 }}</span>
               </div>
-              <span class="section-name">{{ section.title }}</span>
-              <span v-if="generatedSections[idx + 1]" class="expand-btn">
-                {{ expandedContent.has(idx) ? '−' : '+' }}
-              </span>
+              
+              <div class="section-body" v-show="!collapsedSections.has(idx)">
+                <!-- Completed Content -->
+                <div v-if="generatedSections[idx + 1]" class="generated-content" v-html="renderMarkdown(generatedSections[idx + 1])"></div>
+                
+                <!-- Loading State -->
+                <div v-else-if="currentSectionIndex === idx + 1" class="loading-state">
+                  <div class="loading-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <circle cx="12" cy="12" r="10" stroke-width="4" stroke="#E5E7EB"></circle>
+                      <path d="M12 2a10 10 0 0 1 10 10" stroke-width="4" stroke="#8B5CF6" stroke-linecap="round"></path>
+                    </svg>
+                  </div>
+                  <span class="loading-text">正在生成{{ section.title }}...</span>
+                  <span class="cursor-blink"></span>
+                </div>
+              </div>
             </div>
-            
-            <!-- Section Content Preview -->
-            <Transition name="slide-content">
-              <div v-if="expandedContent.has(idx) && generatedSections[idx + 1]" class="section-content">
-                <div class="content-body" v-html="renderMarkdown(generatedSections[idx + 1])"></div>
-              </div>
-            </Transition>
           </div>
         </div>
 
@@ -316,6 +321,7 @@ const currentSectionIndex = ref(null)
 const generatedSections = ref({})
 const expandedContent = ref(new Set())
 const expandedLogs = ref(new Set())
+const collapsedSections = ref(new Set())
 const isComplete = ref(false)
 const startTime = ref(null)
 const leftPanel = ref(null)
@@ -337,6 +343,18 @@ const toggleSectionContent = (idx) => {
     newSet.add(idx)
   }
   expandedContent.value = newSet
+}
+
+const toggleSectionCollapse = (idx) => {
+  // 只有已完成的章节才能折叠
+  if (!generatedSections.value[idx + 1]) return
+  const newSet = new Set(collapsedSections.value)
+  if (newSet.has(idx)) {
+    newSet.delete(idx)
+  } else {
+    newSet.add(idx)
+  }
+  collapsedSections.value = newSet
 }
 
 const toggleLogExpand = (log) => {
@@ -1372,6 +1390,7 @@ watch(() => props.reportId, (newId) => {
     generatedSections.value = {}
     expandedContent.value = new Set()
     expandedLogs.value = new Set()
+    collapsedSections.value = new Set()
     isComplete.value = false
     startTime.value = null
     
@@ -1428,15 +1447,16 @@ watch(() => props.reportId, (newId) => {
   font-size: 11px;
 }
 
-/* Left Panel */
-.left-panel {
+/* Left Panel - Report Style */
+.left-panel.report-style {
   width: 45%;
-  min-width: 350px;
+  min-width: 450px;
   background: #FFFFFF;
   border-right: 1px solid #E5E7EB;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  padding: 60px 50px;
 }
 
 .left-panel::-webkit-scrollbar {
@@ -1452,274 +1472,261 @@ watch(() => props.reportId, (newId) => {
   border-radius: 2px;
 }
 
-.left-panel::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
+/* Report Header */
+.report-content-wrapper {
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
 }
 
-.outline-overview {
-  padding: 20px;
-  border-bottom: 1px solid #F3F4F6;
+.report-header-block {
+  margin-bottom: 50px;
 }
 
-.report-title {
-  font-size: 18px;
+.report-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.report-tag {
+  background: #000000;
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.report-id {
+  font-size: 11px;
+  color: #9CA3AF;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.main-title {
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 36px;
   font-weight: 700;
   color: #111827;
-  margin: 0 0 8px;
-  line-height: 1.4;
+  line-height: 1.2;
+  margin: 0 0 16px 0;
+  letter-spacing: -0.02em;
 }
 
-.report-summary {
-  font-size: 13px;
+.sub-title {
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 16px;
   color: #6B7280;
+  font-style: italic;
   line-height: 1.6;
-  margin: 0 0 16px;
+  margin: 0 0 30px 0;
+  font-weight: 400;
 }
 
-.progress-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.progress-bar {
-  flex: 1;
-  height: 6px;
+.header-divider {
+  height: 1px;
   background: #E5E7EB;
-  border-radius: 3px;
-  overflow: hidden;
+  width: 100%;
 }
 
-.progress-fill {
-  height: 100%;
-  background: #4F46E5;
-  border-radius: 3px;
-  transition: width 0.5s ease;
-}
-
-.progress-text {
-  font-size: 12px;
-  font-weight: 600;
-  color: #4F46E5;
-  min-width: 36px;
-  text-align: right;
-}
-
-/* Section Cards */
-.sections-container {
-  padding: 16px;
+/* Sections List */
+.sections-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 32px;
 }
 
-.section-card {
-  background: #FAFAFA;
-  border: 1px solid #E5E7EB;
-  border-radius: 10px;
-  overflow: hidden;
-  transition: all 0.2s ease;
-}
-
-.section-card:hover {
-  border-color: #D1D5DB;
-}
-
-.section-card.current {
-  border-color: #F59E0B;
-  background: #FFFBEB;
-}
-
-.section-card.completed {
-  border-color: #10B981;
-  background: #ECFDF5;
-}
-
-.section-card-header {
+.report-section-item {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 12px;
-  padding: 14px 16px;
+}
+
+.section-header-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  transition: background-color 0.2s ease;
+  padding: 8px 12px;
+  margin: -8px -12px;
+  border-radius: 8px;
+}
+
+.section-header-row.clickable {
   cursor: pointer;
 }
 
-.section-indicator {
-  width: 28px;
-  height: 28px;
+.section-header-row.clickable:hover {
+  background-color: #F9FAFB;
+}
+
+.collapse-icon {
+  margin-left: auto;
+  color: #9CA3AF;
+  transition: transform 0.3s ease;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.collapse-icon.is-collapsed {
+  transform: rotate(-90deg);
+}
+
+.section-number {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px;
+  color: #E5E7EB; /* Very light gray for number initially */
+  font-weight: 500;
+  transition: color 0.3s ease;
+}
+
+.section-title {
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+  transition: color 0.3s ease;
+}
+
+/* States */
+.report-section-item.is-pending .section-number {
+  color: #E5E7EB;
+}
+.report-section-item.is-pending .section-title {
+  color: #D1D5DB;
+}
+
+.report-section-item.is-active .section-number,
+.report-section-item.is-completed .section-number {
+  color: #9CA3AF;
+}
+
+.report-section-item.is-active .section-title,
+.report-section-item.is-completed .section-title {
+  color: #111827;
+}
+
+.section-body {
+  padding-left: 28px;
+  overflow: hidden;
+}
+
+/* Generated Content */
+.generated-content {
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.8;
+  color: #374151;
+}
+
+.generated-content :deep(p) {
+  margin-bottom: 1em;
+}
+
+.generated-content :deep(.md-h2),
+.generated-content :deep(.md-h3),
+.generated-content :deep(.md-h4) {
+  font-family: 'Times New Roman', Times, serif;
+  color: #111827;
+  margin-top: 1.5em;
+  margin-bottom: 0.8em;
+  font-weight: 700;
+}
+
+.generated-content :deep(.md-h2) { font-size: 20px; border-bottom: 1px solid #F3F4F6; padding-bottom: 8px; }
+.generated-content :deep(.md-h3) { font-size: 18px; }
+.generated-content :deep(.md-h4) { font-size: 16px; }
+
+.generated-content :deep(.md-ul),
+.generated-content :deep(.md-ol) {
+  padding-left: 20px;
+  margin-bottom: 1em;
+}
+
+.generated-content :deep(.md-li) {
+  margin-bottom: 0.5em;
+}
+
+.generated-content :deep(.md-quote) {
+  border-left: 3px solid #E5E7EB;
+  padding-left: 16px;
+  margin: 1.5em 0;
+  color: #6B7280;
+  font-style: italic;
+  font-family: 'Times New Roman', Times, serif;
+}
+
+.generated-content :deep(.code-block) {
+  background: #F9FAFB;
+  padding: 12px;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  overflow-x: auto;
+  margin: 1em 0;
+  border: 1px solid #E5E7EB;
+}
+
+.generated-content :deep(strong) {
+  font-weight: 600;
+  color: #111827;
+}
+
+/* Loading State */
+.loading-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #6B7280;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.loading-icon {
+  width: 18px;
+  height: 18px;
+  animation: spin 1s linear infinite;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  background: #E5E7EB;
-  flex-shrink: 0;
 }
 
-.section-card.completed .section-indicator {
-  background: #10B981;
+.loading-text {
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 15px;
+  color: #4B5563;
 }
 
-.section-card.current .section-indicator {
-  background: #F59E0B;
-}
-
-.check-icon {
-  color: #FFFFFF;
-}
-
-.generating-spinner {
-  width: 14px;
+.cursor-blink {
+  display: inline-block;
+  width: 8px;
   height: 14px;
-  border: 2px solid rgba(255,255,255,0.3);
-  border-top-color: #FFFFFF;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  background: #8B5CF6;
+  opacity: 0.5;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0; }
 }
 
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
-.section-number {
-  font-size: 12px;
-  font-weight: 600;
-  color: #6B7280;
-}
-
-.section-name {
-  flex: 1;
-  font-size: 14px;
-  font-weight: 500;
-  color: #374151;
-}
-
-.expand-btn {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #E5E7EB;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #6B7280;
-  transition: all 0.2s;
-}
-
-.section-card.completed .expand-btn {
-  background: #D1FAE5;
-  color: #059669;
-}
-
-.section-card:hover .expand-btn {
-  background: #D1D5DB;
-}
-
-.section-card.completed:hover .expand-btn {
-  background: #A7F3D0;
-}
-
-.section-content {
-  border-top: 1px solid #E5E7EB;
-  padding: 20px;
-  background: #FFFFFF;
-}
-
-.content-body {
-  font-size: 13px;
-  line-height: 1.7;
-  color: #4B5563;
-}
-
-.content-body :deep(.md-h2) {
+/* Content Styles Override for this view */
+.generated-content :deep(.md-h2) {
+  font-family: 'Times New Roman', Times, serif;
   font-size: 18px;
-  font-weight: 700;
-  color: #111827;
-  margin: 20px 0 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #E5E7EB;
+  margin-top: 0;
 }
 
-.content-body :deep(.md-h3) {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1F2937;
-  margin: 16px 0 10px;
-}
-
-.content-body :deep(.md-h4) {
-  font-size: 14px;
-  font-weight: 600;
-  color: #374151;
-  margin: 14px 0 8px;
-}
-
-.content-body :deep(.md-h5) {
-  font-size: 13px;
-  font-weight: 600;
-  color: #4B5563;
-  margin: 12px 0 6px;
-}
-
-.content-body :deep(.md-p) {
-  margin: 10px 0;
-}
-
-.content-body :deep(.md-quote) {
-  margin: 12px 0;
-  padding: 10px 16px;
-  border-left: 3px solid #6366F1;
-  background: #F3F4F6;
-  color: #4B5563;
-  font-style: italic;
-}
-
-.content-body :deep(.md-ul),
-.content-body :deep(.md-ol) {
-  margin: 10px 0;
-  padding-left: 24px;
-}
-
-.content-body :deep(.md-li),
-.content-body :deep(.md-oli) {
-  margin: 6px 0;
-  line-height: 1.6;
-}
-
-.content-body :deep(.md-hr) {
-  border: none;
-  border-top: 1px solid #E5E7EB;
-  margin: 16px 0;
-}
-
-.content-body :deep(.code-block) {
-  background: #1F2937;
-  color: #E5E7EB;
-  padding: 12px 16px;
-  border-radius: 6px;
-  overflow-x: auto;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  margin: 12px 0;
-}
-
-.content-body :deep(.inline-code) {
-  background: #F3F4F6;
-  color: #DC2626;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-}
-
-.content-body :deep(strong) {
-  color: #111827;
-  font-weight: 600;
-}
-
-.content-body :deep(em) {
-  color: #4B5563;
-}
 
 /* Slide Content Transition */
 .slide-content-enter-active {
