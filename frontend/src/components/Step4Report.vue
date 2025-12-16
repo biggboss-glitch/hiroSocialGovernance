@@ -746,28 +746,102 @@ const PanoramaDisplay = {
   }
 }
 
-// Interview Display Component - Conversation Style
+// Interview Display Component - Conversation Style (Q&A Format)
 const InterviewDisplay = {
   props: ['result'],
   setup(props) {
     const activeIndex = ref(0)
     const expandedAnswers = ref(new Set())
-    const activeTab = ref('twitter') // 'twitter' or 'reddit'
+    // 为每个问题-回答对维护独立的平台选择状态
+    const platformTabs = reactive({}) // { 'agentIdx-qIdx': 'twitter' | 'reddit' }
     
-    const toggleAnswer = (idx) => {
+    // 获取某个问题的当前平台选择
+    const getPlatformTab = (agentIdx, qIdx) => {
+      const key = `${agentIdx}-${qIdx}`
+      return platformTabs[key] || 'twitter'
+    }
+    
+    // 设置某个问题的平台选择
+    const setPlatformTab = (agentIdx, qIdx, platform) => {
+      const key = `${agentIdx}-${qIdx}`
+      platformTabs[key] = platform
+    }
+    
+    const toggleAnswer = (key) => {
       const newSet = new Set(expandedAnswers.value)
-      if (newSet.has(idx)) {
-        newSet.delete(idx)
+      if (newSet.has(key)) {
+        newSet.delete(key)
       } else {
-        newSet.add(idx)
+        newSet.add(key)
       }
       expandedAnswers.value = newSet
     }
     
     const formatAnswer = (text, expanded) => {
       if (!text) return ''
-      if (expanded || text.length <= 600) return text
-      return text.substring(0, 600) + '...'
+      if (expanded || text.length <= 400) return text
+      return text.substring(0, 400) + '...'
+    }
+    
+    // 尝试按问题编号分割回答
+    const splitAnswerByQuestions = (answerText, questionCount) => {
+      if (!answerText || questionCount <= 0) return [answerText]
+      
+      // 尝试按编号分割 (如 "1." "2." 等)
+      const parts = []
+      let remaining = answerText
+      
+      for (let i = 1; i <= questionCount; i++) {
+        const nextNum = i + 1
+        // 查找下一个编号的位置
+        const nextPattern = new RegExp(`\\n\\s*${nextNum}\\.\\s+|\\n\\s*${nextNum}、|\\n\\s*（${nextNum}）|\\n\\s*\\(${nextNum}\\)`)
+        const match = remaining.match(nextPattern)
+        
+        if (match) {
+          // 找到下一个编号，截取当前部分
+          const splitIdx = match.index
+          let currentPart = remaining.substring(0, splitIdx).trim()
+          // 移除当前编号前缀
+          currentPart = currentPart.replace(new RegExp(`^\\s*${i}\\.\\s*|^\\s*${i}、|^\\s*（${i}）|^\\s*\\(${i}\\)`), '').trim()
+          parts.push(currentPart)
+          remaining = remaining.substring(splitIdx).trim()
+        } else if (i === questionCount) {
+          // 最后一个问题，取剩余所有内容
+          let currentPart = remaining.replace(new RegExp(`^\\s*${i}\\.\\s*|^\\s*${i}、|^\\s*（${i}）|^\\s*\\(${i}\\)`), '').trim()
+          parts.push(currentPart)
+        }
+      }
+      
+      // 如果分割失败，返回整体答案
+      if (parts.length === 0 || parts.every(p => !p)) {
+        return [answerText]
+      }
+      
+      return parts
+    }
+    
+    // 获取某个问题对应的回答
+    const getAnswerForQuestion = (interview, qIdx, platform) => {
+      const answer = platform === 'twitter' ? interview.twitterAnswer : (interview.redditAnswer || interview.twitterAnswer)
+      if (!answer) return ''
+      
+      const questionCount = interview.questions?.length || 1
+      const answers = splitAnswerByQuestions(answer, questionCount)
+      
+      // 如果只有一个回答部分，或者索引超出，返回完整回答
+      if (answers.length === 1 || qIdx >= answers.length) {
+        return qIdx === 0 ? answer : ''
+      }
+      
+      return answers[qIdx] || ''
+    }
+    
+    // 检查某个问题是否有双平台回答
+    const hasMultiplePlatforms = (interview, qIdx) => {
+      if (!interview.twitterAnswer || !interview.redditAnswer) return false
+      const twitterAnswer = getAnswerForQuestion(interview, qIdx, 'twitter')
+      const redditAnswer = getAnswerForQuestion(interview, qIdx, 'reddit')
+      return twitterAnswer && redditAnswer && twitterAnswer !== redditAnswer
     }
     
     return () => h('div', { class: 'interview-display' }, [
@@ -814,72 +888,82 @@ const InterviewDisplay = {
           ])
         ]),
         
-        // Conversation Thread
-        h('div', { class: 'conversation-thread' }, [
-          // Question Block (Interviewer)
-          h('div', { class: 'message interviewer' }, [
-            h('div', { class: 'message-header' }, [
-              h('span', { class: 'message-sender' }, 'Interviewer'),
-              h('span', { class: 'message-badge' }, 'Q')
-            ]),
-            h('div', { class: 'message-content' }, [
-              props.result.interviews[activeIndex.value]?.questions?.length > 0 
-                ? h('ol', { class: 'question-list' },
-                    props.result.interviews[activeIndex.value].questions.map((q, qi) => 
-                      h('li', { key: qi, class: 'question-item' }, q)
-                    )
-                  )
-                : h('p', {}, props.result.interviews[activeIndex.value]?.question || 'No question available')
+        // Q&A Conversation Thread - 一问一答样式
+        h('div', { class: 'qa-thread' }, 
+          (props.result.interviews[activeIndex.value]?.questions?.length > 0 
+            ? props.result.interviews[activeIndex.value].questions 
+            : [props.result.interviews[activeIndex.value]?.question || 'No question available']
+          ).map((question, qIdx) => {
+            const interview = props.result.interviews[activeIndex.value]
+            const currentPlatform = getPlatformTab(activeIndex.value, qIdx)
+            const answerText = getAnswerForQuestion(interview, qIdx, currentPlatform)
+            const hasDualPlatform = hasMultiplePlatforms(interview, qIdx)
+            const expandKey = `${activeIndex.value}-${qIdx}`
+            const isExpanded = expandedAnswers.value.has(expandKey)
+            
+            return h('div', { class: 'qa-pair', key: qIdx }, [
+              // Question Block
+              h('div', { class: 'qa-question' }, [
+                h('div', { class: 'qa-badge q-badge' }, `Q${qIdx + 1}`),
+                h('div', { class: 'qa-content' }, [
+                  h('div', { class: 'qa-sender' }, 'Interviewer'),
+                  h('div', { class: 'qa-text' }, question)
+                ])
+              ]),
+              
+              // Answer Block
+              answerText && h('div', { class: 'qa-answer' }, [
+                h('div', { class: 'qa-badge a-badge' }, `A${qIdx + 1}`),
+                h('div', { class: 'qa-content' }, [
+                  h('div', { class: 'qa-answer-header' }, [
+                    h('div', { class: 'qa-sender' }, interview?.name || 'Agent'),
+                    // 双平台切换按钮
+                    hasDualPlatform && h('div', { class: 'platform-switch' }, [
+                      h('button', {
+                        class: ['platform-btn', { active: currentPlatform === 'twitter' }],
+                        onClick: (e) => { e.stopPropagation(); setPlatformTab(activeIndex.value, qIdx, 'twitter') }
+                      }, [
+                        h('svg', { class: 'platform-icon', viewBox: '0 0 24 24', width: 12, height: 12, fill: 'currentColor' }, [
+                          h('path', { d: 'M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z' })
+                        ]),
+                        h('span', {}, 'X')
+                      ]),
+                      h('button', {
+                        class: ['platform-btn', { active: currentPlatform === 'reddit' }],
+                        onClick: (e) => { e.stopPropagation(); setPlatformTab(activeIndex.value, qIdx, 'reddit') }
+                      }, [
+                        h('svg', { class: 'platform-icon', viewBox: '0 0 24 24', width: 12, height: 12, fill: 'currentColor' }, [
+                          h('path', { d: 'M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z' })
+                        ]),
+                        h('span', {}, 'Reddit')
+                      ])
+                    ])
+                  ]),
+                  h('div', { 
+                    class: 'qa-text answer-text',
+                    innerHTML: formatAnswer(answerText, isExpanded)
+                      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                      .replace(/\n/g, '<br>')
+                  }),
+                  // Expand/Collapse Button
+                  answerText.length > 400 && h('button', {
+                    class: 'expand-answer-btn',
+                    onClick: () => toggleAnswer(expandKey)
+                  }, isExpanded ? 'Show Less' : 'Show More')
+                ])
+              ])
             ])
-          ]),
-          
-          // Answer Block (Agent) - with platform tabs
-          h('div', { class: 'message agent' }, [
-            h('div', { class: 'message-header' }, [
-              h('span', { class: 'message-sender' }, props.result.interviews[activeIndex.value]?.name || 'Agent'),
-              h('span', { class: 'message-badge answer' }, 'A')
-            ]),
-            // Platform Tabs
-            (props.result.interviews[activeIndex.value]?.twitterAnswer && props.result.interviews[activeIndex.value]?.redditAnswer) && h('div', { class: 'platform-tabs' }, [
-              h('button', { 
-                class: ['platform-tab', { active: activeTab.value === 'twitter' }],
-                onClick: () => { activeTab.value = 'twitter' }
-              }, 'Twitter'),
-              h('button', { 
-                class: ['platform-tab', { active: activeTab.value === 'reddit' }],
-                onClick: () => { activeTab.value = 'reddit' }
-              }, 'Reddit')
-            ]),
-            // Answer Content
-            h('div', { class: 'message-content answer-content' }, [
-              h('div', { 
-                class: 'answer-text',
-                innerHTML: formatAnswer(
-                  activeTab.value === 'twitter' 
-                    ? props.result.interviews[activeIndex.value]?.twitterAnswer 
-                    : (props.result.interviews[activeIndex.value]?.redditAnswer || props.result.interviews[activeIndex.value]?.twitterAnswer),
-                  expandedAnswers.value.has(activeIndex.value)
-                ).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')
-              }),
-              // Expand/Collapse Button
-              ((props.result.interviews[activeIndex.value]?.twitterAnswer?.length > 600) || 
-               (props.result.interviews[activeIndex.value]?.redditAnswer?.length > 600)) && 
-              h('button', { 
-                class: 'expand-answer-btn',
-                onClick: () => toggleAnswer(activeIndex.value)
-              }, expandedAnswers.value.has(activeIndex.value) ? 'Show Less' : 'Show More')
-            ])
-          ]),
-          
-          // Key Quotes Section
-          props.result.interviews[activeIndex.value]?.quotes?.length > 0 && h('div', { class: 'quotes-section' }, [
-            h('div', { class: 'quotes-header' }, 'Key Quotes'),
-            h('div', { class: 'quotes-list' },
-              props.result.interviews[activeIndex.value].quotes.slice(0, 3).map((quote, qi) => 
-                h('blockquote', { key: qi, class: 'quote-item' }, quote.length > 200 ? quote.substring(0, 200) + '...' : quote)
-              )
+          })
+        ),
+        
+        // Key Quotes Section
+        props.result.interviews[activeIndex.value]?.quotes?.length > 0 && h('div', { class: 'quotes-section' }, [
+          h('div', { class: 'quotes-header' }, 'Key Quotes'),
+          h('div', { class: 'quotes-list' },
+            props.result.interviews[activeIndex.value].quotes.slice(0, 3).map((quote, qi) => 
+              h('blockquote', { key: qi, class: 'quote-item' }, quote.length > 200 ? quote.substring(0, 200) + '...' : quote)
             )
-          ])
+          )
         ])
       ]),
       
@@ -2590,133 +2674,123 @@ watch(() => props.reportId, (newId) => {
   overflow: hidden;
 }
 
-/* Conversation Thread */
-:deep(.interview-display .conversation-thread) {
+/* Q&A Thread - 一问一答样式 */
+:deep(.interview-display .qa-thread) {
   display: flex;
   flex-direction: column;
+  gap: 16px;
+}
+
+:deep(.interview-display .qa-pair) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+}
+
+:deep(.interview-display .qa-question),
+:deep(.interview-display .qa-answer) {
+  display: flex;
   gap: 12px;
 }
 
-:deep(.interview-display .message) {
-  border: 1px solid #E5E7EB;
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-:deep(.interview-display .message.interviewer) {
-  background: #F9FAFB;
-}
-
-:deep(.interview-display .message.agent) {
-  background: #FFFFFF;
-  border-color: #4F46E5;
-  border-width: 1px 1px 1px 3px;
-}
-
-:deep(.interview-display .message-header) {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  border-bottom: 1px solid #E5E7EB;
-}
-
-:deep(.interview-display .message.agent .message-header) {
-  border-bottom-color: #EEF2FF;
-}
-
-:deep(.interview-display .message-sender) {
-  font-size: 12px;
-  font-weight: 600;
-  color: #374151;
-}
-
-:deep(.interview-display .message-badge) {
-  width: 22px;
-  height: 22px;
+:deep(.interview-display .qa-badge) {
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #E5E7EB;
-  color: #6B7280;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  border-radius: 50%;
+  border-radius: 8px;
+  flex-shrink: 0;
 }
 
-:deep(.interview-display .message-badge.answer) {
+:deep(.interview-display .q-badge) {
+  background: #E5E7EB;
+  color: #6B7280;
+}
+
+:deep(.interview-display .a-badge) {
   background: #4F46E5;
   color: #FFFFFF;
 }
 
-:deep(.interview-display .message-content) {
-  padding: 14px;
+:deep(.interview-display .qa-content) {
+  flex: 1;
+  min-width: 0;
 }
 
-/* Question List */
-:deep(.interview-display .question-list) {
-  margin: 0;
-  padding-left: 20px;
-  list-style: decimal;
+:deep(.interview-display .qa-sender) {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6B7280;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
-:deep(.interview-display .question-item) {
-  font-size: 12px;
-  color: #4B5563;
+:deep(.interview-display .qa-text) {
+  font-size: 13px;
+  color: #374151;
   line-height: 1.6;
+}
+
+:deep(.interview-display .qa-answer) {
+  background: #FFFFFF;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #E5E7EB;
+  margin-top: 4px;
+}
+
+:deep(.interview-display .qa-answer-header) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 8px;
 }
 
-:deep(.interview-display .question-item:last-child) {
-  margin-bottom: 0;
-}
-
-/* Platform Tabs */
-:deep(.interview-display .platform-tabs) {
+/* Platform Switch - 双平台切换按钮 */
+:deep(.interview-display .platform-switch) {
   display: flex;
   gap: 4px;
-  padding: 8px 14px;
-  border-bottom: 1px solid #EEF2FF;
+  background: #F3F4F6;
+  padding: 2px;
+  border-radius: 6px;
 }
 
-:deep(.interview-display .platform-tab) {
-  padding: 5px 12px;
+:deep(.interview-display .platform-btn) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
   background: transparent;
-  border: 1px solid #E5E7EB;
+  border: none;
   border-radius: 4px;
   font-size: 10px;
   font-weight: 600;
   color: #6B7280;
   cursor: pointer;
   transition: all 0.15s ease;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
 }
 
-:deep(.interview-display .platform-tab:hover) {
-  border-color: #D1D5DB;
+:deep(.interview-display .platform-btn:hover) {
   color: #374151;
+  background: rgba(255,255,255,0.5);
 }
 
-:deep(.interview-display .platform-tab.active) {
-  background: #111827;
-  border-color: #111827;
-  color: #FFFFFF;
+:deep(.interview-display .platform-btn.active) {
+  background: #FFFFFF;
+  color: #111827;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
 }
 
-/* Answer Content */
-:deep(.interview-display .answer-content) {
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-:deep(.interview-display .answer-content::-webkit-scrollbar) {
-  width: 4px;
-}
-
-:deep(.interview-display .answer-content::-webkit-scrollbar-thumb) {
-  background: #D1D5DB;
-  border-radius: 2px;
+:deep(.interview-display .platform-icon) {
+  flex-shrink: 0;
 }
 
 :deep(.interview-display .answer-text) {
@@ -2731,13 +2805,13 @@ watch(() => props.reportId, (newId) => {
 }
 
 :deep(.interview-display .expand-answer-btn) {
-  display: block;
-  margin-top: 12px;
-  padding: 6px 12px;
+  display: inline-block;
+  margin-top: 10px;
+  padding: 5px 10px;
   background: #F3F4F6;
   border: none;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
   color: #6B7280;
   cursor: pointer;
