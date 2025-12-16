@@ -29,6 +29,7 @@
               }"
             >
               <div class="section-header-row" @click="toggleSectionCollapse(idx)" :class="{ 'clickable': isSectionCompleted(idx + 1) }">
+                <span class="section-number">{{ String(idx + 1).padStart(2, '0') }}</span>
                 <h3 class="section-title">{{ section.title }}</h3>
                 <svg 
                   v-if="isSectionCompleted(idx + 1)" 
@@ -2000,12 +2001,7 @@ const fetchAgentLog = async () => {
             currentSectionIndex.value = null  // 确保清除 loading 状态
             emit('update-status', 'completed')
             stopPolling()
-            // 任务完成后，滚动右侧面板到顶部
-            nextTick(() => {
-              if (rightPanel.value) {
-                rightPanel.value.scrollTop = 0
-              }
-            })
+            // 滚动逻辑统一在循环结束后的 nextTick 中处理
           }
           
           if (log.action === 'report_start') {
@@ -2017,7 +2013,12 @@ const fetchAgentLog = async () => {
         
         nextTick(() => {
           if (rightPanel.value) {
-            rightPanel.value.scrollTop = rightPanel.value.scrollHeight
+            // 如果任务已完成，滚动到顶部；否则滚动到底部跟随最新日志
+            if (isComplete.value) {
+              rightPanel.value.scrollTop = 0
+            } else {
+              rightPanel.value.scrollTop = rightPanel.value.scrollHeight
+            }
           }
         })
       }
@@ -2404,9 +2405,8 @@ watch(() => props.reportId, (newId) => {
 .section-number {
   font-family: 'JetBrains Mono', monospace;
   font-size: 16px;
-  color: #E5E7EB; /* Very light gray for number initially */
+  color: #9CA3AF; /* 深灰色，不随状态变化 */
   font-weight: 500;
-  transition: color 0.3s ease;
 }
 
 .section-title {
@@ -2419,16 +2419,8 @@ watch(() => props.reportId, (newId) => {
 }
 
 /* States */
-.report-section-item.is-pending .section-number {
-  color: #E5E7EB;
-}
 .report-section-item.is-pending .section-title {
   color: #D1D5DB;
-}
-
-.report-section-item.is-active .section-number,
-.report-section-item.is-completed .section-number {
-  color: #9CA3AF;
 }
 
 .report-section-item.is-active .section-title,
