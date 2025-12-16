@@ -255,8 +255,8 @@
                   <!-- Tool Result -->
                   <template v-if="log.action === 'tool_result'">
                     <div class="result-wrapper" :class="'result-' + log.details?.tool_name">
-                      <!-- Hide result-meta for interview_agents as it's shown in the component header -->
-                      <div v-if="log.details?.tool_name !== 'interview_agents'" class="result-meta">
+                      <!-- Hide result-meta for tools that show stats in their own header -->
+                      <div v-if="!['interview_agents', 'insight_forge', 'panorama_search', 'quick_search'].includes(log.details?.tool_name)" class="result-meta">
                         <span class="result-tool">{{ getToolDisplayName(log.details?.tool_name) }}</span>
                         <span class="result-size">{{ formatResultSize(log.details?.result_length) }}</span>
                       </div>
@@ -270,17 +270,17 @@
                         
                         <!-- Insight Forge -->
                         <template v-else-if="log.details?.tool_name === 'insight_forge'">
-                          <InsightDisplay :result="parseInsightForge(log.details.result)" />
+                          <InsightDisplay :result="parseInsightForge(log.details.result)" :result-length="log.details?.result_length" />
                         </template>
                         
                         <!-- Panorama Search -->
                         <template v-else-if="log.details?.tool_name === 'panorama_search'">
-                          <PanoramaDisplay :result="parsePanorama(log.details.result)" />
+                          <PanoramaDisplay :result="parsePanorama(log.details.result)" :result-length="log.details?.result_length" />
                         </template>
                         
                         <!-- Quick Search -->
                         <template v-else-if="log.details?.tool_name === 'quick_search'">
-                          <QuickSearchDisplay :result="parseQuickSearch(log.details.result)" />
+                          <QuickSearchDisplay :result="parseQuickSearch(log.details.result)" :result-length="log.details?.result_length" />
                         </template>
                         
                         <!-- Default -->
@@ -933,13 +933,22 @@ const parseQuickSearch = (text) => {
 
 // Insight Display Component - Enhanced with full data rendering (Interview-like style)
 const InsightDisplay = {
-  props: ['result'],
+  props: ['result', 'resultLength'],
   setup(props) {
     const activeTab = ref('facts') // 'facts', 'entities', 'relations', 'subqueries'
     const expandedFacts = ref(false)
     const expandedEntities = ref(false)
     const expandedRelations = ref(false)
     const INITIAL_SHOW_COUNT = 5
+    
+    // Format result size for display
+    const formatSize = (length) => {
+      if (!length) return ''
+      if (length >= 1000) {
+        return `${(length / 1000).toFixed(1)}k chars`
+      }
+      return `${length} chars`
+    }
     
     return () => h('div', { class: 'insight-display' }, [
       // Header Section - like interview header
@@ -960,7 +969,9 @@ const InsightDisplay = {
             h('span', { class: 'stat-item' }, [
               h('span', { class: 'stat-value' }, props.result.stats.relationships || props.result.relations.length),
               h('span', { class: 'stat-label' }, 'Relations')
-            ])
+            ]),
+            props.resultLength && h('span', { class: 'stat-divider' }, '·'),
+            props.resultLength && h('span', { class: 'stat-size' }, formatSize(props.resultLength))
           ])
         ]),
         props.result.query && h('div', { class: 'header-topic' }, props.result.query),
@@ -976,7 +987,7 @@ const InsightDisplay = {
           class: ['insight-tab', { active: activeTab.value === 'facts' }],
           onClick: () => { activeTab.value = 'facts' }
         }, [
-          h('span', { class: 'tab-label' }, `关键事实 (${props.result.facts.length})`)
+          h('span', { class: 'tab-label' }, `当前关键记忆 (${props.result.facts.length})`)
         ]),
         h('button', {
           class: ['insight-tab', { active: activeTab.value === 'entities' }],
@@ -1003,7 +1014,7 @@ const InsightDisplay = {
         // Facts Tab
         activeTab.value === 'facts' && props.result.facts.length > 0 && h('div', { class: 'facts-panel' }, [
           h('div', { class: 'panel-header' }, [
-            h('span', { class: 'panel-title' }, '关键事实'),
+            h('span', { class: 'panel-title' }, '时序记忆中所关联的最新关键事实'),
             h('span', { class: 'panel-count' }, `共 ${props.result.facts.length} 条`)
           ]),
           h('div', { class: 'facts-list' },
@@ -1026,22 +1037,16 @@ const InsightDisplay = {
             h('span', { class: 'panel-title' }, '核心实体'),
             h('span', { class: 'panel-count' }, `共 ${props.result.entities.length} 个`)
           ]),
-          h('div', { class: 'entities-list' },
-            (expandedEntities.value ? props.result.entities : props.result.entities.slice(0, INITIAL_SHOW_COUNT)).map((entity, i) => 
-              h('div', { class: 'entity-card', key: i }, [
-                h('div', { class: 'entity-header' }, [
-                  h('div', { class: 'entity-avatar' }, entity.name ? entity.name.charAt(0) : '?'),
-                  h('div', { class: 'entity-info' }, [
-                    h('div', { class: 'entity-name' }, entity.name),
-                    h('div', { class: 'entity-type' }, entity.type)
-                  ]),
-                  entity.relatedFactsCount > 0 && h('span', { class: 'entity-fact-count' }, `${entity.relatedFactsCount} 条相关`)
-                ]),
-                entity.summary && h('div', { class: 'entity-summary' }, entity.summary)
+          h('div', { class: 'entities-grid' },
+            (expandedEntities.value ? props.result.entities : props.result.entities.slice(0, 12)).map((entity, i) => 
+              h('div', { class: 'entity-tag', key: i, title: entity.summary || '' }, [
+                h('span', { class: 'entity-name' }, entity.name),
+                h('span', { class: 'entity-type' }, entity.type),
+                entity.relatedFactsCount > 0 && h('span', { class: 'entity-fact-count' }, `${entity.relatedFactsCount}条`)
               ])
             )
           ),
-          props.result.entities.length > INITIAL_SHOW_COUNT && h('button', {
+          props.result.entities.length > 12 && h('button', {
             class: 'expand-btn',
             onClick: () => { expandedEntities.value = !expandedEntities.value }
           }, expandedEntities.value ? `收起 ▲` : `展开全部 ${props.result.entities.length} 个 ▼`)
@@ -1075,7 +1080,7 @@ const InsightDisplay = {
         // Sub-queries Tab
         activeTab.value === 'subqueries' && props.result.subQueries.length > 0 && h('div', { class: 'subqueries-panel' }, [
           h('div', { class: 'panel-header' }, [
-            h('span', { class: 'panel-title' }, '分析子问题'),
+            h('span', { class: 'panel-title' }, '漂移查询生成分析子问题'),
             h('span', { class: 'panel-count' }, `共 ${props.result.subQueries.length} 个`)
           ]),
           h('div', { class: 'subqueries-list' },
@@ -1089,7 +1094,7 @@ const InsightDisplay = {
         ]),
         
         // Empty state
-        activeTab.value === 'facts' && props.result.facts.length === 0 && h('div', { class: 'empty-state' }, '暂无关键事实'),
+        activeTab.value === 'facts' && props.result.facts.length === 0 && h('div', { class: 'empty-state' }, '暂无当前关键记忆'),
         activeTab.value === 'entities' && props.result.entities.length === 0 && h('div', { class: 'empty-state' }, '暂无核心实体'),
         activeTab.value === 'relations' && props.result.relations.length === 0 && h('div', { class: 'empty-state' }, '暂无关系链')
       ])
@@ -1099,13 +1104,22 @@ const InsightDisplay = {
 
 // Panorama Display Component - Enhanced with Active/Historical tabs
 const PanoramaDisplay = {
-  props: ['result'],
+  props: ['result', 'resultLength'],
   setup(props) {
     const activeTab = ref('active') // 'active', 'historical', 'entities'
     const expandedActive = ref(false)
     const expandedHistorical = ref(false)
     const expandedEntities = ref(false)
     const INITIAL_SHOW_COUNT = 5
+    
+    // Format result size for display
+    const formatSize = (length) => {
+      if (!length) return ''
+      if (length >= 1000) {
+        return `${(length / 1000).toFixed(1)}k chars`
+      }
+      return `${length} chars`
+    }
     
     return () => h('div', { class: 'panorama-display' }, [
       // Header Section
@@ -1121,7 +1135,9 @@ const PanoramaDisplay = {
             h('span', { class: 'stat-item' }, [
               h('span', { class: 'stat-value' }, props.result.stats.edges),
               h('span', { class: 'stat-label' }, 'Edges')
-            ])
+            ]),
+            props.resultLength && h('span', { class: 'stat-divider' }, '·'),
+            props.resultLength && h('span', { class: 'stat-size' }, formatSize(props.resultLength))
           ])
         ]),
         props.result.query && h('div', { class: 'header-topic' }, props.result.query)
@@ -1133,13 +1149,13 @@ const PanoramaDisplay = {
           class: ['panorama-tab', { active: activeTab.value === 'active' }],
           onClick: () => { activeTab.value = 'active' }
         }, [
-          h('span', { class: 'tab-label' }, `当前有效 (${props.result.activeFacts.length})`)
+          h('span', { class: 'tab-label' }, `当前有效记忆 (${props.result.activeFacts.length})`)
         ]),
         h('button', {
           class: ['panorama-tab', { active: activeTab.value === 'historical' }],
           onClick: () => { activeTab.value = 'historical' }
         }, [
-          h('span', { class: 'tab-label' }, `历史记录 (${props.result.historicalFacts.length})`)
+          h('span', { class: 'tab-label' }, `历史记忆 (${props.result.historicalFacts.length})`)
         ]),
         h('button', {
           class: ['panorama-tab', { active: activeTab.value === 'entities' }],
@@ -1154,7 +1170,7 @@ const PanoramaDisplay = {
         // Active Facts Tab
         activeTab.value === 'active' && h('div', { class: 'facts-panel active-facts' }, [
           h('div', { class: 'panel-header' }, [
-            h('span', { class: 'panel-title' }, '当前有效事实'),
+            h('span', { class: 'panel-title' }, '当前有效记忆'),
             h('span', { class: 'panel-count' }, `共 ${props.result.activeFacts.length} 条`)
           ]),
           props.result.activeFacts.length > 0 ? h('div', { class: 'facts-list' },
@@ -1164,7 +1180,7 @@ const PanoramaDisplay = {
                 h('div', { class: 'fact-content' }, fact)
               ])
             )
-          ) : h('div', { class: 'empty-state' }, '暂无当前有效事实'),
+          ) : h('div', { class: 'empty-state' }, '暂无当前有效记忆'),
           props.result.activeFacts.length > INITIAL_SHOW_COUNT && h('button', {
             class: 'expand-btn',
             onClick: () => { expandedActive.value = !expandedActive.value }
@@ -1174,7 +1190,7 @@ const PanoramaDisplay = {
         // Historical Facts Tab
         activeTab.value === 'historical' && h('div', { class: 'facts-panel historical-facts' }, [
           h('div', { class: 'panel-header' }, [
-            h('span', { class: 'panel-title' }, '历史/过期事实'),
+            h('span', { class: 'panel-title' }, '历史记忆'),
             h('span', { class: 'panel-count' }, `共 ${props.result.historicalFacts.length} 条`)
           ]),
           props.result.historicalFacts.length > 0 ? h('div', { class: 'facts-list' },
@@ -1196,7 +1212,7 @@ const PanoramaDisplay = {
                 ])
               ])
             )
-          ) : h('div', { class: 'empty-state' }, '暂无历史记录'),
+          ) : h('div', { class: 'empty-state' }, '暂无历史记忆'),
           props.result.historicalFacts.length > INITIAL_SHOW_COUNT && h('button', {
             class: 'expand-btn',
             onClick: () => { expandedHistorical.value = !expandedHistorical.value }
@@ -1508,7 +1524,7 @@ const InterviewDisplay = {
 
 // Quick Search Display Component - Enhanced with full data rendering
 const QuickSearchDisplay = {
-  props: ['result'],
+  props: ['result', 'resultLength'],
   setup(props) {
     const activeTab = ref('facts') // 'facts', 'edges', 'nodes'
     const expandedFacts = ref(false)
@@ -1519,6 +1535,15 @@ const QuickSearchDisplay = {
     const hasNodes = computed(() => props.result.nodes && props.result.nodes.length > 0)
     const showTabs = computed(() => hasEdges.value || hasNodes.value)
     
+    // Format result size for display
+    const formatSize = (length) => {
+      if (!length) return ''
+      if (length >= 1000) {
+        return `${(length / 1000).toFixed(1)}k chars`
+      }
+      return `${length} chars`
+    }
+    
     return () => h('div', { class: 'quick-search-display' }, [
       // Header Section
       h('div', { class: 'quicksearch-header' }, [
@@ -1528,7 +1553,9 @@ const QuickSearchDisplay = {
             h('span', { class: 'stat-item' }, [
               h('span', { class: 'stat-value' }, props.result.count || props.result.facts.length),
               h('span', { class: 'stat-label' }, 'Results')
-            ])
+            ]),
+            props.resultLength && h('span', { class: 'stat-divider' }, '·'),
+            props.resultLength && h('span', { class: 'stat-size' }, formatSize(props.resultLength))
           ])
         ]),
         props.result.query && h('div', { class: 'header-query' }, [
@@ -4146,6 +4173,12 @@ watch(() => props.reportId, (newId) => {
   margin: 0 4px;
 }
 
+:deep(.insight-header .stat-size) {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #9CA3AF;
+}
+
 :deep(.insight-header .header-topic) {
   font-size: 13px;
   color: #5B21B6;
@@ -4228,12 +4261,17 @@ watch(() => props.reportId, (newId) => {
 }
 
 :deep(.insight-display .facts-list),
-:deep(.insight-display .entities-list),
 :deep(.insight-display .relations-list),
 :deep(.insight-display .subqueries-list) {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+:deep(.insight-display .entities-grid) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 :deep(.insight-display .fact-item) {
@@ -4267,7 +4305,45 @@ watch(() => props.reportId, (newId) => {
   line-height: 1.6;
 }
 
-/* Entity Card Styles */
+/* Entity Tag Styles - Compact multi-column layout */
+:deep(.insight-display .entity-tag) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  cursor: default;
+  transition: all 0.15s ease;
+}
+
+:deep(.insight-display .entity-tag:hover) {
+  background: #F3F4F6;
+  border-color: #D1D5DB;
+}
+
+:deep(.insight-display .entity-tag .entity-name) {
+  font-size: 12px;
+  font-weight: 500;
+  color: #111827;
+}
+
+:deep(.insight-display .entity-tag .entity-type) {
+  font-size: 9px;
+  color: #7C3AED;
+  background: #EDE9FE;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+:deep(.insight-display .entity-tag .entity-fact-count) {
+  font-size: 9px;
+  color: #9CA3AF;
+  margin-left: 2px;
+}
+
+/* Legacy entity card styles for backwards compatibility */
 :deep(.insight-display .entity-card) {
   padding: 12px;
   background: #F9FAFB;
@@ -4281,30 +4357,17 @@ watch(() => props.reportId, (newId) => {
   gap: 10px;
 }
 
-:deep(.insight-display .entity-avatar) {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%);
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 700;
-  color: #FFFFFF;
-}
-
 :deep(.insight-display .entity-info) {
   flex: 1;
 }
 
-:deep(.insight-display .entity-name) {
+:deep(.insight-display .entity-card .entity-name) {
   font-size: 13px;
   font-weight: 600;
   color: #111827;
 }
 
-:deep(.insight-display .entity-type) {
+:deep(.insight-display .entity-card .entity-type) {
   font-size: 10px;
   color: #7C3AED;
   background: #EDE9FE;
@@ -4314,7 +4377,7 @@ watch(() => props.reportId, (newId) => {
   margin-top: 2px;
 }
 
-:deep(.insight-display .entity-fact-count) {
+:deep(.insight-display .entity-card .entity-fact-count) {
   font-size: 10px;
   color: #9CA3AF;
   background: #F3F4F6;
@@ -4495,6 +4558,12 @@ watch(() => props.reportId, (newId) => {
   margin: 0 4px;
 }
 
+:deep(.panorama-header .stat-size) {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #9CA3AF;
+}
+
 :deep(.panorama-header .header-topic) {
   font-size: 13px;
   color: #1E40AF;
@@ -4582,8 +4651,8 @@ watch(() => props.reportId, (newId) => {
 }
 
 :deep(.panorama-display .fact-item.active) {
-  background: #F0FDF4;
-  border-color: #86EFAC;
+  background: #F9FAFB;
+  border-color: #E5E7EB;
 }
 
 :deep(.panorama-display .fact-item.historical) {
@@ -4607,8 +4676,8 @@ watch(() => props.reportId, (newId) => {
 }
 
 :deep(.panorama-display .fact-item.active .fact-number) {
-  background: #16A34A;
-  color: #FFFFFF;
+  background: #E5E7EB;
+  color: #6B7280;
 }
 
 :deep(.panorama-display .fact-item.historical .fact-number) {
@@ -4716,6 +4785,17 @@ watch(() => props.reportId, (newId) => {
   font-size: 10px;
 }
 
+:deep(.quicksearch-header .stat-divider) {
+  color: #FDBA74;
+  margin: 0 4px;
+}
+
+:deep(.quicksearch-header .stat-size) {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #9CA3AF;
+}
+
 :deep(.quicksearch-header .header-query) {
   font-size: 13px;
   color: #9A3412;
@@ -4811,6 +4891,11 @@ watch(() => props.reportId, (newId) => {
   border-radius: 6px;
 }
 
+:deep(.quick-search-display .fact-item.active) {
+  background: #F9FAFB;
+  border-color: #E5E7EB;
+}
+
 :deep(.quick-search-display .fact-number) {
   flex-shrink: 0;
   width: 20px;
@@ -4818,12 +4903,17 @@ watch(() => props.reportId, (newId) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #FDBA74;
+  background: #E5E7EB;
   border-radius: 50%;
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
   font-weight: 700;
-  color: #FFFFFF;
+  color: #6B7280;
+}
+
+:deep(.quick-search-display .fact-item.active .fact-number) {
+  background: #E5E7EB;
+  color: #6B7280;
 }
 
 :deep(.quick-search-display .fact-content) {
