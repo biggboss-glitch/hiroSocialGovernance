@@ -213,8 +213,40 @@
 
                   <!-- Tool Call -->
                   <template v-if="log.action === 'tool_call'">
-                    <div class="tool-badge">
-                      <svg class="tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                    <div class="tool-badge" :class="'tool-' + getToolColor(log.details?.tool_name)">
+                      <!-- Deep Insight - Lightbulb -->
+                      <svg v-if="getToolIcon(log.details?.tool_name) === 'lightbulb'" class="tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.5V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.5A7 7 0 0 0 12 2z"></path>
+                      </svg>
+                      <!-- Panorama Search - Globe -->
+                      <svg v-else-if="getToolIcon(log.details?.tool_name) === 'globe'" class="tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                      </svg>
+                      <!-- Agent Interview - Users -->
+                      <svg v-else-if="getToolIcon(log.details?.tool_name) === 'users'" class="tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path>
+                      </svg>
+                      <!-- Quick Search - Zap -->
+                      <svg v-else-if="getToolIcon(log.details?.tool_name) === 'zap'" class="tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                      </svg>
+                      <!-- Graph Stats - Chart -->
+                      <svg v-else-if="getToolIcon(log.details?.tool_name) === 'chart'" class="tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="20" x2="18" y2="10"></line>
+                        <line x1="12" y1="20" x2="12" y2="4"></line>
+                        <line x1="6" y1="20" x2="6" y2="14"></line>
+                      </svg>
+                      <!-- Entity Query - Database -->
+                      <svg v-else-if="getToolIcon(log.details?.tool_name) === 'database'" class="tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                        <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+                      </svg>
+                      <!-- Default - Tool -->
+                      <svg v-else class="tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
                       </svg>
                       {{ getToolDisplayName(log.details?.tool_name) }}
@@ -222,15 +254,13 @@
                     <div v-if="log.details?.parameters && expandedLogs.has(log.timestamp)" class="tool-params">
                       <pre>{{ formatParams(log.details.parameters) }}</pre>
                     </div>
-                    <button v-if="log.details?.parameters" class="expand-toggle" @click.stop="toggleLogExpand(log)">
-                      {{ expandedLogs.has(log.timestamp) ? 'Hide Params' : 'Show Params' }}
-                    </button>
                   </template>
 
                   <!-- Tool Result -->
                   <template v-if="log.action === 'tool_result'">
                     <div class="result-wrapper" :class="'result-' + log.details?.tool_name">
-                      <div class="result-meta">
+                      <!-- Hide result-meta for interview_agents as it's shown in the component header -->
+                      <div v-if="log.details?.tool_name !== 'interview_agents'" class="result-meta">
                         <span class="result-tool">{{ getToolDisplayName(log.details?.tool_name) }}</span>
                         <span class="result-size">{{ formatResultSize(log.details?.result_length) }}</span>
                       </div>
@@ -239,7 +269,7 @@
                       <div v-if="!showRawResult[log.timestamp]" class="result-structured">
                         <!-- Interview Agents - Special Display -->
                         <template v-if="log.details?.tool_name === 'interview_agents'">
-                          <InterviewDisplay :result="parseInterview(log.details.result)" />
+                          <InterviewDisplay :result="parseInterview(log.details.result)" :result-length="log.details?.result_length" />
                         </template>
                         
                         <!-- Insight Forge -->
@@ -267,10 +297,6 @@
                       <div v-else class="result-raw">
                         <pre>{{ log.details?.result }}</pre>
                       </div>
-                      
-                      <button class="toggle-raw" @click.stop="toggleRawResult(log.timestamp)">
-                        {{ showRawResult[log.timestamp] ? 'Structured View' : 'Raw Output' }}
-                      </button>
                     </div>
                   </template>
 
@@ -295,9 +321,6 @@
                     <div v-if="expandedLogs.has(log.timestamp) && log.details?.response" class="llm-content">
                       <pre>{{ log.details.response }}</pre>
                     </div>
-                    <button v-if="log.details?.response" class="expand-toggle" @click.stop="toggleLogExpand(log)">
-                      {{ expandedLogs.has(log.timestamp) ? 'Hide Response' : 'Show Response' }}
-                    </button>
                   </template>
 
                   <!-- Report Complete -->
@@ -312,9 +335,27 @@
                   </template>
                 </div>
 
-                <!-- Elapsed Time -->
-                <div class="timeline-footer" v-if="log.elapsed_seconds">
-                  <span class="elapsed-badge">+{{ log.elapsed_seconds.toFixed(1) }}s</span>
+                <!-- Footer: Elapsed Time + Action Buttons -->
+                <div class="timeline-footer" v-if="log.elapsed_seconds || (log.action === 'tool_call' && log.details?.parameters) || log.action === 'tool_result' || (log.action === 'llm_response' && log.details?.response)">
+                  <span v-if="log.elapsed_seconds" class="elapsed-badge">+{{ log.elapsed_seconds.toFixed(1) }}s</span>
+                  <span v-else class="elapsed-placeholder"></span>
+                  
+                  <div class="footer-actions">
+                    <!-- Tool Call: Show/Hide Params -->
+                    <button v-if="log.action === 'tool_call' && log.details?.parameters" class="action-btn" @click.stop="toggleLogExpand(log)">
+                      {{ expandedLogs.has(log.timestamp) ? 'Hide Params' : 'Show Params' }}
+                    </button>
+                    
+                    <!-- Tool Result: Raw/Structured View -->
+                    <button v-if="log.action === 'tool_result'" class="action-btn" @click.stop="toggleRawResult(log.timestamp, $event)">
+                      {{ showRawResult[log.timestamp] ? 'Structured View' : 'Raw Output' }}
+                    </button>
+                    
+                    <!-- LLM Response: Show/Hide Response -->
+                    <button v-if="log.action === 'llm_response' && log.details?.response" class="action-btn" @click.stop="toggleLogExpand(log)">
+                      {{ expandedLogs.has(log.timestamp) ? 'Hide Response' : 'Show Response' }}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -375,8 +416,26 @@ const logContent = ref(null)
 const showRawResult = reactive({})
 
 // Toggle functions
-const toggleRawResult = (timestamp) => {
+const toggleRawResult = (timestamp, event) => {
+  // 保存按钮相对于视口的位置
+  const button = event?.target
+  const buttonRect = button?.getBoundingClientRect()
+  const buttonTopBeforeToggle = buttonRect?.top
+  
+  // 切换状态
   showRawResult[timestamp] = !showRawResult[timestamp]
+  
+  // 等待 DOM 更新后，调整滚动位置以保持按钮在相同位置
+  if (button && buttonTopBeforeToggle !== undefined && rightPanel.value) {
+    nextTick(() => {
+      const newButtonRect = button.getBoundingClientRect()
+      const buttonTopAfterToggle = newButtonRect.top
+      const scrollDelta = buttonTopAfterToggle - buttonTopBeforeToggle
+      
+      // 调整滚动位置
+      rightPanel.value.scrollTop += scrollDelta
+    })
+  }
 }
 
 const toggleSectionContent = (idx) => {
@@ -419,17 +478,50 @@ const isLogCollapsed = (log) => {
   return false
 }
 
-// Tool display names (without emojis)
-const getToolDisplayName = (toolName) => {
-  const names = {
-    'insight_forge': 'Deep Insight',
-    'panorama_search': 'Panorama Search',
-    'interview_agents': 'Agent Interview',
-    'quick_search': 'Quick Search',
-    'get_graph_statistics': 'Graph Stats',
-    'get_entities_by_type': 'Entity Query'
+// Tool configurations with display names and colors
+const toolConfig = {
+  'insight_forge': {
+    name: 'Deep Insight',
+    color: 'purple',
+    icon: 'lightbulb' // 灯泡图标 - 代表洞察
+  },
+  'panorama_search': {
+    name: 'Panorama Search',
+    color: 'blue',
+    icon: 'globe' // 地球图标 - 代表全景搜索
+  },
+  'interview_agents': {
+    name: 'Agent Interview',
+    color: 'green',
+    icon: 'users' // 用户图标 - 代表对话
+  },
+  'quick_search': {
+    name: 'Quick Search',
+    color: 'orange',
+    icon: 'zap' // 闪电图标 - 代表快速
+  },
+  'get_graph_statistics': {
+    name: 'Graph Stats',
+    color: 'cyan',
+    icon: 'chart' // 图表图标 - 代表统计
+  },
+  'get_entities_by_type': {
+    name: 'Entity Query',
+    color: 'pink',
+    icon: 'database' // 数据库图标 - 代表实体
   }
-  return names[toolName] || toolName
+}
+
+const getToolDisplayName = (toolName) => {
+  return toolConfig[toolName]?.name || toolName
+}
+
+const getToolColor = (toolName) => {
+  return toolConfig[toolName]?.color || 'gray'
+}
+
+const getToolIcon = (toolName) => {
+  return toolConfig[toolName]?.icon || 'tool'
 }
 
 // Parse functions
@@ -811,8 +903,24 @@ const PanoramaDisplay = {
 
 // Interview Display Component - Conversation Style (Q&A Format)
 const InterviewDisplay = {
-  props: ['result'],
+  props: ['result', 'resultLength'],
   setup(props) {
+    // Format result size for display
+    const formatSize = (length) => {
+      if (!length) return ''
+      if (length >= 1000) {
+        return `${(length / 1000).toFixed(1)}k chars`
+      }
+      return `${length} chars`
+    }
+    
+    // Clean quote text - remove leading list numbers to avoid double numbering
+    const cleanQuoteText = (text) => {
+      if (!text) return ''
+      // Remove leading patterns like "1. ", "2. ", "1、", "（1）", "(1)" etc.
+      return text.replace(/^\s*\d+[\.\、\)）]\s*/, '').trim()
+    }
+    
     const activeIndex = ref(0)
     const expandedAnswers = ref(new Set())
     // 为每个问题-回答对维护独立的平台选择状态
@@ -921,7 +1029,9 @@ const InterviewDisplay = {
             props.result.totalCount > 0 && h('span', { class: 'stat-item' }, [
               h('span', { class: 'stat-value' }, props.result.totalCount),
               h('span', { class: 'stat-label' }, 'Total')
-            ])
+            ]),
+            props.resultLength && h('span', { class: 'stat-divider' }, '·'),
+            props.resultLength && h('span', { class: 'stat-size' }, formatSize(props.resultLength))
           ])
         ]),
         props.result.topic && h('div', { class: 'header-topic' }, props.result.topic)
@@ -986,19 +1096,21 @@ const InterviewDisplay = {
                         class: ['platform-btn', { active: currentPlatform === 'twitter' }],
                         onClick: (e) => { e.stopPropagation(); setPlatformTab(activeIndex.value, qIdx, 'twitter') }
                       }, [
-                        h('svg', { class: 'platform-icon', viewBox: '0 0 24 24', width: 12, height: 12, fill: 'currentColor' }, [
-                          h('path', { d: 'M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z' })
+                        h('svg', { class: 'platform-icon', viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                          h('circle', { cx: '12', cy: '12', r: '10' }),
+                          h('line', { x1: '2', y1: '12', x2: '22', y2: '12' }),
+                          h('path', { d: 'M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z' })
                         ]),
-                        h('span', {}, 'X')
+                        h('span', {}, '世界1')
                       ]),
                       h('button', {
                         class: ['platform-btn', { active: currentPlatform === 'reddit' }],
                         onClick: (e) => { e.stopPropagation(); setPlatformTab(activeIndex.value, qIdx, 'reddit') }
                       }, [
-                        h('svg', { class: 'platform-icon', viewBox: '0 0 24 24', width: 12, height: 12, fill: 'currentColor' }, [
-                          h('path', { d: 'M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z' })
+                        h('svg', { class: 'platform-icon', viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                          h('path', { d: 'M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z' })
                         ]),
-                        h('span', {}, 'Reddit')
+                        h('span', {}, '世界2')
                       ])
                     ])
                   ]),
@@ -1023,17 +1135,26 @@ const InterviewDisplay = {
         props.result.interviews[activeIndex.value]?.quotes?.length > 0 && h('div', { class: 'quotes-section' }, [
           h('div', { class: 'quotes-header' }, 'Key Quotes'),
           h('div', { class: 'quotes-list' },
-            props.result.interviews[activeIndex.value].quotes.slice(0, 3).map((quote, qi) => 
-              h('blockquote', { key: qi, class: 'quote-item' }, quote.length > 200 ? quote.substring(0, 200) + '...' : quote)
-            )
+            props.result.interviews[activeIndex.value].quotes.slice(0, 3).map((quote, qi) => {
+              const cleanedQuote = cleanQuoteText(quote)
+              const displayQuote = cleanedQuote.length > 200 ? cleanedQuote.substring(0, 200) + '...' : cleanedQuote
+              return h('blockquote', { 
+                key: qi, 
+                class: 'quote-item',
+                innerHTML: renderMarkdown(displayQuote)
+              })
+            })
           )
         ])
       ]),
-      
+
       // Summary Section (Collapsible)
       props.result.summary && h('div', { class: 'summary-section' }, [
         h('div', { class: 'summary-header' }, 'Interview Summary'),
-        h('div', { class: 'summary-content' }, props.result.summary.length > 500 ? props.result.summary.substring(0, 500) + '...' : props.result.summary)
+        h('div', { 
+          class: 'summary-content',
+          innerHTML: renderMarkdown(props.result.summary.length > 500 ? props.result.summary.substring(0, 500) + '...' : props.result.summary)
+        })
       ])
     ])
   }
@@ -2253,9 +2374,22 @@ watch(() => props.reportId, (newId) => {
 }
 
 .timeline-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-top: 10px;
   padding-top: 10px;
   border-top: 1px solid #F3F4F6;
+}
+
+.elapsed-placeholder {
+  flex-shrink: 0;
+}
+
+.footer-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .elapsed-badge {
@@ -2381,10 +2515,81 @@ watch(() => props.reportId, (newId) => {
   border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
+  transition: all 0.2s ease;
 }
 
 .tool-icon {
   flex-shrink: 0;
+}
+
+/* Tool Colors - Purple (Deep Insight) */
+.tool-badge.tool-purple {
+  background: linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%);
+  border-color: #C4B5FD;
+  color: #6D28D9;
+}
+.tool-badge.tool-purple .tool-icon {
+  stroke: #7C3AED;
+}
+
+/* Tool Colors - Blue (Panorama Search) */
+.tool-badge.tool-blue {
+  background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
+  border-color: #93C5FD;
+  color: #1D4ED8;
+}
+.tool-badge.tool-blue .tool-icon {
+  stroke: #2563EB;
+}
+
+/* Tool Colors - Green (Agent Interview) */
+.tool-badge.tool-green {
+  background: linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%);
+  border-color: #86EFAC;
+  color: #15803D;
+}
+.tool-badge.tool-green .tool-icon {
+  stroke: #16A34A;
+}
+
+/* Tool Colors - Orange (Quick Search) */
+.tool-badge.tool-orange {
+  background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
+  border-color: #FDBA74;
+  color: #C2410C;
+}
+.tool-badge.tool-orange .tool-icon {
+  stroke: #EA580C;
+}
+
+/* Tool Colors - Cyan (Graph Stats) */
+.tool-badge.tool-cyan {
+  background: linear-gradient(135deg, #ECFEFF 0%, #CFFAFE 100%);
+  border-color: #67E8F9;
+  color: #0E7490;
+}
+.tool-badge.tool-cyan .tool-icon {
+  stroke: #0891B2;
+}
+
+/* Tool Colors - Pink (Entity Query) */
+.tool-badge.tool-pink {
+  background: linear-gradient(135deg, #FDF2F8 0%, #FCE7F3 100%);
+  border-color: #F9A8D4;
+  color: #BE185D;
+}
+.tool-badge.tool-pink .tool-icon {
+  stroke: #DB2777;
+}
+
+/* Tool Colors - Gray (Default) */
+.tool-badge.tool-gray {
+  background: linear-gradient(135deg, #F9FAFB 0%, #F3F4F6 100%);
+  border-color: #D1D5DB;
+  color: #374151;
+}
+.tool-badge.tool-gray .tool-icon {
+  stroke: #6B7280;
 }
 
 .tool-params {
@@ -2409,19 +2614,24 @@ watch(() => props.reportId, (newId) => {
   padding: 10px;
 }
 
-.expand-toggle {
-  margin-top: 8px;
-  background: transparent;
-  border: none;
-  color: var(--wf-active-text);
+/* Unified Action Buttons */
+.action-btn {
+  background: #F3F4F6;
+  border: 1px solid #E5E7EB;
+  padding: 4px 10px;
+  border-radius: 4px;
   font-size: 11px;
   font-weight: 500;
+  color: #6B7280;
   cursor: pointer;
-  padding: 0;
+  transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
-.expand-toggle:hover {
-  text-decoration: underline;
+.action-btn:hover {
+  background: #E5E7EB;
+  color: #374151;
+  border-color: #D1D5DB;
 }
 
 /* Result Wrapper */
@@ -2480,23 +2690,7 @@ watch(() => props.reportId, (newId) => {
   color: #6B7280;
 }
 
-.toggle-raw {
-  margin-top: 10px;
-  background: rgba(255,255,255,0.7);
-  border: none;
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 500;
-  color: #6B7280;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.toggle-raw:hover {
-  background: rgba(255,255,255,0.9);
-  color: #374151;
-}
+/* Legacy toggle-raw removed - using unified .action-btn */
 
 /* LLM Response */
 .llm-meta {
@@ -2886,6 +3080,12 @@ watch(() => props.reportId, (newId) => {
   font-size: 12px;
 }
 
+:deep(.interview-display .stat-size) {
+  font-size: 11px;
+  color: #9CA3AF;
+  font-family: 'JetBrains Mono', monospace;
+}
+
 :deep(.interview-display .header-topic) {
   margin-top: 4px;
   font-size: 12px;
@@ -2893,66 +3093,85 @@ watch(() => props.reportId, (newId) => {
   line-height: 1.5;
 }
 
-/* Agent Tabs - Minimal pills */
+/* Agent Tabs - Card Style */
 :deep(.interview-display .agent-tabs) {
   display: flex;
   gap: 8px;
-  padding: 0 0 12px 0;
+  padding: 0 0 14px 0;
   background: transparent;
   border-bottom: 1px solid #F3F4F6;
   overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #E5E7EB transparent;
 }
 
 :deep(.interview-display .agent-tabs::-webkit-scrollbar) {
-  height: 2px;
+  height: 4px;
+}
+
+:deep(.interview-display .agent-tabs::-webkit-scrollbar-track) {
+  background: transparent;
 }
 
 :deep(.interview-display .agent-tabs::-webkit-scrollbar-thumb) {
   background: #E5E7EB;
+  border-radius: 2px;
+}
+
+:deep(.interview-display .agent-tabs::-webkit-scrollbar-thumb:hover) {
+  background: #D1D5DB;
 }
 
 :deep(.interview-display .agent-tab) {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 0;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
+  padding: 6px 12px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
   font-size: 12px;
   font-weight: 500;
-  color: #9CA3AF;
+  color: #6B7280;
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
 }
 
 :deep(.interview-display .agent-tab:hover) {
-  color: #6B7280;
+  background: #F3F4F6;
+  border-color: #D1D5DB;
+  color: #374151;
 }
 
 :deep(.interview-display .agent-tab.active) {
-  background: transparent;
-  border-color: #4F46E5;
-  color: #111827;
+  background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+  border-color: #A5B4FC;
+  color: #4338CA;
+  box-shadow: 0 1px 2px rgba(99, 102, 241, 0.1);
 }
 
 :deep(.interview-display .tab-avatar) {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #F3F4F6;
+  background: #E5E7EB;
   color: #6B7280;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   border-radius: 50%;
+  flex-shrink: 0;
+}
+
+:deep(.interview-display .agent-tab:hover .tab-avatar) {
+  background: #D1D5DB;
 }
 
 :deep(.interview-display .agent-tab.active .tab-avatar) {
-  background: #4F46E5;
+  background: #6366F1;
   color: #FFFFFF;
 }
 
@@ -3233,6 +3452,70 @@ watch(() => props.reportId, (newId) => {
   font-size: 13px;
   color: #374151;
   line-height: 1.6;
+}
+
+/* Markdown styles in summary */
+:deep(.interview-display .summary-content h2),
+:deep(.interview-display .summary-content h3),
+:deep(.interview-display .summary-content h4),
+:deep(.interview-display .summary-content h5) {
+  margin: 12px 0 8px 0;
+  font-weight: 600;
+  color: #111827;
+}
+
+:deep(.interview-display .summary-content h2) {
+  font-size: 15px;
+}
+
+:deep(.interview-display .summary-content h3) {
+  font-size: 14px;
+}
+
+:deep(.interview-display .summary-content h4),
+:deep(.interview-display .summary-content h5) {
+  font-size: 13px;
+}
+
+:deep(.interview-display .summary-content p) {
+  margin: 8px 0;
+}
+
+:deep(.interview-display .summary-content strong) {
+  font-weight: 600;
+  color: #111827;
+}
+
+:deep(.interview-display .summary-content em) {
+  font-style: italic;
+}
+
+:deep(.interview-display .summary-content ul),
+:deep(.interview-display .summary-content ol) {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+:deep(.interview-display .summary-content li) {
+  margin: 4px 0;
+}
+
+:deep(.interview-display .summary-content blockquote) {
+  margin: 8px 0;
+  padding-left: 12px;
+  border-left: 3px solid #E5E7EB;
+  color: #6B7280;
+  font-style: italic;
+}
+
+/* Markdown styles in quotes */
+:deep(.interview-display .quote-item strong) {
+  font-weight: 600;
+  color: #374151;
+}
+
+:deep(.interview-display .quote-item em) {
+  font-style: italic;
 }
 
 /* Quick Search Display */
