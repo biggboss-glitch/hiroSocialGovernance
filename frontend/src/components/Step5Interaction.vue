@@ -433,6 +433,7 @@ const showToolsDetail = ref(true)
 // Chat State
 const chatInput = ref('')
 const chatHistory = ref([])
+const chatHistoryCache = ref({}) // 缓存所有对话记录: { 'report_agent': [], 'agent_0': [], 'agent_1': [], ... }
 const isSending = ref(false)
 const chatMessages = ref(null)
 const chatInputRef = ref(null)
@@ -482,13 +483,29 @@ const selectChatTarget = (target) => {
   }
 }
 
+// 保存当前对话记录到缓存
+const saveChatHistory = () => {
+  if (chatHistory.value.length === 0) return
+  
+  if (chatTarget.value === 'report_agent') {
+    chatHistoryCache.value['report_agent'] = [...chatHistory.value]
+  } else if (selectedAgentIndex.value !== null) {
+    chatHistoryCache.value[`agent_${selectedAgentIndex.value}`] = [...chatHistory.value]
+  }
+}
+
 const selectReportAgentChat = () => {
+  // 保存当前对话记录
+  saveChatHistory()
+  
   activeTab.value = 'chat'
   chatTarget.value = 'report_agent'
   selectedAgent.value = null
   selectedAgentIndex.value = null
   showAgentDropdown.value = false
-  chatHistory.value = []
+  
+  // 恢复 Report Agent 的对话记录
+  chatHistory.value = chatHistoryCache.value['report_agent'] || []
 }
 
 const selectSurveyTab = () => {
@@ -507,11 +524,16 @@ const toggleAgentDropdown = () => {
 }
 
 const selectAgent = (agent, idx) => {
+  // 保存当前对话记录
+  saveChatHistory()
+  
   selectedAgent.value = agent
   selectedAgentIndex.value = idx
   chatTarget.value = 'agent'
   showAgentDropdown.value = false
-  chatHistory.value = [] // Reset chat history for new agent
+  
+  // 恢复该 Agent 的对话记录
+  chatHistory.value = chatHistoryCache.value[`agent_${idx}`] || []
   addLog(`选择对话对象: ${agent.username}`)
 }
 
@@ -577,8 +599,12 @@ const renderMarkdown = (content) => {
   html = html.replace(/<p class="md-p">(<ul|<ol|<blockquote|<pre|<hr)/g, '$1')
   html = html.replace(/(<\/ul>|<\/ol>|<\/blockquote>|<\/pre>)<\/p>/g, '$1')
   // 清理列表前后的 <br> 标签
-  html = html.replace(/<br>(<ul|<ol)/g, '$1')
-  html = html.replace(/(<\/ul>|<\/ol>)<br>/g, '$1')
+  html = html.replace(/<br>\s*(<ul|<ol)/g, '$1')
+  html = html.replace(/(<\/ul>|<\/ol>)\s*<br>/g, '$1')
+  // 清理连续的 <br> 标签
+  html = html.replace(/(<br>\s*){2,}/g, '<br>')
+  // 清理列表后紧跟的段落开始标签前的 <br>
+  html = html.replace(/(<\/ol>|<\/ul>)<br>(<p|<div)/g, '$1$2')
   
   return html
 }
@@ -616,6 +642,8 @@ const sendMessage = async () => {
   } finally {
     isSending.value = false
     scrollToBottom()
+    // 自动保存对话记录到缓存
+    saveChatHistory()
   }
 }
 
@@ -1920,6 +1948,42 @@ watch(() => props.simulationId, (newId) => {
 
 .message-text :deep(.md-p:last-child) {
   margin-bottom: 0;
+}
+
+/* 修复有序列表编号 - 使用 CSS 计数器让多个 ol 连续编号 */
+.message-text {
+  counter-reset: list-counter;
+}
+
+.message-text :deep(.md-ol) {
+  list-style: none;
+  padding-left: 0;
+  margin: 8px 0;
+}
+
+.message-text :deep(.md-oli) {
+  counter-increment: list-counter;
+  display: flex;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.message-text :deep(.md-oli)::before {
+  content: counter(list-counter) ".";
+  font-weight: 600;
+  color: #374151;
+  min-width: 20px;
+  flex-shrink: 0;
+}
+
+/* 无序列表样式 */
+.message-text :deep(.md-ul) {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.message-text :deep(.md-li) {
+  margin: 4px 0;
 }
 
 /* Typing Indicator */
