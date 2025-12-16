@@ -148,6 +148,73 @@
         <!-- Chat Mode -->
         <div v-if="activeTab === 'chat'" class="chat-container">
 
+          <!-- Report Agent Tools Card -->
+          <div v-if="chatTarget === 'report_agent'" class="report-agent-tools-card">
+            <div class="tools-card-header">
+              <div class="tools-card-avatar">R</div>
+              <div class="tools-card-info">
+                <div class="tools-card-name">Report Agent - Chat</div>
+                <div class="tools-card-subtitle">报告生成智能体的快速对话版本，可调用 4 种专业工具</div>
+              </div>
+              <button class="tools-card-toggle" @click="showToolsDetail = !showToolsDetail">
+                <svg :class="{ 'is-expanded': showToolsDetail }" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+            </div>
+            <div v-if="showToolsDetail" class="tools-card-body">
+              <div class="tools-grid">
+                <div class="tool-item tool-purple">
+                  <div class="tool-icon-wrapper">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.5V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.5A7 7 0 0 0 12 2z"></path>
+                    </svg>
+                  </div>
+                  <div class="tool-content">
+                    <div class="tool-name">InsightForge 深度归因</div>
+                    <div class="tool-desc">对齐现实世界种子数据与模拟环境状态，结合Global/Local Memory机制，提供跨时空的深度归因分析</div>
+                  </div>
+                </div>
+                <div class="tool-item tool-blue">
+                  <div class="tool-icon-wrapper">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                    </svg>
+                  </div>
+                  <div class="tool-content">
+                    <div class="tool-name">PanoramaSearch 全景追踪</div>
+                    <div class="tool-desc">基于图结构的广度遍历算法，重构事件传播路径，捕获全量信息流动的拓扑结构</div>
+                  </div>
+                </div>
+                <div class="tool-item tool-orange">
+                  <div class="tool-icon-wrapper">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                    </svg>
+                  </div>
+                  <div class="tool-content">
+                    <div class="tool-name">QuickSearch 快速检索</div>
+                    <div class="tool-desc">基于 GraphRAG 的即时查询接口，优化索引效率，用于快速提取具体的节点属性与离散事实</div>
+                  </div>
+                </div>
+                <div class="tool-item tool-green">
+                  <div class="tool-icon-wrapper">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                      <circle cx="9" cy="7" r="4"></circle>
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                  </div>
+                  <div class="tool-content">
+                    <div class="tool-name">InterviewSubAgent 虚拟访谈</div>
+                    <div class="tool-desc">自主式访谈，能够并行与模拟世界中个体进行多轮对话，采集非结构化的观点数据与心理状态</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Agent Profile Card -->
           <div v-if="chatTarget === 'agent' && selectedAgent" class="agent-profile-card">
             <div class="profile-card-header">
@@ -361,6 +428,7 @@ const showAgentDropdown = ref(false)
 const selectedAgent = ref(null)
 const selectedAgentIndex = ref(null)
 const showFullProfile = ref(true)
+const showToolsDetail = ref(true)
 
 // Chat State
 const chatInput = ref('')
@@ -471,11 +539,31 @@ const renderMarkdown = (content) => {
   html = html.replace(/^## (.+)$/gm, '<h3 class="md-h3">$1</h3>')
   html = html.replace(/^# (.+)$/gm, '<h2 class="md-h2">$1</h2>')
   html = html.replace(/^> (.+)$/gm, '<blockquote class="md-quote">$1</blockquote>')
-  html = html.replace(/^- (.+)$/gm, '<li class="md-li">$1</li>')
-  html = html.replace(/(<li class="md-li">[\s\S]*?<\/li>)(\s*<li)/g, '$1$2')
-  html = html.replace(/(<li class="md-li">.*<\/li>)+/g, '<ul class="md-ul">$&</ul>')
-  html = html.replace(/^\d+\. (.+)$/gm, '<li class="md-oli">$1</li>')
-  html = html.replace(/(<li class="md-oli">.*<\/li>)+/g, '<ol class="md-ol">$&</ol>')
+  
+  // 处理列表 - 支持子列表
+  html = html.replace(/^(\s*)- (.+)$/gm, (match, indent, text) => {
+    const level = Math.floor(indent.length / 2)
+    return `<li class="md-li" data-level="${level}">${text}</li>`
+  })
+  html = html.replace(/^(\s*)(\d+)\. (.+)$/gm, (match, indent, num, text) => {
+    const level = Math.floor(indent.length / 2)
+    return `<li class="md-oli" data-level="${level}">${text}</li>`
+  })
+  
+  // 包装无序列表
+  html = html.replace(/(<li class="md-li"[^>]*>.*?<\/li>\s*)+/g, '<ul class="md-ul">$&</ul>')
+  // 包装有序列表
+  html = html.replace(/(<li class="md-oli"[^>]*>.*?<\/li>\s*)+/g, '<ol class="md-ol">$&</ol>')
+  
+  // 清理列表项之间的所有空白
+  html = html.replace(/<\/li>\s+<li/g, '</li><li')
+  // 清理列表开始标签后的空白
+  html = html.replace(/<ul class="md-ul">\s+/g, '<ul class="md-ul">')
+  html = html.replace(/<ol class="md-ol">\s+/g, '<ol class="md-ol">')
+  // 清理列表结束标签前的空白
+  html = html.replace(/\s+<\/ul>/g, '</ul>')
+  html = html.replace(/\s+<\/ol>/g, '</ol>')
+  
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
   html = html.replace(/_(.+?)_/g, '<em>$1</em>')
@@ -488,6 +576,9 @@ const renderMarkdown = (content) => {
   html = html.replace(/(<\/h[2-5]>)<\/p>/g, '$1')
   html = html.replace(/<p class="md-p">(<ul|<ol|<blockquote|<pre|<hr)/g, '$1')
   html = html.replace(/(<\/ul>|<\/ol>|<\/blockquote>|<\/pre>)<\/p>/g, '$1')
+  // 清理列表前后的 <br> 标签
+  html = html.replace(/<br>(<ul|<ol)/g, '$1')
+  html = html.replace(/(<\/ul>|<\/ol>)<br>/g, '$1')
   
   return html
 }
@@ -1286,6 +1377,158 @@ watch(() => props.simulationId, (newId) => {
   overflow: hidden;
 }
 
+/* Report Agent Tools Card */
+.report-agent-tools-card {
+  border-bottom: 1px solid #E5E7EB;
+  background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%);
+}
+
+.tools-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+}
+
+.tools-card-avatar {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  background: linear-gradient(135deg, #1F2937 0%, #374151 100%);
+  color: #FFFFFF;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 600;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(31, 41, 55, 0.2);
+}
+
+.tools-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.tools-card-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1F2937;
+  margin-bottom: 2px;
+}
+
+.tools-card-subtitle {
+  font-size: 12px;
+  color: #6B7280;
+}
+
+.tools-card-toggle {
+  width: 28px;
+  height: 28px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6B7280;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.tools-card-toggle:hover {
+  background: #F9FAFB;
+  border-color: #D1D5DB;
+}
+
+.tools-card-toggle svg {
+  transition: transform 0.3s ease;
+}
+
+.tools-card-toggle svg.is-expanded {
+  transform: rotate(180deg);
+}
+
+.tools-card-body {
+  padding: 0 20px 16px 20px;
+}
+
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.tool-item {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  background: #FFFFFF;
+  border-radius: 10px;
+  border: 1px solid #E5E7EB;
+  transition: all 0.2s ease;
+}
+
+.tool-item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.tool-icon-wrapper {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tool-purple .tool-icon-wrapper {
+  background: rgba(139, 92, 246, 0.1);
+  color: #8B5CF6;
+}
+
+.tool-blue .tool-icon-wrapper {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3B82F6;
+}
+
+.tool-orange .tool-icon-wrapper {
+  background: rgba(249, 115, 22, 0.1);
+  color: #F97316;
+}
+
+.tool-green .tool-icon-wrapper {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22C55E;
+}
+
+.tool-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.tool-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1F2937;
+  margin-bottom: 4px;
+}
+
+.tool-desc {
+  font-size: 11px;
+  color: #6B7280;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 /* Agent Profile Card */
 .agent-profile-card {
   border-bottom: 1px solid #E5E7EB;
@@ -1653,10 +1896,10 @@ watch(() => props.simulationId, (newId) => {
 }
 
 .message-text {
-  padding: 12px 16px;
+  padding: 10px 14px;
   border-radius: 12px;
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .chat-message.user .message-text {
@@ -1671,11 +1914,19 @@ watch(() => props.simulationId, (newId) => {
   border-bottom-left-radius: 4px;
 }
 
+.message-text :deep(.md-p) {
+  margin: 0;
+}
+
+.message-text :deep(.md-p:last-child) {
+  margin-bottom: 0;
+}
+
 /* Typing Indicator */
 .typing-indicator {
   display: flex;
   gap: 4px;
-  padding: 12px 16px;
+  padding: 10px 14px;
   background: #F3F4F6;
   border-radius: 12px;
   border-bottom-left-radius: 4px;
