@@ -704,11 +704,32 @@ const sendToAgent = async (message) => {
   })
   
   if (res.success && res.data) {
-    const results = res.data.results || res.data
-    if (results && results.length > 0) {
+    // 正确的数据路径: res.data.result.results 是一个对象字典
+    // 格式: {"twitter_0": {...}, "reddit_0": {...}} 或单平台 {"reddit_0": {...}}
+    const resultData = res.data.result || res.data
+    const resultsDict = resultData.results || resultData
+    
+    // 将对象字典转换为数组，优先获取 reddit 平台的回复
+    let responseContent = null
+    const agentId = selectedAgentIndex.value
+    
+    if (typeof resultsDict === 'object' && !Array.isArray(resultsDict)) {
+      // 优先使用 reddit 平台回复，其次 twitter
+      const redditKey = `reddit_${agentId}`
+      const twitterKey = `twitter_${agentId}`
+      const agentResult = resultsDict[redditKey] || resultsDict[twitterKey] || Object.values(resultsDict)[0]
+      if (agentResult) {
+        responseContent = agentResult.response || agentResult.answer
+      }
+    } else if (Array.isArray(resultsDict) && resultsDict.length > 0) {
+      // 兼容数组格式
+      responseContent = resultsDict[0].response || resultsDict[0].answer
+    }
+    
+    if (responseContent) {
       chatHistory.value.push({
         role: 'assistant',
-        content: results[0].response || results[0].answer || '无响应',
+        content: responseContent,
         timestamp: new Date().toISOString()
       })
       addLog(`${selectedAgent.value.username} 已回复`)
@@ -767,18 +788,46 @@ const submitSurvey = async () => {
     })
     
     if (res.success && res.data) {
-      const results = res.data.results || res.data
-      surveyResults.value = results.map((result, i) => {
-        const agentIdx = interviews[i].agent_id
+      // 正确的数据路径: res.data.result.results 是一个对象字典
+      // 格式: {"twitter_0": {...}, "reddit_0": {...}, "twitter_1": {...}, ...}
+      const resultData = res.data.result || res.data
+      const resultsDict = resultData.results || resultData
+      
+      // 将对象字典转换为数组格式
+      const surveyResultsList = []
+      
+      for (const interview of interviews) {
+        const agentIdx = interview.agent_id
         const agent = profiles.value[agentIdx]
-        return {
+        
+        // 优先使用 reddit 平台回复，其次 twitter
+        let responseContent = '无响应'
+        
+        if (typeof resultsDict === 'object' && !Array.isArray(resultsDict)) {
+          const redditKey = `reddit_${agentIdx}`
+          const twitterKey = `twitter_${agentIdx}`
+          const agentResult = resultsDict[redditKey] || resultsDict[twitterKey]
+          if (agentResult) {
+            responseContent = agentResult.response || agentResult.answer || '无响应'
+          }
+        } else if (Array.isArray(resultsDict)) {
+          // 兼容数组格式
+          const matchedResult = resultsDict.find(r => r.agent_id === agentIdx)
+          if (matchedResult) {
+            responseContent = matchedResult.response || matchedResult.answer || '无响应'
+          }
+        }
+        
+        surveyResultsList.push({
           agent_id: agentIdx,
           agent_name: agent?.username || `Agent ${agentIdx}`,
           profession: agent?.profession,
           question: surveyQuestion.value.trim(),
-          answer: result.response || result.answer || '无响应'
-        }
-      })
+          answer: responseContent
+        })
+      }
+      
+      surveyResults.value = surveyResultsList
       addLog(`收到 ${surveyResults.value.length} 条回复`)
     } else {
       throw new Error(res.error || '请求失败')
