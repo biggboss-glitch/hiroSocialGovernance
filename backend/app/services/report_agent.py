@@ -499,7 +499,7 @@ class ReportAgent:
     MAX_REFLECTION_ROUNDS = 3
     
     # 对话中的最大工具调用次数
-    MAX_TOOL_CALLS_PER_CHAT = 5
+    MAX_TOOL_CALLS_PER_CHAT = 2
     
     def __init__(
         self, 
@@ -1656,62 +1656,45 @@ class ReportAgent:
         
         chat_history = chat_history or []
         
-        system_prompt = f"""你是一个拥有「上帝视角」的未来预测助手，负责回答关于模拟预测结果的问题。
+        # 获取已生成的报告内容
+        report_content = ""
+        try:
+            report = ReportManager.get_report_by_simulation(self.simulation_id)
+            if report and report.markdown_content:
+                # 限制报告长度，避免上下文过长
+                report_content = report.markdown_content[:15000]
+                if len(report.markdown_content) > 15000:
+                    report_content += "\n\n... [报告内容已截断] ..."
+        except Exception as e:
+            logger.warning(f"获取报告内容失败: {e}")
+        
+        # 构建系统提示
+        system_prompt = f"""你是一个简洁高效的模拟预测助手。
 
-═══════════════════════════════════════════════════════════════
-【预测场景背景】
-═══════════════════════════════════════════════════════════════
-预测条件（模拟需求）: {self.simulation_requirement}
-模拟世界ID: {self.graph_id}
+【背景】
+预测条件: {self.simulation_requirement}
 
-模拟世界是对未来的预演。你的任务是帮助用户理解：在设定条件下，未来会发生什么？各类人群会如何反应？
+【已生成的分析报告】
+{report_content if report_content else "（暂无报告）"}
 
-═══════════════════════════════════════════════════════════════
-【最重要的规则 - 必须遵守】
-═══════════════════════════════════════════════════════════════
+【规则】
+1. 优先基于上述报告内容回答问题
+2. 直接回答问题，避免冗长的思考论述
+3. 仅在报告内容不足以回答时，才调用工具检索更多数据
+4. 回答要简洁、清晰、有条理
 
-1. 【必须调用工具获取预测数据】
-   - 你的回答必须基于模拟世界中的预测结果
-   - 禁止使用你自己的知识来回答问题
-   - 每次回答前至少调用1次工具获取预测数据
-
-2. 【必须引用Agent的原始言行】
-   - Agent的发言和行为是对未来人群行为的预测
-   - 在回答中使用引用格式展示这些预测，例如：
-     > "某类人群会表示：原文内容..."
-   - 这些引用是预测的核心证据
-
-3. 【忠实呈现预测结果】
-   - 回答必须反映模拟世界中的预测结果
-   - 不要添加模拟中不存在的信息
-   - 如果某方面信息不足，如实说明
-
-═══════════════════════════════════════════════════════════════
-【可用检索工具】（最多调用3次）
-═══════════════════════════════════════════════════════════════
-
+【可用工具】（仅在需要时使用，最多调用1-2次）
 {self._get_tools_description()}
-
-【工具使用建议】
-- insight_forge: 用于深度分析，会自动分解问题并多维度检索
-- panorama_search: 用于了解全貌和演变过程
-- quick_search: 用于快速验证某个具体信息
-- interview_agents: 用于采访模拟Agent，获取不同角色的真实观点和看法
 
 【工具调用格式】
 <tool_call>
 {{"name": "工具名称", "parameters": {{"参数名": "参数值"}}}}
 </tool_call>
 
-═══════════════════════════════════════════════════════════════
-【回答要求】
-═══════════════════════════════════════════════════════════════
-
-1. 先调用工具获取模拟数据，再回答问题
-2. 大量引用检索到的原文
-3. 使用 > 格式引用重要内容
-4. 如果信息不足，如实说明限制
-5. 保持专业和客观"""
+【回答风格】
+- 简洁直接，不要长篇大论
+- 使用 > 格式引用关键内容
+- 优先给出结论，再解释原因"""
 
         # 构建消息
         messages = [{"role": "system", "content": system_prompt}]
@@ -1720,48 +1703,27 @@ class ReportAgent:
         for h in chat_history[-10:]:  # 限制历史长度
             messages.append(h)
         
-        # 添加用户消息，强调需要先检索
+        # 添加用户消息
         messages.append({
             "role": "user", 
-            "content": f"""{message}
-
-【提醒】请先调用工具获取模拟数据，再回答问题。推荐使用 insight_forge 进行深度检索。"""
+            "content": message
         })
         
-        # ReACT循环
+        # ReACT循环（简化版）
         tool_calls_made = []
-        max_iterations = 5  # 最大迭代轮数
-        min_tool_calls = 1  # 最少工具调用次数
+        max_iterations = 2  # 减少迭代轮数
         
         for iteration in range(max_iterations):
             response = self.llm.chat(
                 messages=messages,
-                temperature=0.5,
-                max_tokens=2048
+                temperature=0.5
             )
             
             # 解析工具调用
             tool_calls = self._parse_tool_calls(response)
             
             if not tool_calls:
-                # 没有工具调用
-                if len(tool_calls_made) < min_tool_calls and iteration < 2:
-                    # 还没有调用过工具，强烈提示需要先检索
-                    messages.append({"role": "assistant", "content": response})
-                    messages.append({
-                        "role": "user", 
-                        "content": f"""【重要】你还没有调用工具获取模拟数据！
-
-请先调用工具检索相关信息：
-<tool_call>
-{{"name": "insight_forge", "parameters": {{"query": "{message[:100]}"}}}}
-</tool_call>
-
-【记住】回答必须基于模拟结果，不能使用你自己的知识！"""
-                    })
-                    continue
-                
-                # 已有工具调用，清理响应并返回
+                # 没有工具调用，直接返回响应
                 clean_response = re.sub(r'<tool_call>.*?</tool_call>', '', response, flags=re.DOTALL)
                 clean_response = re.sub(r'\[TOOL_CALL\].*?\)', '', clean_response)
                 
@@ -1771,33 +1733,30 @@ class ReportAgent:
                     "sources": [tc.get("parameters", {}).get("query", "") for tc in tool_calls_made]
                 }
             
-            # 执行工具调用
+            # 执行工具调用（限制数量）
             tool_results = []
-            for call in tool_calls:
+            for call in tool_calls[:1]:  # 每轮最多执行1次工具调用
                 if len(tool_calls_made) >= self.MAX_TOOL_CALLS_PER_CHAT:
                     break
                 result = self._execute_tool(call["name"], call.get("parameters", {}))
                 tool_results.append({
                     "tool": call["name"],
-                    "result": result[:2000]  # 增加结果长度限制
+                    "result": result[:1500]  # 限制结果长度
                 })
                 tool_calls_made.append(call)
             
             # 将结果添加到消息
             messages.append({"role": "assistant", "content": response})
-            observation = "═══ 检索结果 ═══\n" + "\n\n".join([
-                f"【{r['tool']}】\n{r['result']}" for r in tool_results
-            ])
+            observation = "\n".join([f"[{r['tool']}结果]\n{r['result']}" for r in tool_results])
             messages.append({
                 "role": "user", 
-                "content": observation + "\n\n请基于以上模拟数据回答问题。\n【重要】请在回答中引用检索到的原文，使用 > 格式。"
+                "content": observation + "\n\n请简洁回答问题。"
             })
         
         # 达到最大迭代，获取最终响应
         final_response = self.llm.chat(
             messages=messages,
-            temperature=0.5,
-            max_tokens=2048
+            temperature=0.5
         )
         
         # 清理响应
