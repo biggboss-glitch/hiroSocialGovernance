@@ -1,31 +1,32 @@
-# Flask框架
+# ===========================================
+# MiroFish Backend Dependencies
+# ===========================================
+# Python 3.11+ required
+# Install: pip install -r requirements.txt
+# ===========================================
+
+# ============= 核心框架 =============
 flask>=3.0.0
-flask-cors>=4.0.0
+flask-cors>=6.0.0
 
-# Zep Cloud SDK
-zep-cloud>=2.0.0
-
-# OpenAI SDK（用于LLM调用）
+# ============= LLM 相关 =============
+# OpenAI SDK（统一使用 OpenAI 格式调用 LLM）
 openai>=1.0.0
 
-# PDF处理
+# ============= Zep Cloud =============
+zep-cloud==3.13.0
+
+# ============= OASIS 社交媒体模拟 =============
+# OASIS 社交模拟框架
+camel-oasis==0.2.5
+camel-ai==0.2.78
+
+# ============= 文件处理 =============
 PyMuPDF>=1.24.0
 
-# 环境变量
+# ============= 工具库 =============
+# 环境变量加载
 python-dotenv>=1.0.0
 
 # 数据验证
 pydantic>=2.0.0
-
-# 文件处理
-werkzeug>=3.0.0
-
-# OASIS社交媒体模拟框架
-oasis-ai>=0.1.0
-camel-ai>=0.2.0
-
-# LangChain框架（用于Report Agent）
-langchain>=0.2.0
-langchain-core>=0.2.0
-langchain-openai>=0.1.0
-
