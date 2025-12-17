@@ -29,18 +29,28 @@ MiroFish/
 
 ### 前置要求
 
-- **Python 3.11+**
-- **Node.js 18+**
-- **[uv](https://docs.astral.sh/uv/)**（Python 包管理器）
+在开始之前，请确保已安装以下工具：
 
-安装 uv：
+| 工具 | 版本要求 | 说明 | 安装检查 |
+|------|---------|------|---------|
+| **Node.js** | 18+ | 前端运行环境，包含 npm | `node -v` |
+| **Python** | 3.11+ | 后端运行环境 | `python --version` |
+| **uv** | 最新版 | Python 包管理器（替代 pip） | `uv --version` |
+
+#### 安装 uv
+
 ```bash
 # macOS/Linux
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Windows
+# Windows (PowerShell)
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# 或使用 Homebrew (macOS)
+brew install uv
 ```
+
+> ⚠️ 安装 uv 后需要**重新打开终端**或执行 `source ~/.zshrc` (macOS/Linux) 使其生效。
 
 ### 配置环境变量
 
@@ -185,6 +195,9 @@ A: 检查后端是否正常运行在 5001 端口，前端开发服务器会自�
 
 ### Q: OASIS 模拟启动失败
 A: 确保已安装 `camel-oasis` 和 `camel-ai` 依赖，且 LLM API 配置正确。
+
+### Q: 运行 `npm run setup:backend` 报错 "uv: command not found"
+A: uv 未安装或未加入 PATH。请先安装 uv（参考前置要求），安装后**重新打开终端**再执行。
 
 ### Q: Windows 上 Python 虚拟环境激活失败
 A: 使用 `.venv\Scripts\activate` 而不是 `source .venv/bin/activate`。
