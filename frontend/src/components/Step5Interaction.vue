@@ -538,7 +538,7 @@ const selectAgent = (agent, idx) => {
   
   // 恢复该 Agent 的对话记录
   chatHistory.value = chatHistoryCache.value[`agent_${idx}`] || []
-  addLog(`选择对话对象: ${agent.username}`)
+  addLog(t('log.selectChatTarget', { name: agent.username }))
 }
 
 const formatTime = (timestamp) => {
@@ -665,7 +665,7 @@ const sendMessage = async () => {
       await sendToAgent(message)
     }
   } catch (err) {
-    addLog(`发送失败: ${err.message}`)
+    addLog(t('log.sendFailed', { error: err.message }))
     chatHistory.value.push({
       role: 'assistant',
       content: t('step5.errorOccurred', { error: err.message }),
@@ -680,7 +680,7 @@ const sendMessage = async () => {
 }
 
 const sendToReportAgent = async (message) => {
-  addLog(`向 Report Agent 发送: ${message.substring(0, 50)}...`)
+  addLog(t('log.sendToReportAgent', { message: message.substring(0, 50) }))
   
   // Build chat history for API
   const historyForApi = chatHistory.value
@@ -703,7 +703,7 @@ const sendToReportAgent = async (message) => {
       content: res.data.response || res.data.answer || t('step5.noResponse'),
       timestamp: new Date().toISOString()
     })
-    addLog('Report Agent 已回复')
+    addLog(t('log.reportAgentReplied'))
   } else {
     throw new Error(res.error || t('step5.requestFailed'))
   }
@@ -714,7 +714,7 @@ const sendToAgent = async (message) => {
     throw new Error(t('step5.selectAgentFirst'))
   }
   
-  addLog(`向 ${selectedAgent.value.username} 发送: ${message.substring(0, 50)}...`)
+  addLog(t('log.sendToAgent', { name: selectedAgent.value.username, message: message.substring(0, 50) }))
   
   // Build prompt with chat history
   let prompt = message
@@ -764,7 +764,7 @@ const sendToAgent = async (message) => {
         content: responseContent,
         timestamp: new Date().toISOString()
       })
-      addLog(`${selectedAgent.value.username} 已回复`)
+      addLog(t('log.agentReplied', { name: selectedAgent.value.username }))
     } else {
       throw new Error(t('step5.noResponse'))
     }
@@ -806,7 +806,7 @@ const submitSurvey = async () => {
   if (selectedAgents.value.size === 0 || !surveyQuestion.value.trim()) return
   
   isSurveying.value = true
-  addLog(`发送问卷给 ${selectedAgents.value.size} 个对象...`)
+  addLog(t('log.sendSurvey', { count: selectedAgents.value.size }))
   
   try {
     const interviews = Array.from(selectedAgents.value).map(idx => ({
@@ -860,12 +860,12 @@ const submitSurvey = async () => {
       }
       
       surveyResults.value = surveyResultsList
-      addLog(`收到 ${surveyResults.value.length} 条回复`)
+      addLog(t('log.receivedReplies', { count: surveyResults.value.length }))
     } else {
       throw new Error(res.error || t('step5.requestFailed'))
     }
   } catch (err) {
-    addLog(`问卷发送失败: ${err.message}`)
+    addLog(t('log.surveySendFailed', { error: err.message }))
   } finally {
     isSurveying.value = false
   }
@@ -876,7 +876,7 @@ const loadReportData = async () => {
   if (!props.reportId) return
   
   try {
-    addLog(`加载报告数据: ${props.reportId}`)
+    addLog(t('log.loadReportData', { id: props.reportId }))
     
     // Get report info
     const reportRes = await getReport(props.reportId)
@@ -885,7 +885,7 @@ const loadReportData = async () => {
       await loadAgentLogs()
     }
   } catch (err) {
-    addLog(`加载报告失败: ${err.message}`)
+    addLog(t('log.loadReportFailed', { error: err.message }))
   }
 }
 
@@ -907,10 +907,10 @@ const loadAgentLogs = async () => {
         }
       })
       
-      addLog('报告数据加载完成')
+      addLog(t('log.reportDataLoaded'))
     }
   } catch (err) {
-    addLog(`加载报告日志失败: ${err.message}`)
+    addLog(t('log.loadReportLogFailed', { error: err.message }))
   }
 }
 
@@ -921,10 +921,10 @@ const loadProfiles = async () => {
     const res = await getSimulationProfilesRealtime(props.simulationId, 'reddit')
     if (res.success && res.data) {
       profiles.value = res.data.profiles || []
-      addLog(`加载了 ${profiles.value.length} 个模拟个体`)
+      addLog(t('log.loadedProfiles', { count: profiles.value.length }))
     }
   } catch (err) {
-    addLog(`加载模拟个体失败: ${err.message}`)
+    addLog(t('log.loadProfilesFailed', { error: err.message }))
   }
 }
 
@@ -938,7 +938,7 @@ const handleClickOutside = (e) => {
 
 // Lifecycle
 onMounted(() => {
-  addLog('Step5 深度互动初始化')
+  addLog(t('log.step5Init'))
   loadReportData()
   loadProfiles()
   document.addEventListener('click', handleClickOutside)
