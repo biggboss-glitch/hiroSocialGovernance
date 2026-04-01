@@ -379,7 +379,7 @@ def build_graph():
                 task_manager.update_task(
                     task_id, 
                     status=TaskStatus.PROCESSING,
-                    message="初始化图谱构建服务..."
+                    message=t('progress.initGraphService')
                 )
                 
                 # 创建图谱构建服务
@@ -388,7 +388,7 @@ def build_graph():
                 # 分块
                 task_manager.update_task(
                     task_id,
-                    message="文本分块中...",
+                    message=t('progress.textChunking'),
                     progress=5
                 )
                 chunks = TextProcessor.split_text(
@@ -401,7 +401,7 @@ def build_graph():
                 # 创建图谱
                 task_manager.update_task(
                     task_id,
-                    message="创建Zep图谱...",
+                    message=t('progress.creatingZepGraph'),
                     progress=10
                 )
                 graph_id = builder.create_graph(name=graph_name)
@@ -413,7 +413,7 @@ def build_graph():
                 # 设置本体
                 task_manager.update_task(
                     task_id,
-                    message="设置本体定义...",
+                    message=t('progress.settingOntology'),
                     progress=15
                 )
                 builder.set_ontology(graph_id, ontology)
@@ -429,7 +429,7 @@ def build_graph():
                 
                 task_manager.update_task(
                     task_id,
-                    message=f"开始添加 {total_chunks} 个文本块...",
+                    message=t('progress.addingChunks', count=total_chunks),
                     progress=15
                 )
                 
@@ -443,7 +443,7 @@ def build_graph():
                 # 等待Zep处理完成（查询每个episode的processed状态）
                 task_manager.update_task(
                     task_id,
-                    message="等待Zep处理数据...",
+                    message=t('progress.waitingZepProcess'),
                     progress=55
                 )
                 
@@ -460,7 +460,7 @@ def build_graph():
                 # 获取图谱数据
                 task_manager.update_task(
                     task_id,
-                    message="获取图谱数据...",
+                    message=t('progress.fetchingGraphData'),
                     progress=95
                 )
                 graph_data = builder.get_graph_data(graph_id)
@@ -477,7 +477,7 @@ def build_graph():
                 task_manager.update_task(
                     task_id,
                     status=TaskStatus.COMPLETED,
-                    message="图谱构建完成",
+                    message=t('progress.graphBuildComplete'),
                     progress=100,
                     result={
                         "project_id": project_id,
@@ -500,7 +500,7 @@ def build_graph():
                 task_manager.update_task(
                     task_id,
                     status=TaskStatus.FAILED,
-                    message=f"构建失败: {str(e)}",
+                    message=t('progress.buildFailed', error=str(e)),
                     error=traceback.format_exc()
                 )
         

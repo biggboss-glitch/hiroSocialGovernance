@@ -508,7 +508,7 @@ def prepare_simulation():
                     task_id,
                     status=TaskStatus.PROCESSING,
                     progress=0,
-                    message="开始准备模拟环境..."
+                    message=t('progress.startPreparingEnv')
                 )
                 
                 # 准备模拟（带进度回调）

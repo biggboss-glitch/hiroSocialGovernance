@@ -17,6 +17,7 @@ from ..utils.logger import get_logger
 from .zep_entity_reader import ZepEntityReader, FilteredEntities
 from .oasis_profile_generator import OasisProfileGenerator, OasisAgentProfile
 from .simulation_config_generator import SimulationConfigGenerator, SimulationParameters
+from ..utils.locale import t
 
 logger = get_logger('mirofish.simulation')
 
@@ -270,12 +271,12 @@ class SimulationManager:
             
             # ========== 阶段1: 读取并过滤实体 ==========
             if progress_callback:
-                progress_callback("reading", 0, "正在连接Zep图谱...")
+                progress_callback("reading", 0, t('progress.connectingZepGraph'))
             
             reader = ZepEntityReader()
             
             if progress_callback:
-                progress_callback("reading", 30, "正在读取节点数据...")
+                progress_callback("reading", 30, t('progress.readingNodeData'))
             
             filtered = reader.filter_defined_entities(
                 graph_id=state.graph_id,
@@ -288,8 +289,8 @@ class SimulationManager:
             
             if progress_callback:
                 progress_callback(
-                    "reading", 100, 
-                    f"完成，共 {filtered.filtered_count} 个实体",
+                    "reading", 100,
+                    t('progress.readingComplete', count=filtered.filtered_count),
                     current=filtered.filtered_count,
                     total=filtered.filtered_count
                 )
@@ -305,8 +306,8 @@ class SimulationManager:
             
             if progress_callback:
                 progress_callback(
-                    "generating_profiles", 0, 
-                    "开始生成...",
+                    "generating_profiles", 0,
+                    t('progress.startGenerating'),
                     current=0,
                     total=total_entities
                 )

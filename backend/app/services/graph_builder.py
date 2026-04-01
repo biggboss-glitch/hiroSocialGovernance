@@ -17,6 +17,7 @@ from ..config import Config
 from ..models.task import TaskManager, TaskStatus
 from ..utils.zep_paging import fetch_all_nodes, fetch_all_edges
 from .text_processor import TextProcessor
+from ..utils.locale import t
 
 
 @dataclass
@@ -109,7 +110,7 @@ class GraphBuilderService:
                 task_id,
                 status=TaskStatus.PROCESSING,
                 progress=5,
-                message="开始构建图谱..."
+                message=t('progress.startBuildingGraph')
             )
             
             # 1. 创建图谱
@@ -117,7 +118,7 @@ class GraphBuilderService:
             self.task_manager.update_task(
                 task_id,
                 progress=10,
-                message=f"图谱已创建: {graph_id}"
+                message=t('progress.graphCreated', graphId=graph_id)
             )
             
             # 2. 设置本体
@@ -125,7 +126,7 @@ class GraphBuilderService:
             self.task_manager.update_task(
                 task_id,
                 progress=15,
-                message="本体已设置"
+                message=t('progress.ontologySet')
             )
             
             # 3. 文本分块
@@ -134,7 +135,7 @@ class GraphBuilderService:
             self.task_manager.update_task(
                 task_id,
                 progress=20,
-                message=f"文本已分割为 {total_chunks} 个块"
+                message=t('progress.textSplit', count=total_chunks)
             )
             
             # 4. 分批发送数据
@@ -151,7 +152,7 @@ class GraphBuilderService:
             self.task_manager.update_task(
                 task_id,
                 progress=60,
-                message="等待Zep处理数据..."
+                message=t('progress.waitingZepProcess')
             )
             
             self._wait_for_episodes(
@@ -167,7 +168,7 @@ class GraphBuilderService:
             self.task_manager.update_task(
                 task_id,
                 progress=90,
-                message="获取图谱信息..."
+                message=t('progress.fetchingGraphInfo')
             )
             
             graph_info = self._get_graph_info(graph_id)
@@ -304,7 +305,7 @@ class GraphBuilderService:
             if progress_callback:
                 progress = (i + len(batch_chunks)) / total_chunks
                 progress_callback(
-                    f"发送第 {batch_num}/{total_batches} 批数据 ({len(batch_chunks)} 块)...",
+                    t('progress.sendingBatch', current=batch_num, total=total_batches, chunks=len(batch_chunks)),
                     progress
                 )
             
@@ -333,7 +334,7 @@ class GraphBuilderService:
                 
             except Exception as e:
                 if progress_callback:
-                    progress_callback(f"批次 {batch_num} 发送失败: {str(e)}", 0)
+                    progress_callback(t('progress.batchFailed', batch=batch_num, error=str(e)), 0)
                 raise
         
         return episode_uuids
@@ -347,7 +348,7 @@ class GraphBuilderService:
         """等待所有 episode 处理完成（通过查询每个 episode 的 processed 状态）"""
         if not episode_uuids:
             if progress_callback:
-                progress_callback("无需等待（没有 episode）", 1.0)
+                progress_callback(t('progress.noEpisodesWait'), 1.0)
             return
         
         start_time = time.time()
@@ -356,13 +357,13 @@ class GraphBuilderService:
         total_episodes = len(episode_uuids)
         
         if progress_callback:
-            progress_callback(f"开始等待 {total_episodes} 个文本块处理...", 0)
+            progress_callback(t('progress.waitingEpisodes', count=total_episodes), 0)
         
         while pending_episodes:
             if time.time() - start_time > timeout:
                 if progress_callback:
                     progress_callback(
-                        f"部分文本块超时，已完成 {completed_count}/{total_episodes}",
+                        t('progress.episodesTimeout', completed=completed_count, total=total_episodes),
                         completed_count / total_episodes
                     )
                 break
@@ -384,7 +385,7 @@ class GraphBuilderService:
             elapsed = int(time.time() - start_time)
             if progress_callback:
                 progress_callback(
-                    f"Zep处理中... {completed_count}/{total_episodes} 完成, {len(pending_episodes)} 待处理 ({elapsed}秒)",
+                    t('progress.zepProcessing', completed=completed_count, total=total_episodes, pending=len(pending_episodes), elapsed=elapsed),
                     completed_count / total_episodes if total_episodes > 0 else 0
                 )
             
@@ -392,7 +393,7 @@ class GraphBuilderService:
                 time.sleep(3)  # 每3秒检查一次
         
         if progress_callback:
-            progress_callback(f"处理完成: {completed_count}/{total_episodes}", 1.0)
+            progress_callback(t('progress.processingComplete', completed=completed_count, total=total_episodes), 1.0)
     
     def _get_graph_info(self, graph_id: str) -> GraphInfo:
         """获取图谱信息"""
