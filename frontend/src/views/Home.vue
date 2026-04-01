@@ -895,3 +895,31 @@ const startSimulation = () => {
   }
 }
 </style>
+
+<style>
+/* English locale adjustments (unscoped to target html[lang]) */
+html[lang="en"] .main-title {
+  font-size: 3.5rem;
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: -1px;
+}
+
+html[lang="en"] .hero-desc {
+  text-align: left;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: 0;
+}
+
+html[lang="en"] .slogan-text {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: 0;
+}
+
+html[lang="en"] .tag-row {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+html[lang="en"] .navbar .nav-links {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+</style>
