@@ -934,7 +934,15 @@ html[lang="en"] .status-section .status-ready {
 
 html[lang="en"] .status-section .metric-value {
   font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 1.5rem;
+  font-size: 1.4rem;
+}
+
+html[lang="en"] .workflow-section .step-title {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+html[lang="en"] .workflow-section .step-desc {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 html[lang="en"] .workflow-section {
