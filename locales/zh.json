@@ -394,7 +394,17 @@
     "sectionDone": "章节 {title} 已完成",
     "assemblingReport": "正在组装完整报告...",
     "reportComplete": "报告生成完成",
-    "reportFailed": "报告生成失败: {error}"
+    "reportFailed": "报告生成失败: {error}",
+    "savingProfiles": "保存Profile文件...",
+    "profilesComplete": "完成，共 {count} 个Profile",
+    "callingLLMConfig": "正在调用LLM生成配置...",
+    "savingConfigFiles": "正在保存配置文件...",
+    "configComplete": "配置生成完成",
+    "generatingTimeConfig": "生成时间配置...",
+    "generatingEventConfig": "生成事件配置和热点话题...",
+    "generatingAgentConfig": "生成Agent配置 ({start}-{end}/{total})...",
+    "generatingPlatformConfig": "生成平台配置...",
+    "zepSearchQuery": "关于{name}的所有信息、活动、事件、关系和背景"
   },
   "log": {
     "preparingGoBack": "准备返回 Step 2，正在关闭模拟...",

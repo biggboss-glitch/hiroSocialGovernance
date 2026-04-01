@@ -352,8 +352,8 @@ class SimulationManager:
             # Reddit 已经在生成过程中实时保存了，这里再保存一次确保完整性
             if progress_callback:
                 progress_callback(
-                    "generating_profiles", 95, 
-                    "保存Profile文件...",
+                    "generating_profiles", 95,
+                    t('progress.savingProfiles'),
                     current=total_entities,
                     total=total_entities
                 )
@@ -375,8 +375,8 @@ class SimulationManager:
             
             if progress_callback:
                 progress_callback(
-                    "generating_profiles", 100, 
-                    f"完成，共 {len(profiles)} 个Profile",
+                    "generating_profiles", 100,
+                    t('progress.profilesComplete', count=len(profiles)),
                     current=len(profiles),
                     total=len(profiles)
                 )
@@ -384,8 +384,8 @@ class SimulationManager:
             # ========== 阶段3: LLM智能生成模拟配置 ==========
             if progress_callback:
                 progress_callback(
-                    "generating_config", 0, 
-                    "正在分析模拟需求...",
+                    "generating_config", 0,
+                    t('progress.analyzingRequirements'),
                     current=0,
                     total=3
                 )
@@ -394,8 +394,8 @@ class SimulationManager:
             
             if progress_callback:
                 progress_callback(
-                    "generating_config", 30, 
-                    "正在调用LLM生成配置...",
+                    "generating_config", 30,
+                    t('progress.callingLLMConfig'),
                     current=1,
                     total=3
                 )
@@ -413,8 +413,8 @@ class SimulationManager:
             
             if progress_callback:
                 progress_callback(
-                    "generating_config", 70, 
-                    "正在保存配置文件...",
+                    "generating_config", 70,
+                    t('progress.savingConfigFiles'),
                     current=2,
                     total=3
                 )
@@ -429,8 +429,8 @@ class SimulationManager:
             
             if progress_callback:
                 progress_callback(
-                    "generating_config", 100, 
-                    "配置生成完成",
+                    "generating_config", 100,
+                    t('progress.configComplete'),
                     current=3,
                     total=3
                 )

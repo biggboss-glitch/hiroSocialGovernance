@@ -394,7 +394,17 @@
     "sectionDone": "Section {title} complete",
     "assemblingReport": "Assembling full report...",
     "reportComplete": "Report generation complete",
-    "reportFailed": "Report generation failed: {error}"
+    "reportFailed": "Report generation failed: {error}",
+    "savingProfiles": "Saving profile files...",
+    "profilesComplete": "Done, {count} profiles generated",
+    "callingLLMConfig": "Calling LLM to generate config...",
+    "savingConfigFiles": "Saving config files...",
+    "configComplete": "Config generation complete",
+    "generatingTimeConfig": "Generating time config...",
+    "generatingEventConfig": "Generating event config and hot topics...",
+    "generatingAgentConfig": "Generating agent config ({start}-{end}/{total})...",
+    "generatingPlatformConfig": "Generating platform config...",
+    "zepSearchQuery": "All information, activities, events, relationships and background about {name}"
   },
   "log": {
     "preparingGoBack": "Preparing to return to Step 2, closing simulation...",
