@@ -409,7 +409,11 @@
     "eventConfigLabel": "事件配置",
     "agentConfigResult": "Agent配置: 成功生成 {count} 个",
     "postAssignResult": "初始帖子分配: {count} 个帖子已分配发布者",
-    "profileGenerated": "[已生成] {name} ({type})"
+    "profileGenerated": "[已生成] {name} ({type})",
+    "readingGraphEntities": "读取图谱实体",
+    "generatingProfiles": "生成Agent人设",
+    "generatingSimConfig": "生成模拟配置",
+    "preparingScripts": "准备模拟脚本"
   },
   "log": {
     "preparingGoBack": "准备返回 Step 2，正在关闭模拟...",

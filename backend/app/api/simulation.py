@@ -533,10 +533,10 @@ def prepare_simulation():
                     
                     # 构建详细进度信息
                     stage_names = {
-                        "reading": "读取图谱实体",
-                        "generating_profiles": "生成Agent人设",
-                        "generating_config": "生成模拟配置",
-                        "copying_scripts": "准备模拟脚本"
+                        "reading": t('progress.readingGraphEntities'),
+                        "generating_profiles": t('progress.generatingProfiles'),
+                        "generating_config": t('progress.generatingSimConfig'),
+                        "copying_scripts": t('progress.preparingScripts')
                     }
                     
                     stage_index = list(stage_weights.keys()).index(stage) + 1 if stage in stage_weights else 1

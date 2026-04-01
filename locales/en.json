@@ -409,7 +409,11 @@
     "eventConfigLabel": "Event Config",
     "agentConfigResult": "Agent Config: {count} generated",
     "postAssignResult": "Post Assignment: {count} posts assigned",
-    "profileGenerated": "[Generated] {name} ({type})"
+    "profileGenerated": "[Generated] {name} ({type})",
+    "readingGraphEntities": "Reading Graph Entities",
+    "generatingProfiles": "Generating Agent Profiles",
+    "generatingSimConfig": "Generating Simulation Config",
+    "preparingScripts": "Preparing Scripts"
   },
   "log": {
     "preparingGoBack": "Preparing to return to Step 2, closing simulation...",
