@@ -937,15 +937,17 @@ html[lang="en"] .status-section .metric-value {
   font-size: 1.4rem;
 }
 
-html[lang="en"] .workflow-section .step-title {
+html[lang="en"] .workflow-list .step-title {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-html[lang="en"] .workflow-section .step-desc {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+html[lang="en"] .workflow-list .step-desc {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  font-size: 0.72rem !important;
+  line-height: 1.4 !important;
 }
 
-html[lang="en"] .workflow-section {
+html[lang="en"] .workflow-list {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 </style>
