@@ -21,6 +21,7 @@ from enum import Enum
 from ..config import Config
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
+from ..utils.locale import get_language_instruction
 from .zep_tools import (
     ZepToolsService, 
     SearchResult, 
@@ -1162,7 +1163,7 @@ class ReportAgent:
         if progress_callback:
             progress_callback("planning", 30, "正在生成报告大纲...")
         
-        system_prompt = PLAN_SYSTEM_PROMPT
+        system_prompt = f"{PLAN_SYSTEM_PROMPT}\n\n{get_language_instruction()}"
         user_prompt = PLAN_USER_PROMPT_TEMPLATE.format(
             simulation_requirement=self.simulation_requirement,
             total_nodes=context.get('graph_statistics', {}).get('total_nodes', 0),
@@ -1258,6 +1259,7 @@ class ReportAgent:
             section_title=section.title,
             tools_description=self._get_tools_description(),
         )
+        system_prompt = f"{system_prompt}\n\n{get_language_instruction()}"
 
         # 构建用户prompt - 每个已完成章节各传入最大4000字
         if previous_sections:
@@ -1805,6 +1807,7 @@ class ReportAgent:
             report_content=report_content if report_content else "（暂无报告）",
             tools_description=self._get_tools_description(),
         )
+        system_prompt = f"{system_prompt}\n\n{get_language_instruction()}"
 
         # 构建消息
         messages = [{"role": "system", "content": system_prompt}]

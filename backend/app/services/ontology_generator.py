@@ -6,6 +6,7 @@
 import json
 from typing import Dict, Any, List, Optional
 from ..utils.llm_client import LLMClient
+from ..utils.locale import get_language_instruction
 
 
 # 本体生成的系统提示词
@@ -188,8 +189,9 @@ class OntologyGenerator:
             additional_context
         )
         
+        system_prompt = f"{ONTOLOGY_SYSTEM_PROMPT}\n\n{get_language_instruction()}"
         messages = [
-            {"role": "system", "content": ONTOLOGY_SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message}
         ]
         

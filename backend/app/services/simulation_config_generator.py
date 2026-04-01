@@ -20,6 +20,7 @@ from openai import OpenAI
 
 from ..config import Config
 from ..utils.logger import get_logger
+from ..utils.locale import get_language_instruction
 from .zep_entity_reader import EntityNode, ZepEntityReader
 
 logger = get_logger('mirofish.simulation_config')
@@ -585,7 +586,8 @@ class SimulationConfigGenerator:
 - reasoning (string): 简要说明为什么这样配置"""
 
         system_prompt = "你是社交媒体模拟专家。返回纯JSON格式，时间配置需符合中国人作息习惯。"
-        
+        system_prompt = f"{system_prompt}\n\n{get_language_instruction()}"
+
         try:
             return self._call_llm_with_retry(prompt, system_prompt)
         except Exception as e:
@@ -701,7 +703,8 @@ class SimulationConfigGenerator:
 }}"""
 
         system_prompt = "你是舆论分析专家。返回纯JSON格式。注意 poster_type 必须精确匹配可用实体类型。"
-        
+        system_prompt = f"{system_prompt}\n\n{get_language_instruction()}"
+
         try:
             return self._call_llm_with_retry(prompt, system_prompt)
         except Exception as e:
@@ -864,7 +867,8 @@ class SimulationConfigGenerator:
 }}"""
 
         system_prompt = "你是社交媒体行为分析专家。返回纯JSON，配置需符合中国人作息习惯。"
-        
+        system_prompt = f"{system_prompt}\n\n{get_language_instruction()}"
+
         try:
             result = self._call_llm_with_retry(prompt, system_prompt)
             llm_configs = {cfg["agent_id"]: cfg for cfg in result.get("agent_configs", [])}
