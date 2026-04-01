@@ -501,7 +501,7 @@
                       </span>
                     </div>
                     <div class="auto-desc">
-                      <p class="highlight-tip" @click="useCustomRounds = true">{{ $t(‘step2.customTip’) }} ➝</p>
+                      <p class="highlight-tip" @click="useCustomRounds = true">{{ $t('step2.customTip') }} ➝</p>
                     </div>
                   </div>
                 </div>
