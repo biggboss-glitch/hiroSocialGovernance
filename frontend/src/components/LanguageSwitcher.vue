@@ -1,5 +1,5 @@
 <template>
-  <div class="language-switcher" :class="{ dark: dark }" ref="switcherRef">
+  <div class="language-switcher" ref="switcherRef">
     <button class="switcher-trigger" @click="toggleDropdown">
       {{ currentLabel }}
       <span class="caret">{{ open ? '▲' : '▼' }}</span>
@@ -22,13 +22,6 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { availableLocales } from '@/i18n/index.js'
-
-const props = defineProps({
-  dark: {
-    type: Boolean,
-    default: false
-  }
-})
 
 const { locale } = useI18n()
 const open = ref(false)
@@ -127,27 +120,5 @@ onUnmounted(() => {
   color: var(--orange, #FF4500);
 }
 
-/* Dark theme (for dark navbar backgrounds) */
-.dark .switcher-trigger {
-  color: var(--white, #FFFFFF);
-  border-color: rgba(255, 255, 255, 0.3);
-}
 
-.dark .switcher-trigger:hover {
-  border-color: rgba(255, 255, 255, 0.6);
-}
-
-.dark .switcher-dropdown {
-  background: var(--black, #000000);
-  border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: none;
-}
-
-.dark .switcher-option {
-  color: var(--white, #FFFFFF);
-}
-
-.dark .switcher-option:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
 </style>

@@ -4,7 +4,7 @@
     <nav class="navbar">
       <div class="nav-brand">MIROFISH</div>
       <div class="nav-links">
-        <LanguageSwitcher dark />
+        <LanguageSwitcher />
         <a href="https://github.com/666ghj/MiroFish" target="_blank" class="github-link">
           {{ $t('nav.visitGithub') }} <span class="arrow">↗</span>
         </a>
@@ -25,16 +25,16 @@
             <span class="gradient-text">{{ $t('home.heroTitle2') }}</span>
           </h1>
           
-          <div class=”hero-desc”>
+          <div class="hero-desc">
             <p>
-              <i18n-t keypath=”home.heroDesc” tag=”span”>
-                <template #brand><span class=”highlight-bold”>{{ $t('home.heroDescBrand') }}</span></template>
-                <template #agentScale><span class=”highlight-orange”>{{ $t('home.heroDescAgentScale') }}</span></template>
-                <template #optimalSolution><span class=”highlight-code”>{{ $t('home.heroDescOptimalSolution') }}</span></template>
+              <i18n-t keypath="home.heroDesc" tag="span">
+                <template #brand><span class="highlight-bold">{{ $t('home.heroDescBrand') }}</span></template>
+                <template #agentScale><span class="highlight-orange">{{ $t('home.heroDescAgentScale') }}</span></template>
+                <template #optimalSolution><span class="highlight-code">{{ $t('home.heroDescOptimalSolution') }}</span></template>
               </i18n-t>
             </p>
-            <p class=”slogan-text”>
-              {{ $t('home.slogan') }}<span class=”blinking-cursor”>_</span>
+            <p class="slogan-text">
+              {{ $t('home.slogan') }}<span class="blinking-cursor">_</span>
             </p>
           </div>
            
