@@ -333,6 +333,8 @@
     "batchInterviewTimeout": "等待批量Interview响应超时: {error}",
     "globalInterviewTimeout": "等待全局Interview响应超时: {error}",
     "envRunning": "环境正在运行，可以接收Interview命令",
+    "envNotRunningShort": "环境未运行或已关闭",
+    "requireGraphIdAndQuery": "请提供 graph_id 和 query",
     "initReportAgent": "初始化Report Agent..."
   }
 }

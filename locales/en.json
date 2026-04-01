@@ -333,6 +333,8 @@
     "batchInterviewTimeout": "Batch interview response timed out: {error}",
     "globalInterviewTimeout": "Global interview response timed out: {error}",
     "envRunning": "Environment is running and ready for Interview commands",
+    "envNotRunningShort": "Environment not running or closed",
+    "requireGraphIdAndQuery": "Please provide graph_id and query",
     "initReportAgent": "Initializing Report Agent..."
   }
 }
