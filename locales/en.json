@@ -245,7 +245,9 @@
     "panelSearchResults": "Search Results",
     "emptySearchResults": "No results found",
     "panelRelatedEdges": "Related Edges",
-    "panelRelatedNodes": "Related Nodes"
+    "panelRelatedNodes": "Related Nodes",
+    "world1": "World 1",
+    "world2": "World 2"
   },
   "step5": {
     "interactiveTools": "Interactive Tools",

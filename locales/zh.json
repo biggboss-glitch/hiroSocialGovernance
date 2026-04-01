@@ -245,7 +245,9 @@
     "panelSearchResults": "搜索结果",
     "emptySearchResults": "未找到相关结果",
     "panelRelatedEdges": "相关关系",
-    "panelRelatedNodes": "相关节点"
+    "panelRelatedNodes": "相关节点",
+    "world1": "世界1",
+    "world2": "世界2"
   },
   "step5": {
     "interactiveTools": "Interactive Tools",
