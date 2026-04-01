@@ -172,7 +172,9 @@
     "genderMale": "男",
     "genderFemale": "女",
     "genderOther": "其他",
-    "yearsOld": "岁"
+    "yearsOld": "岁",
+    "initializing": "初始化",
+    "generating": "生成中"
   },
   "step3": {
     "startGenerateReport": "开始生成结果报告",
@@ -201,7 +203,9 @@
     "stoppingProcess": "正在停止模拟进程...",
     "checkStatusFailed": "检查模拟状态失败: {error}",
     "forceStopSuccess": "模拟已强制停止",
-    "forceStopFailed": "强制停止失败: {error}"
+    "forceStopFailed": "强制停止失败: {error}",
+    "startGenerateReportBtn": "开始生成结果报告",
+    "generatingReportBtn": "启动中..."
   },
   "step4": {
     "generatingSection": "正在生成{title}...",
@@ -237,7 +241,11 @@
     "surveyResults": "调查结果",
     "surveyResultsCount": "{count} 条回复",
     "selectAll": "全选",
-    "clearSelection": "清空"
+    "clearSelection": "清空",
+    "errorOccurred": "抱歉，发生了错误: {error}",
+    "noResponse": "无响应",
+    "requestFailed": "请求失败",
+    "selectAgentFirst": "请先选择一个模拟个体"
   },
   "graph": {
     "panelTitle": "Graph Relationship Visualization",
@@ -246,7 +254,11 @@
     "realtimeUpdating": "实时更新中...",
     "pendingContentHint": "还有少量内容处理中，建议稍后手动刷新图谱",
     "nodeDetails": "Node Details",
-    "relationship": "Relationship"
+    "relationship": "Relationship",
+    "graphDataLoading": "图谱数据加载中...",
+    "waitingOntology": "等待本体生成...",
+    "toggleMaximize": "最大化/还原",
+    "closeHint": "关闭提示"
   },
   "history": {
     "title": "推演记录",
@@ -263,7 +275,11 @@
     "step1Button": "图谱构建",
     "step2Button": "环境搭建",
     "step4Button": "分析报告",
-    "replayHint": "Step3「开始模拟」与 Step5「深度互动」需在运行中启动，不支持历史回放"
+    "replayHint": "Step3「开始模拟」与 Step5「深度互动」需在运行中启动，不支持历史回放",
+    "notStarted": "未开始",
+    "roundsProgress": "{current}/{total} 轮",
+    "untitledSimulation": "未命名模拟",
+    "unknownFile": "未知文件"
   },
   "api": {
     "projectNotFound": "项目不存在: {id}",

@@ -172,7 +172,9 @@
     "genderMale": "Male",
     "genderFemale": "Female",
     "genderOther": "Other",
-    "yearsOld": "years old"
+    "yearsOld": "years old",
+    "initializing": "Initializing",
+    "generating": "Generating"
   },
   "step3": {
     "startGenerateReport": "Generate Result Report",
@@ -201,7 +203,9 @@
     "stoppingProcess": "Stopping simulation process...",
     "checkStatusFailed": "Failed to check simulation status: {error}",
     "forceStopSuccess": "Simulation force stopped",
-    "forceStopFailed": "Force stop failed: {error}"
+    "forceStopFailed": "Force stop failed: {error}",
+    "startGenerateReportBtn": "Generate Result Report",
+    "generatingReportBtn": "Starting..."
   },
   "step4": {
     "generatingSection": "Generating {title}...",
@@ -237,7 +241,11 @@
     "surveyResults": "Survey Results",
     "surveyResultsCount": "{count} responses",
     "selectAll": "Select All",
-    "clearSelection": "Clear"
+    "clearSelection": "Clear",
+    "errorOccurred": "Sorry, an error occurred: {error}",
+    "noResponse": "No response",
+    "requestFailed": "Request failed",
+    "selectAgentFirst": "Please select a simulated individual first"
   },
   "graph": {
     "panelTitle": "Graph Relationship Visualization",
@@ -246,7 +254,11 @@
     "realtimeUpdating": "Updating in real-time...",
     "pendingContentHint": "Some content is still processing. Consider refreshing the graph manually later.",
     "nodeDetails": "Node Details",
-    "relationship": "Relationship"
+    "relationship": "Relationship",
+    "graphDataLoading": "Loading graph data...",
+    "waitingOntology": "Waiting for ontology generation...",
+    "toggleMaximize": "Maximize/Restore",
+    "closeHint": "Close hint"
   },
   "history": {
     "title": "Simulation History",
@@ -263,7 +275,11 @@
     "step1Button": "Graph Build",
     "step2Button": "Env Setup",
     "step4Button": "Analysis Report",
-    "replayHint": "Step 3 'Run Simulation' and Step 5 'Deep Interaction' must be started during runtime and do not support history replay"
+    "replayHint": "Step 3 'Run Simulation' and Step 5 'Deep Interaction' must be started during runtime and do not support history replay",
+    "notStarted": "Not started",
+    "roundsProgress": "{current}/{total} rounds",
+    "untitledSimulation": "Untitled simulation",
+    "unknownFile": "Unknown file"
   },
   "api": {
     "projectNotFound": "Project not found: {id}",
