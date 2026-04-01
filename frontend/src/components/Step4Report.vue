@@ -5153,3 +5153,10 @@ watch(() => props.reportId, (newId) => {
 .log-msg.warning { color: #FFA726; }
 .log-msg.success { color: #66BB6A; }
 </style>
+
+<style>
+/* English locale: smaller report title */
+html[lang="en"] .report-header-block .main-title {
+  font-size: 28px;
+}
+</style>

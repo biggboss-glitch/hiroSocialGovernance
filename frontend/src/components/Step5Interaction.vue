@@ -2575,3 +2575,10 @@ watch(() => props.simulationId, (newId) => {
   margin: 24px 0;
 }
 </style>
+
+<style>
+/* English locale: smaller report title */
+html[lang="en"] .report-header-block .main-title {
+  font-size: 28px;
+}
+</style>

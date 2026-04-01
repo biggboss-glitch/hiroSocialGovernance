@@ -922,4 +922,22 @@ html[lang="en"] .tag-row {
 html[lang="en"] .navbar .nav-links {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
+
+/* Left pane: system status + workflow */
+html[lang="en"] .status-section {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+html[lang="en"] .status-section .status-ready {
+  font-size: 1.6rem;
+}
+
+html[lang="en"] .status-section .metric-value {
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 1.5rem;
+}
+
+html[lang="en"] .workflow-section {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
 </style>
