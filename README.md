@@ -51,7 +51,9 @@ Social media governance is a critical real-world challenge affecting billions of
 ### Installation
 
 ```bash
-# Clone repository
+# Clone from GitHub:
+git clone https://github.com/biggboss-glitch/hiroSocialGovernance.git
+# OR clone directly from Hugging Face:
 git clone https://huggingface.co/spaces/arnold2309/hiroSocialGovernance.git
 cd hiroSocialGovernance
 
