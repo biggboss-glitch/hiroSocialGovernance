@@ -273,7 +273,7 @@ def main():
     port = int(os.getenv("PORT", "7860"))
     host = os.getenv("HOST", "0.0.0.0")
     print(f"Starting Hiro Social Governance Environment on {host}:{port}")
-    uvicorn.run("api.server:app", host=host, port=port)
+    uvicorn.run("server.app:app", host=host, port=port)
 
 # For local testing
 if __name__ == "__main__":
