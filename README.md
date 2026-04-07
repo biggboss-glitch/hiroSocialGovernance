@@ -1,8 +1,8 @@
 ---
 title: Hiro Social Governance
-emoji: \U0001f6e1\ufe0f
-colorFrom: indigo
-colorTo: purple
+emoji: 🚀
+colorFrom: blue
+colorTo: indigo
 sdk: docker
 app_port: 7860
 tags:
