@@ -1,0 +1,33 @@
+{
+  "config": {
+    "api_base_url": "https://integrate.api.nvidia.com/v1",
+    "model_name": "minimaxai/minimax-m2.5"
+  },
+  "results": [
+    {
+      "task": "easy",
+      "steps": 50,
+      "total_reward": -25.5344,
+      "avg_reward": -0.5107,
+      "final_grade": 0.422,
+      "elapsed_time": 818.48
+    },
+    {
+      "task": "medium",
+      "steps": 100,
+      "total_reward": -43.3122,
+      "avg_reward": -0.4331,
+      "final_grade": 0.485,
+      "elapsed_time": 10995.92
+    },
+    {
+      "task": "hard",
+      "steps": 150,
+      "total_reward": -78.9925,
+      "avg_reward": -0.5266,
+      "final_grade": 0.382,
+      "elapsed_time": 1674.11
+    }
+  ],
+  "total_time": 13488.58
+}
