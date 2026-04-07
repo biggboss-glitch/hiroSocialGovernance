@@ -245,6 +245,16 @@ async def run_task(task_id: str, seed: Optional[int] = None) -> Dict[str, Any]:
         result["error"] = str(e)
         log_step(step=1, action="ERROR", reward=0.0, done=True, error=str(e))
 
+    # Always retrieve grade — even on early exit or error
+    try:
+        score = env.get_task_grade()
+    except Exception:
+        pass  # score stays at its last value (or 0.0)
+
+    # Clamp to strictly (0, 1) — validator rejects 0.0 and 1.0
+    EPSILON = 0.001
+    score = max(EPSILON, min(1.0 - EPSILON, score))
+
     elapsed = time.time() - start
     result["elapsed_time"] = elapsed
     result["final_grade"] = score

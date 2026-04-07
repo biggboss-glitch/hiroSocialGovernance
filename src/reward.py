@@ -304,7 +304,10 @@ class Grader:
         if completion_ratio < 0.8:
             grade *= completion_ratio
         
-        return round(max(0.0, min(1.0, grade)), 3)
+        # Clamp to strictly within (0, 1) — hackathon validator rejects 0.0 and 1.0
+        EPSILON = 0.001
+        grade = max(EPSILON, min(1.0 - EPSILON, grade))
+        return round(grade, 3)
     
     @staticmethod
     def get_grade_breakdown(
