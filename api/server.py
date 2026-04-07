@@ -130,7 +130,7 @@ async def root() -> Dict[str, Any]:
 
 
 @app.post("/reset")
-async def reset(request: ResetRequest) -> Dict[str, Any]:
+async def reset(request: Optional[ResetRequest] = None) -> Dict[str, Any]:
     """
     Reset environment and start new episode.
 
@@ -141,6 +141,9 @@ async def reset(request: ResetRequest) -> Dict[str, Any]:
         Initial observation
     """
     global _env
+
+    if request is None:
+        request = ResetRequest()
 
     if _env is None:
         raise HTTPException(status_code=500, detail="Environment not initialized")
