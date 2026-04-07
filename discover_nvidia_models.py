@@ -4,9 +4,12 @@ import os
 import sys
 import json
 
-# Set environment variables
+# Set environment variables (API Key should be in .env)
 os.environ["NVIDIA_API_BASE"] = "https://integrate.api.nvidia.com/v1"
-os.environ["NVIDIA_API_KEY"] = "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"
+# Read from environment, don't hardcode
+api_key = os.getenv("HF_TOKEN") or os.getenv("NVIDIA_API_KEY")
+if api_key:
+    os.environ["NVIDIA_API_KEY"] = api_key
 
 NVIDIA_API_BASE = os.getenv("NVIDIA_API_BASE")
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")

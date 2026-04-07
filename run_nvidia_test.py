@@ -6,7 +6,9 @@ import sys
 # Set environment variables
 os.environ["NVIDIA_API_BASE"] = "https://integrate.api.nvidia.com/v1"
 os.environ["NVIDIA_MODEL_NAME"] = "nemotron"
-os.environ["NVIDIA_API_KEY"] = "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"
+api_key = os.getenv("HF_TOKEN") or os.getenv("NVIDIA_API_KEY")
+if api_key:
+    os.environ["NVIDIA_API_KEY"] = api_key
 
 # Now run the test
 print("NVIDIA API Test")

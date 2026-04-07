@@ -7,7 +7,9 @@ import subprocess
 # Set environment variables
 os.environ["NVIDIA_API_BASE"] = "https://integrate.api.nvidia.com/v1"
 os.environ["NVIDIA_MODEL_NAME"] = "minimaxai/minimax-m2.5"
-os.environ["NVIDIA_API_KEY"] = "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"
+api_key = os.getenv("HF_TOKEN") or os.getenv("NVIDIA_API_KEY")
+if api_key:
+    os.environ["NVIDIA_API_KEY"] = api_key
 
 print("=" * 70)
 print("HIRO SOCIAL GOVERNANCE - FULL INFERENCE PIPELINE")
