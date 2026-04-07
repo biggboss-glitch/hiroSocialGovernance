@@ -31,8 +31,8 @@ root_dir = str(Path(__file__).resolve().parent)
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
-from src.environment import HiroSocialEnv
-from src.models import Action, ActionType, Observation
+from src.environment import HiroSocialEnv  # type: ignore
+from src.models import Action, ActionType, Observation  # type: ignore
 # API configurations strictly following hackathon rules
 API_BASE_URL = os.getenv("API_BASE_URL", "https://integrate.api.nvidia.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "minimaxai/minimax-m2.5")
