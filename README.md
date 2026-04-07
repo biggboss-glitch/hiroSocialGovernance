@@ -43,7 +43,8 @@ Social media governance is a critical real-world challenge affecting billions of
 - ✅ **Dense reward shaping** - Multi-objective reward function
 - ✅ **Rule-based multi-agent system** - 10-50 autonomous agents
 - ✅ **Realistic social dynamics** - Virality, belief updates, trust dynamics
-- ✅ **Baseline inference script** - Reproducible LLM evaluation
+- ✅ **Async parallel inference** - All tasks run simultaneously via `asyncio.gather`
+- ✅ **Smart rule-based fallback** - Instant heuristic decisions when LLM is slow
 - ✅ **Docker + HF Spaces ready** - Easy deployment
 
 ## Quick Start
@@ -254,10 +255,12 @@ Platform trust changes based on moderation:
 
 ## Baseline Inference
 
-Run the baseline LLM agent against all tasks:
+The inference script uses **async parallel execution** — all three tasks (easy, medium, hard) run simultaneously via `asyncio.gather`, cutting total wall-clock time by ~3×.
+
+When the LLM API is slow or unavailable, a **smart rule-based fallback** instantly makes governance decisions based on toxicity/misinformation thresholds, ensuring the pipeline never stalls.
 
 ```bash
-# Using NVIDIA API (configured in .env file)
+# Run ALL tasks in parallel (recommended)
 python inference.py
 
 # Run a specific task
@@ -267,12 +270,12 @@ python inference.py --task easy
 python inference.py --task hard --seed 42
 ```
 
-**Environment Variables** (set in `.env` file):
+**Environment Variables** (set via HF Space secrets or `.env` file):
 
 ```bash
-NVIDIA_API_BASE=https://integrate.api.nvidia.com/v1
-NVIDIA_MODEL_NAME=minimaxai/minimax-m2.5
-NVIDIA_API_KEY=your_nvidia_api_key
+HF_TOKEN=your_api_key
+API_BASE_URL=https://integrate.api.nvidia.com/v1
+MODEL_NAME=minimaxai/minimax-m2.5
 ```
 
 **Expected scores:**
@@ -366,16 +369,18 @@ hiro-social-governance/
 │       ├── medium.py       # Medium task (25 agents)
 │       └── hard.py         # Hard task (50 agents + outbreak)
 │
-├── api/
-│   └── server.py           # FastAPI server for HF Spaces
+├── server/
+│   └── app.py              # FastAPI server for HF Spaces
 │
 ├── tests/
 │   └── test_environment.py # Unit tests
 │
 ├── openenv.yaml            # OpenEnv specification
+├── pyproject.toml          # Project metadata & uv config
+├── uv.lock                 # Locked dependencies
 ├── Dockerfile              # Container configuration
 ├── requirements.txt        # Python dependencies
-├── inference.py            # Baseline inference script
+├── inference.py            # Async parallel inference script
 ├── validate.py             # Pre-submission validation
 └── README.md               # This file
 ```
@@ -410,15 +415,17 @@ Environment variables:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `API_BASE_URL` | LLM API endpoint | `https://api.openai.com/v1` |
-| `MODEL_NAME` | Model identifier | `gpt-3.5-turbo` |
-| `OPENAI_API_KEY` | API key | Required for inference |
+| `HF_TOKEN` | API key (NVIDIA / OpenAI) | Required for inference |
+| `API_BASE_URL` | LLM API endpoint | `https://integrate.api.nvidia.com/v1` |
+| `MODEL_NAME` | Model identifier | `minimaxai/minimax-m2.5` |
 | `PORT` | HTTP port | `7860` |
 | `HOST` | HTTP host | `0.0.0.0` |
 
 ## Performance
 
-- **Runtime**: < 20 minutes for all tasks
+- **Runtime**: ~8-10 minutes for all 3 tasks (async parallel execution)
+- **Per-task time cap**: 8 minutes hard limit
+- **LLM timeout**: 10 seconds per call with rule-based fallback
 - **Memory**: < 512MB RAM
 - **CPU**: Works on 2 vCPU
 - **Dependencies**: All free, open-source packages
