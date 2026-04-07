@@ -1,0 +1,228 @@
+name: hiro-social-governance
+version: "1.0.0"
+description: "Multi-Agent Social Governance Environment - Train AI agents to govern social media platforms by balancing content safety, misinformation control, engagement, and trust"
+author: "Hiro Team"
+tags: ["social-media", "governance", "multi-agent", "moderation", "real-world"]
+
+environment:
+  type: discrete
+  max_episode_steps: 150
+  
+models:
+  observation:
+    type: object
+    required: [step, max_steps, num_agents, active_agents]
+    properties:
+      step:
+        type: integer
+        description: "Current simulation step"
+      max_steps:
+        type: integer
+        description: "Maximum steps for episode"
+      recent_posts:
+        type: array
+        items:
+          type: object
+        description: "Recent posts in network"
+      flagged_posts:
+        type: array
+        items:
+          type: object
+        description: "Flagged posts"
+      num_agents:
+        type: integer
+        description: "Total number of agents"
+      active_agents:
+        type: integer
+        description: "Number of non-suspended agents"
+      network_toxicity:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: "Overall network toxicity level"
+      misinformation_index:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: "Misinformation spread level"
+      engagement_score:
+        type: number
+        description: "Platform engagement score"
+      total_posts:
+        type: integer
+        description: "Total posts in simulation"
+      total_interactions:
+        type: integer
+        description: "Total likes + shares + comments"
+      avg_trust_score:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: "Average agent trust in platform"
+      belief_polarization:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: "Belief polarization (0=unified, 1=polarized)"
+      posts_removed:
+        type: integer
+        description: "Posts removed by moderator"
+      users_warned:
+        type: integer
+        description: "Users warned"
+      users_suspended:
+        type: integer
+        description: "Users suspended"
+      counter_info_injected:
+        type: integer
+        description: "Counter-information posts injected"
+        
+  action:
+    type: object
+    required: [action_type]
+    properties:
+      action_type:
+        type: string
+        enum: [remove_post, flag_post, downrank_post, boost_post, warn_user, suspend_user, inject_counter_info, no_action]
+        description: "Type of moderation action"
+      target_id:
+        type: string
+        description: "Target post or user ID"
+      reason:
+        type: string
+        description: "Reason for action"
+      content:
+        type: string
+        description: "Content for counter-info injection"
+        
+  reward:
+    type: number
+    minimum: -1.0
+    maximum: 1.0
+    description: "Reward value between -1 and 1"
+    
+  reward_detailed:
+    type: object
+    properties:
+      total:
+        type: number
+        minimum: -1.0
+        maximum: 1.0
+      toxicity_reduction:
+        type: number
+        description: "Reward for reducing toxicity"
+      misinformation_control:
+        type: number
+        description: "Reward for controlling misinformation"
+      engagement:
+        type: number
+        description: "Reward for engagement"
+      trust_score:
+        type: number
+        description: "Reward for maintaining trust"
+      over_moderation_penalty:
+        type: number
+        description: "Penalty for over-moderation"
+      feedback:
+        type: string
+        description: "Human-readable explanation"
+
+tasks:
+  - id: easy
+    name: "Small Network Governance"
+    difficulty: easy
+    description: "Manage a small network (10 agents) and control toxic content"
+    num_agents: 10
+    max_steps: 50
+    expected_baseline: 0.60
+    
+  - id: medium
+    name: "Balanced Network Governance"
+    difficulty: medium
+    description: "Manage a medium network (25 agents) balancing moderation and engagement"
+    num_agents: 25
+    max_steps: 100
+    expected_baseline: 0.50
+    
+  - id: hard
+    name: "Crisis Network Governance"
+    difficulty: hard
+    description: "Manage a large network (50 agents) during viral misinformation outbreak"
+    num_agents: 50
+    max_steps: 150
+    viral_outbreak: true
+    expected_baseline: 0.40
+
+reward_formula:
+  description: "Weighted combination of governance objectives"
+  components:
+    toxicity_reduction: 0.30
+    misinformation_control: 0.25
+    engagement: 0.20
+    trust_score: 0.15
+    over_moderation_penalty: -0.10
+
+api:
+  reset:
+    method: POST
+    path: /reset
+    parameters:
+      task:
+        type: string
+        required: true
+        description: "Task identifier (easy, medium, hard)"
+      seed:
+        type: integer
+        required: false
+        description: "Random seed for reproducibility"
+    returns:
+      observation: "Initial observation"
+      
+  step:
+    method: POST
+    path: /step
+    parameters:
+      action:
+        type: object
+        required: true
+        description: "Governance action to execute"
+    returns:
+      observation: "New observation"
+      reward: "Reward value"
+      done: "Episode complete"
+      info: "Additional info"
+      
+  state:
+    method: GET
+    path: /state
+    returns:
+      state: "Current environment state"
+      
+  tasks:
+    method: GET
+    path: /tasks
+    returns:
+      tasks: "List of available tasks"
+      
+  grade:
+    method: GET
+    path: /grade
+    returns:
+      grade: "Final task grade (0.0-1.0)"
+      
+  health:
+    method: GET
+    path: /health
+    returns:
+      status: "Service health status"
+
+resources:
+  memory: "512MB"
+  timeout: "30s"
+  
+docker:
+  base_image: "python:3.11-slim"
+  port: 7860
+  health_check: 
+    path: /health
+    interval: 30s
