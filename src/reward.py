@@ -2,7 +2,7 @@
 
 from typing import Dict, List, Tuple
 
-from src.models import Post
+from src.models import Post  # type: ignore
 
 
 class RewardCalculator:
