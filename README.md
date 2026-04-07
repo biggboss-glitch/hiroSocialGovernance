@@ -52,8 +52,8 @@ Social media governance is a critical real-world challenge affecting billions of
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/hiro-social-governance.git
-cd hiro-social-governance
+git clone https://huggingface.co/spaces/arnold2309/hiroSocialGovernance.git
+cd hiroSocialGovernance
 
 # Create virtual environment
 python -m venv venv
