@@ -267,12 +267,14 @@ async def get_grade() -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Failed to get grade: {str(e)}")
 
 
-# For local testing
-if __name__ == "__main__":
+def main():
+    """Entry point for openenv multi-mode deployment."""
     import uvicorn
-
     port = int(os.getenv("PORT", "7860"))
     host = os.getenv("HOST", "0.0.0.0")
-
     print(f"Starting Hiro Social Governance Environment on {host}:{port}")
-    uvicorn.run(app, host=host, port=port)
+    uvicorn.run("api.server:app", host=host, port=port)
+
+# For local testing
+if __name__ == "__main__":
+    main()
