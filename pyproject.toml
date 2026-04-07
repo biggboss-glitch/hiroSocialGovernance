@@ -7,7 +7,7 @@ name = "hiro-social-governance"
 version = "1.0.0"
 description = "Multi-Agent Social Governance Environment"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "fastapi",
     "uvicorn",
