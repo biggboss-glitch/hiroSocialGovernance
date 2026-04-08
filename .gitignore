@@ -2,3 +2,5 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+CONTEXT.md
+test_validator_flow.py

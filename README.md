@@ -45,6 +45,7 @@ Social media governance is a critical real-world challenge affecting billions of
 - ✅ **Realistic social dynamics** - Virality, belief updates, trust dynamics
 - ✅ **Async parallel inference** - All tasks run simultaneously via `asyncio.gather`
 - ✅ **Smart rule-based fallback** - Instant heuristic decisions when LLM is slow
+- ✅ **4-layer nuclear grade clamping** - Scores always in (0.01, 0.99) with NaN/inf protection
 - ✅ **Docker + HF Spaces ready** - Easy deployment
 
 ## Quick Start
@@ -466,14 +467,15 @@ Apache 2.0 - See [LICENSE](LICENSE) for details.
 ```bibtex
 @software{hiro_social_governance,
   title = {Hiro: Multi-Agent Social Governance Environment},
-  author = {Hiro Team},
-  year = {2024},
-  url = {https://github.com/yourusername/hiro-social-governance}
+  author = {Arnold},
+  year = {2026},
+  url = {https://github.com/biggboss-glitch/hiroSocialGovernance}
 }
 ```
 
 ## Acknowledgments
 
-- Built for the [OpenEnv](https://openenv.dev) framework
+- Built for the [Meta PyTorch x Scaler OpenEnv Hackathon 2026](https://openenv.dev)
+- Deployed on [Hugging Face Spaces](https://huggingface.co/spaces/arnold2309/hiroSocialGovernance)
 - Inspired by real-world content moderation challenges
 - Multi-agent dynamics based on social science research
