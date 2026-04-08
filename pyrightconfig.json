@@ -1,0 +1,17 @@
+{
+  "include": [
+    "."
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    ".pytest_cache",
+    "venv",
+    ".venv"
+  ],
+  "executionEnvironments": [
+    {
+      "root": "."
+    }
+  ]
+}
