@@ -2,10 +2,10 @@
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.models import Action, Observation, Reward, TaskConfig
-from src.reward import Grader
-from src.tasks import TaskRegistry
-from src.tasks.base import BaseTask
+from src.models import Action, Observation, Reward, TaskConfig  # type: ignore
+from src.reward import Grader  # type: ignore
+from src.tasks import TaskRegistry  # type: ignore
+from src.tasks.base import BaseTask  # type: ignore
 
 
 class HiroSocialEnv:
