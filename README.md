@@ -278,13 +278,15 @@ API_BASE_URL=https://integrate.api.nvidia.com/v1
 MODEL_NAME=minimaxai/minimax-m2.5
 ```
 
-**Expected scores:**
+**Actual baseline scores** (using `minimaxai/minimax-m2.5` via NVIDIA API):
 
-| Task | GPT-3.5 | GPT-4 |
-|------|---------|-------|
-| Easy | 0.55-0.65 | 0.65-0.75 |
-| Medium | 0.45-0.55 | 0.55-0.65 |
-| Hard | 0.35-0.45 | 0.45-0.55 |
+| Task | Steps | Grade | Avg Reward | Time |
+|------|-------|-------|------------|------|
+| Easy | 50 | **0.480** | -0.410 | 234s |
+| Medium | 100 | **0.515** | -0.409 | 457s |
+| Hard | 150 | **0.382** | -0.532 | 719s |
+
+**Total wall-clock time: ~12 minutes** (all tasks run in parallel)
 
 ## Docker Deployment
 
@@ -423,8 +425,8 @@ Environment variables:
 
 ## Performance
 
-- **Runtime**: ~8-10 minutes for all 3 tasks (async parallel execution)
-- **Per-task time cap**: 8 minutes hard limit
+- **Runtime**: ~12 minutes for all 3 tasks (async parallel execution)
+- **Per-task time cap**: 25 minutes hard limit (generous safety margin)
 - **LLM timeout**: 10 seconds per call with rule-based fallback
 - **Memory**: < 512MB RAM
 - **CPU**: Works on 2 vCPU
@@ -434,11 +436,11 @@ Environment variables:
 
 The baseline inference script (`inference.py`) evaluates an automated RL agent or LLM logic across the defined tasks. When executed against a common model (e.g. `minimaxai/minimax-m2.5` via NVIDIA NIM or an OpenAI equivalent), expected baselines are approximately:
 
-| Task | Agents | Steps | Focus | Expected Grade |
+| Task | Agents | Steps | Focus | Actual Grade |
 |------|--------|-------|-------|----------------|
-| **Easy** | 10 | 50 | Basic toxicity isolation | ~0.60 - 0.70 |
-| **Medium** | 25 | 100 | Multi-objective optimization | ~0.50 - 0.60 |
-| **Hard** | 50 | 150 | High-pressure crisis response | ~0.40 - 0.50 |
+| **Easy** | 10 | 50 | Basic toxicity isolation | **0.480** |
+| **Medium** | 25 | 100 | Multi-objective optimization | **0.515** |
+| **Hard** | 50 | 150 | High-pressure crisis response | **0.382** |
 
 Run `python inference.py` to continuously benchmark and establish current baseline evaluations for your agents.
 

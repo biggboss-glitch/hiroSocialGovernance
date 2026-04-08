@@ -46,7 +46,7 @@ def check_required_files() -> bool:
         ("src/dynamics.py", "Social dynamics"),
         ("src/reward.py", "Reward calculation"),
         ("src/tasks/__init__.py", "Tasks package"),
-        ("api/server.py", "API server"),
+        ("server/app.py", "API server"),
         ("LICENSE", "License file"),
     ]
 
@@ -301,7 +301,7 @@ def check_api_server() -> bool:
     print("=" * 60)
 
     try:
-        from api.server import app
+        from server.app import app
         print("  [PASS] API server imports successfully")
 
         # Check routes exist

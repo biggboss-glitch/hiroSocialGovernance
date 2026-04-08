@@ -29,9 +29,8 @@ hiro-social-governance/
 │       ├── medium.py             # Medium task (25 agents)
 │       ├── hard.py               # Hard task (50 agents + outbreak)
 │
-├── api/                          # HTTP API (200 lines)
-│   ├── __init__.py
-│   └── server.py                 # FastAPI server for HF Spaces
+├── server/                       # HTTP API (200 lines)
+│   └── app.py                 # FastAPI server for HF Spaces
 │
 ├── tests/                        # Unit tests (250 lines)
 │   ├── __init__.py
@@ -115,9 +114,9 @@ reward =
 
 | Task | Agents | Duration | Challenge | Expected Grade |
 |------|--------|----------|-----------|----------------|
-| **Easy** | 10 | 50 steps | Basic toxicity control | 0.55-0.65 |
-| **Medium** | 25 | 100 steps | Balance moderation & engagement | 0.50-0.60 |
-| **Hard** | 50 | 150 steps | Viral outbreak at step 50 | 0.45-0.55 |
+| **Easy** | 10 | 50 steps | Basic toxicity control | **0.480** |
+| **Medium** | 25 | 100 steps | Balance moderation & engagement | **0.515** |
+| **Hard** | 50 | 150 steps | Viral outbreak at step 50 | **0.382** |
 
 ### 6. Action Space
 
@@ -163,11 +162,12 @@ Observation:
 ✓ Graders:               PASS
 ✓ Inference Script:      PASS
 ✓ Dockerfile:            PASS
+✓ API Server:            PASS
 
-Task Test Results:
-  easy:    50 steps, Grade: 0.557
-  medium:  100 steps, Grade: 0.537
-  hard:    150 steps, Grade: 0.492
+Baseline Inference Results (async parallel, ~12 min total):
+  easy:    50 steps,  Grade: 0.480, Time: 234s
+  medium:  100 steps, Grade: 0.515, Time: 457s
+  hard:    150 steps, Grade: 0.382, Time: 719s
 ```
 
 ## Quick Start
@@ -198,9 +198,9 @@ print(f'Grade: {env.get_task_grade():.3f}')
 "
 
 # Run baseline inference
-export API_BASE_URL="https://api.openai.com/v1"
-export MODEL_NAME="gpt-3.5-turbo"
-export OPENAI_API_KEY="your_key"
+set HF_TOKEN=your_api_key
+set API_BASE_URL=https://integrate.api.nvidia.com/v1
+set MODEL_NAME=minimaxai/minimax-m2.5
 python inference.py
 
 # Docker build
@@ -239,7 +239,9 @@ curl http://localhost:7860/health
 
 ## Performance
 
-- **Runtime**: < 20 minutes for all tasks
+- **Runtime**: ~12 minutes for all 3 tasks (async parallel)
+- **Per-task time cap**: 25 minutes (generous safety margin)
+- **LLM timeout**: 10 seconds per call with rule-based fallback
 - **Memory**: < 512MB RAM
 - **CPU**: Works on 2 vCPU
 - **Dependencies**: All free, open-source

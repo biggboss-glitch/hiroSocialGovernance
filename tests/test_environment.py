@@ -2,8 +2,8 @@
 
 import pytest
 
-from src.environment import HiroSocialEnv
-from src.models import Action, ActionType, Observation
+from src.environment import HiroSocialEnv  # type: ignore
+from src.models import Action, ActionType, Observation  # type: ignore
 
 
 class TestEnvironment:
@@ -328,8 +328,8 @@ class TestAPIServer:
     @pytest.fixture
     def client(self):
         """Create test client."""
-        from httpx import ASGITransport, AsyncClient
-        from api.server import app
+        from httpx import ASGITransport, AsyncClient  # type: ignore
+        from server.app import app  # type: ignore
         import asyncio
 
         transport = ASGITransport(app=app)
@@ -338,8 +338,8 @@ class TestAPIServer:
 
     def test_health_endpoint(self):
         """Test /health endpoint."""
-        from fastapi.testclient import TestClient
-        from api.server import app
+        from fastapi.testclient import TestClient  # type: ignore
+        from server.app import app  # type: ignore
 
         with TestClient(app) as client:
             response = client.get("/health")
@@ -349,8 +349,8 @@ class TestAPIServer:
 
     def test_root_endpoint(self):
         """Test / root endpoint."""
-        from fastapi.testclient import TestClient
-        from api.server import app
+        from fastapi.testclient import TestClient  # type: ignore
+        from server.app import app  # type: ignore
 
         with TestClient(app) as client:
             response = client.get("/")
@@ -360,8 +360,8 @@ class TestAPIServer:
 
     def test_tasks_endpoint(self):
         """Test /tasks endpoint."""
-        from fastapi.testclient import TestClient
-        from api.server import app
+        from fastapi.testclient import TestClient  # type: ignore
+        from server.app import app  # type: ignore
 
         with TestClient(app) as client:
             response = client.get("/tasks")
@@ -372,8 +372,8 @@ class TestAPIServer:
 
     def test_reset_and_step_flow(self):
         """Test /reset -> /step -> /grade flow."""
-        from fastapi.testclient import TestClient
-        from api.server import app
+        from fastapi.testclient import TestClient  # type: ignore
+        from server.app import app  # type: ignore
 
         with TestClient(app) as client:
             # Reset
@@ -406,8 +406,8 @@ class TestAPIServer:
 
     def test_reset_invalid_task(self):
         """Test /reset with invalid task returns 400."""
-        from fastapi.testclient import TestClient
-        from api.server import app
+        from fastapi.testclient import TestClient  # type: ignore
+        from server.app import app  # type: ignore
 
         with TestClient(app) as client:
             response = client.post("/reset", json={"task": "nonexistent"})

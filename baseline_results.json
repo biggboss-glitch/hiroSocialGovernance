@@ -6,28 +6,22 @@
   "results": [
     {
       "task": "easy",
-      "steps": 50,
-      "total_reward": -25.5344,
-      "avg_reward": -0.5107,
-      "final_grade": 0.422,
-      "elapsed_time": 818.48
+      "elapsed_time": 234.11353278160095,
+      "final_grade": 0.48,
+      "avg_reward": -0.4100698145322661
     },
     {
       "task": "medium",
-      "steps": 100,
-      "total_reward": -43.3122,
-      "avg_reward": -0.4331,
-      "final_grade": 0.485,
-      "elapsed_time": 10995.92
+      "elapsed_time": 457.2099361419678,
+      "final_grade": 0.515,
+      "avg_reward": -0.408738974967254
     },
     {
       "task": "hard",
-      "steps": 150,
-      "total_reward": -78.9925,
-      "avg_reward": -0.5266,
+      "elapsed_time": 719.3313865661621,
       "final_grade": 0.382,
-      "elapsed_time": 1674.11
+      "avg_reward": -0.5315094930173523
     }
   ],
-  "total_time": 13488.58
+  "total_time": 721.51
 }

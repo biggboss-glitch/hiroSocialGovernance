@@ -43,7 +43,7 @@ HF_TOKEN = os.getenv("HF_TOKEN", "")
 LLM_TIMEOUT = 10.0        # seconds per LLM call
 MAX_RETRIES = 1            # single retry on failure
 RETRY_DELAY = 1.0          # fixed 1s retry delay
-TASK_TIME_LIMIT = 480.0    # 8 min hard cap per task (3 tasks × 8 = 24 min max)
+TASK_TIME_LIMIT = 1500.0   # 25 min cap per task (tasks run in parallel, so total ~11 min)
 MAX_TOKENS = 150           # keep responses short and fast
 
 
