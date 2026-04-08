@@ -318,12 +318,17 @@ class Grader:
         episode_length: int,
         max_steps: int
     ) -> Dict[str, float]:
-        """Get detailed grade breakdown."""
+        """Get detailed grade breakdown with strictly (0, 1) scores."""
+        def safe(val):
+            import math
+            if not math.isfinite(val): return 0.5
+            return max(0.001, min(0.999, val))
+
         return {
-            "toxicity_score": max(0.0, 1.0 - final_metrics.get("network_toxicity", 0.5) * 2),
-            "misinformation_score": max(0.0, 1.0 - final_metrics.get("misinformation_index", 0.3) * 2.5),
-            "engagement_score": min(1.0, final_metrics.get("engagement_score", 0.0) / 100.0),
-            "trust_score": final_metrics.get("avg_trust_score", 0.5),
-            "polarization_score": max(0.0, 1.0 - final_metrics.get("belief_polarization", 0.5)),
-            "completion_ratio": episode_length / max_steps
+            "toxicity_score": safe(1.0 - final_metrics.get("network_toxicity", 0.5) * 2),
+            "misinformation_score": safe(1.0 - final_metrics.get("misinformation_index", 0.3) * 2.5),
+            "engagement_score": safe(final_metrics.get("engagement_score", 0.0) / 100.0),
+            "trust_score": safe(final_metrics.get("avg_trust_score", 0.5)),
+            "polarization_score": safe(1.0 - final_metrics.get("belief_polarization", 0.5)),
+            "completion_ratio": safe(episode_length / max_steps)
         }

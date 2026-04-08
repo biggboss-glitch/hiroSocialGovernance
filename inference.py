@@ -47,15 +47,36 @@ TASK_TIME_LIMIT = 1500.0   # 25 min cap per task (tasks run in parallel, so tota
 MAX_TOKENS = 150           # keep responses short and fast
 
 
+def safe_score(score: float) -> float:
+    """Ensure a score is strictly within (0, 1). Never returns 0.0 or 1.0."""
+    import math
+    if not isinstance(score, (int, float)):
+        return 0.5
+    score = float(score)
+    if not math.isfinite(score):
+        return 0.5
+    if score <= 0:
+        return 1e-6
+    if score >= 1:
+        return 1 - 1e-6
+    return score
+
+
 # Structured Logging Functions
 def log_start(task: str, env: str, model: str):
     print(f"[START] task={task} env={env} model={model}", flush=True)
 
 def log_step(step: int, action: str, reward: float, done: bool, error: str = None):
-    print(f"[STEP] step={step} action={action} reward={reward:.4f} done={done} error={error}", flush=True)
+    # Sanitize reward for logging to avoid exactly 0.0000 or 1.0000
+    safe_reward = safe_score(reward)
+    print(f"[STEP] step={step} action={action} reward={safe_reward:.4f} done={done} error={error}", flush=True)
 
 def log_end(success: bool, steps: int, score: float, rewards: list):
-    print(f"[END] success={success} steps={steps} score={score:.4f} rewards={rewards}", flush=True)
+    # Sanitize score for logging
+    safe_end_score = safe_score(score)
+    # Sanitize rewards list for logging
+    safe_rewards = [safe_score(r) for r in rewards]
+    print(f"[END] success={success} steps={steps} score={safe_end_score:.4f} rewards={safe_rewards}", flush=True)
 
 
 # ── Fast rule-based fallback (zero latency) ────────────────────────

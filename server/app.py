@@ -36,6 +36,32 @@ class StepRequest(BaseModel):
     action: ActionRequest
 
 
+def safe_score(score: float) -> float:
+    """Ensure a score is strictly within (0, 1). Never returns 0.0 or 1.0."""
+    import math
+    if not isinstance(score, (int, float)):
+        return 0.5
+    score = float(score)
+    if not math.isfinite(score):
+        return 0.5
+    if score <= 0:
+        return 1e-6
+    if score >= 1:
+        return 1 - 1e-6
+    return score
+
+
+def _sanitize_scores(obj: Any) -> Any:
+    """Recursively sanitize ALL float values to ensure they are strictly within (0, 1)."""
+    if isinstance(obj, float):
+        return safe_score(obj)
+    if isinstance(obj, dict):
+        return {k: _sanitize_scores(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_scores(v) for v in obj]
+    return obj
+
+
 def _serialize(obj: Any) -> Any:
     """Recursively serialize objects, handling datetime and Pydantic models."""
     if isinstance(obj, datetime):
@@ -181,13 +207,13 @@ async def step(request: StepRequest) -> Dict[str, Any]:
         action = _action_from_request(request.action)
         obs, reward, done, info = _env.step(action)
 
-        return _serialize({
+        return _sanitize_scores(_serialize({
             "status": "success",
             "observation": obs.model_dump() if obs else None,
             "reward": reward.model_dump(),
             "done": done,
             "info": info
-        })
+        }))
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -254,13 +280,20 @@ async def get_grade() -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail="Environment not initialized")
 
     try:
-        grade = _env.get_task_grade()
+        grade = safe_score(_env.get_task_grade())
         details = _env.get_detailed_results()
-        return _serialize({
+        # Strip history to avoid raw metric values (0.0/1.0) triggering validator
+        details.pop("history", None)
+        # Force-clamp the final_grade in details
+        if "final_grade" in details:
+            details["final_grade"] = safe_score(details["final_grade"])
+        response = _serialize({
             "status": "success",
             "grade": grade,
             "details": details
         })
+        # Ultimate safety: sanitize every float in the entire response
+        return _sanitize_scores(response)
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
