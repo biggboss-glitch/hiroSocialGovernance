@@ -240,10 +240,13 @@ class HiroSocialEnv:
         if not self._is_initialized:
             raise RuntimeError("Environment not initialized. Call reset() first.")
         
+        import math
         grade = self._task.grade()
-        # Safety: ensure score is strictly in (0, 1) — validator rejects 0.0 and 1.0
-        grade = max(0.001, min(0.999, float(grade)))
-        return round(grade, 4)
+        grade = float(grade)
+        if not math.isfinite(grade):
+            grade = 0.5
+        grade = max(0.01, min(0.99, grade))
+        return grade
     
     def get_task_info(self) -> Dict[str, Any]:
         """
@@ -298,11 +301,14 @@ class HiroSocialEnv:
         if not self._is_initialized:
             raise RuntimeError("Environment not initialized. Call reset() first.")
         
-        raw_grade = self._task.grade()
-        clamped_grade = max(0.001, min(0.999, float(raw_grade)))
+        import math
+        raw_grade = float(self._task.grade())
+        if not math.isfinite(raw_grade):
+            raw_grade = 0.5
+        clamped_grade = max(0.01, min(0.99, raw_grade))
         return {
             "task_id": self._task_id,
-            "final_grade": round(clamped_grade, 4),
+            "final_grade": clamped_grade,
             "total_steps": self._task._step_count,
             "max_steps": self._task.config.max_steps,
             "history": self._task._history

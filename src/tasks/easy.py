@@ -153,9 +153,14 @@ class EasyTask(BaseTask):
         return observation, reward, self._is_done, info
     
     def grade(self) -> float:
-        """Calculate final grade."""
+        """Calculate final grade — always returns strictly in (0, 1)."""
+        import math
         final_metrics = self._calculate_metrics()
-        return Grader.grade(final_metrics, self._step_count, self.config.max_steps)
+        raw = Grader.grade(final_metrics, self._step_count, self.config.max_steps)
+        raw = float(raw)
+        if not math.isfinite(raw):
+            raw = 0.5
+        return max(0.01, min(0.99, raw))
     
     def _generate_posts(self):
         """Generate posts from agents."""

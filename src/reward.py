@@ -304,10 +304,13 @@ class Grader:
         if completion_ratio < 0.8:
             grade *= completion_ratio
         
-        # Clamp to strictly within (0, 1) — hackathon validator rejects 0.0 and 1.0
-        EPSILON = 0.001
+        # Nuclear clamp: strictly within (0, 1) — hackathon validator rejects 0.0 and 1.0
+        import math
+        if not math.isfinite(grade):
+            grade = 0.5  # safe fallback for NaN/inf
+        EPSILON = 0.01
         grade = max(EPSILON, min(1.0 - EPSILON, grade))
-        return round(grade, 3)
+        return float(grade)
     
     @staticmethod
     def get_grade_breakdown(
