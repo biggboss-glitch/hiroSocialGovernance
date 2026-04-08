@@ -50,15 +50,16 @@ MAX_TOKENS = 150           # keep responses short and fast
 def safe_score(score: float) -> float:
     """Ensure a score is strictly within (0, 1). Never returns 0.0 or 1.0."""
     import math
+    EPSILON = 0.01
     if not isinstance(score, (int, float)):
         return 0.5
     score = float(score)
     if not math.isfinite(score):
         return 0.5
     if score <= 0:
-        return 1e-6
+        return EPSILON
     if score >= 1:
-        return 1 - 1e-6
+        return 1 - EPSILON
     return score
 
 
