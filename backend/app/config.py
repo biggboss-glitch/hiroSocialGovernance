@@ -64,9 +64,9 @@ class Config:
     REPORT_AGENT_TEMPERATURE = float(os.environ.get('REPORT_AGENT_TEMPERATURE', '0.5'))
     
     @classmethod
-    def validate(cls):
+    def validate(cls) -> list[str]:
         """验证必要配置"""
-        errors = []
+        errors: list[str] = []
         if not cls.LLM_API_KEY:
             errors.append("LLM_API_KEY 未配置")
         if not cls.ZEP_API_KEY:
