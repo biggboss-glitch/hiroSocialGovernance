@@ -11,7 +11,7 @@ from collections.abc import Callable
 from typing import Any
 
 from zep_cloud import InternalServerError
-from zep_cloud.client import Zep
+from .mock_zep import Zep
 
 from .logger import get_logger
 

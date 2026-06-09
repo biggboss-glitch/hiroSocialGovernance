@@ -16,8 +16,8 @@ dependencies = [
     # LLM 相关
     "openai>=1.0.0",
     
-    # Zep Cloud
-    "zep-cloud==3.13.0",
+    # Mem0
+    "mem0ai>=0.1.28",
     
     # OASIS 社交媒体模拟
     "camel-oasis==0.2.5",
@@ -32,6 +32,9 @@ dependencies = [
     # 工具库
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",
+    
+    # Zep Cloud SDK
+    "zep-cloud>=2.0.0",
 ]
 
 [project.optional-dependencies]

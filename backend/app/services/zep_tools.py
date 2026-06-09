@@ -13,7 +13,7 @@ import json
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 
-from zep_cloud.client import Zep
+from ..utils.mock_zep import Zep
 
 from ..config import Config
 from ..utils.logger import get_logger
