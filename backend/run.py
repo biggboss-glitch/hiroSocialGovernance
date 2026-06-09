@@ -19,7 +19,7 @@ from app.config import Config
 
 
 def main():
-    """主函数"""
+    """Main function"""
     errors = Config.validate()
     if errors:
         print("Configuration errors:")

@@ -2,8 +2,8 @@ import axios from 'axios'
 import i18n from '../i18n'
 
 const service = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001',
-  timeout: 300000, // 5分钟超时（本体生成可能需要较长时间）
+  baseURL: import.meta.env.VITE_API_BASE_URL || '',
+  timeout: 300000, // 5分钟超时（Ontology Generation可能需要较长时间）
   headers: {
     'Content-Type': 'application/json'
   }

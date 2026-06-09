@@ -1,6 +1,6 @@
 """
 OASIS模拟运行器
-在后台运行模拟并记录每个Agent的动作，支持实时状态监控
+在后台运行模拟并记录每 Agent的动作，支持实时状态监控
 """
 
 import os
@@ -199,7 +199,7 @@ class SimulationRunner:
     
     负责：
     1. 在后台进程中运行OASIS模拟
-    2. 解析运行日志，记录每个Agent的动作
+    2. 解析运行日志，记录每 Agent的动作
     3. 提供实时状态查询接口
     4. 支持暂停/停止/恢复操作
     """
@@ -316,7 +316,7 @@ class SimulationRunner:
         platform: str = "parallel",  # twitter / reddit / parallel
         max_rounds: int = None,  # 最大模拟轮数（可选，用于截断过长的模拟）
         enable_graph_memory_update: bool = False,  # 是否将活动更新到Zep图谱
-        graph_id: str = None  # Zep图谱ID（启用图谱更新时必需）
+        graph_id: str = None  # ZepGraph ID（启用图谱更新时必需）
     ) -> SimulationRunState:
         """
         启动模拟
@@ -326,7 +326,7 @@ class SimulationRunner:
             platform: 运行平台 (twitter/reddit/parallel)
             max_rounds: 最大模拟轮数（可选，用于截断过长的模拟）
             enable_graph_memory_update: 是否将Agent活动动态更新到Zep图谱
-            graph_id: Zep图谱ID（启用图谱更新时必需）
+            graph_id: ZepGraph ID（启用图谱更新时必需）
             
         Returns:
             SimulationRunState
@@ -384,7 +384,7 @@ class SimulationRunner:
         else:
             cls._graph_memory_enabled[simulation_id] = False
         
-        # 确定运行哪个脚本（脚本位于 backend/scripts/ 目录）
+        # 确定运行哪 脚本（脚本位于 backend/scripts/ 目录）
         if platform == "twitter":
             script_name = "run_twitter_simulation.py"
             state.twitter_running = True
@@ -439,7 +439,7 @@ class SimulationRunner:
                 cmd,
                 cwd=sim_dir,
                 stdout=main_log_file,
-                stderr=subprocess.STDOUT,  # stderr 也写入同一个文件
+                stderr=subprocess.STDOUT,  # stderr 也写入同一 文件
                 text=True,
                 encoding='utf-8',  # 显式指定编码
                 bufsize=1,
@@ -619,25 +619,25 @@ class SimulationRunner:
                             if "event_type" in action_data:
                                 event_type = action_data.get("event_type")
                                 
-                                # 检测 simulation_end 事件，标记平台已完成
+                                # 检测 simulation_end 事件，标记平台Completed
                                 if event_type == "simulation_end":
                                     if platform == "twitter":
                                         state.twitter_completed = True
                                         state.twitter_running = False
-                                        logger.info(f"Twitter 模拟已完成: {state.simulation_id}, total_rounds={action_data.get('total_rounds')}, total_actions={action_data.get('total_actions')}")
+                                        logger.info(f"Twitter 模拟Completed: {state.simulation_id}, total_rounds={action_data.get('total_rounds')}, total_actions={action_data.get('total_actions')}")
                                     elif platform == "reddit":
                                         state.reddit_completed = True
                                         state.reddit_running = False
-                                        logger.info(f"Reddit 模拟已完成: {state.simulation_id}, total_rounds={action_data.get('total_rounds')}, total_actions={action_data.get('total_actions')}")
+                                        logger.info(f"Reddit 模拟Completed: {state.simulation_id}, total_rounds={action_data.get('total_rounds')}, total_actions={action_data.get('total_actions')}")
                                     
-                                    # 检查是否所有启用的平台都已完成
-                                    # 如果只运行了一个平台，只检查那个平台
-                                    # 如果运行了两个平台，需要两个都完成
+                                    # 检查是否所有启用的平台都Completed
+                                    # 如果只运行了一 平台，只检查那 平台
+                                    # 如果运行了两 平台，需要两 都完成
                                     all_completed = cls._check_all_platforms_completed(state)
                                     if all_completed:
                                         state.runner_status = RunnerStatus.COMPLETED
                                         state.completed_at = datetime.now().isoformat()
-                                        logger.info(f"所有平台模拟已完成: {state.simulation_id}")
+                                        logger.info(f"所有平台模拟Completed: {state.simulation_id}")
                                 
                                 # 更新轮次信息（从 round_end 事件）
                                 elif event_type == "round_end":
@@ -654,10 +654,10 @@ class SimulationRunner:
                                             state.reddit_current_round = round_num
                                         state.reddit_simulated_hours = simulated_hours
                                     
-                                    # 总体轮次取两个平台的最大值
+                                    # 总体轮次取两 平台的最大值
                                     if round_num > state.current_round:
                                         state.current_round = round_num
-                                    # 总体时间取两个平台的最大值
+                                    # 总体时间取两 平台的最大值
                                     state.simulated_hours = max(state.twitter_simulated_hours, state.reddit_simulated_hours)
                                 
                                 continue
@@ -693,12 +693,12 @@ class SimulationRunner:
     @classmethod
     def _check_all_platforms_completed(cls, state: SimulationRunState) -> bool:
         """
-        检查所有启用的平台是否都已完成模拟
+        检查所有启用的平台是否都Completed模拟
         
         通过检查对应的 actions.jsonl 文件是否存在来判断平台是否被启用
         
         Returns:
-            True 如果所有启用的平台都已完成
+            True 如果所有启用的平台都Completed
         """
         sim_dir = os.path.join(cls.RUN_STATE_DIR, state.simulation_id)
         twitter_log = os.path.join(sim_dir, "twitter", "actions.jsonl")
@@ -714,7 +714,7 @@ class SimulationRunner:
         if reddit_enabled and not state.reddit_completed:
             return False
         
-        # 至少有一个平台被启用且已完成
+        # 至少有一 平台被启用且Completed
         return twitter_enabled or reddit_enabled
     
     @classmethod
@@ -762,7 +762,7 @@ class SimulationRunner:
             pgid = os.getpgid(process.pid)
             logger.info(f"终止进程组 (Unix): simulation={simulation_id}, pgid={pgid}")
             
-            # 先发送 SIGTERM 给整个进程组
+            # 先发送 SIGTERM 给整 进程组
             os.killpg(pgid, signal.SIGTERM)
             
             try:
@@ -831,7 +831,7 @@ class SimulationRunner:
         round_num: Optional[int] = None
     ) -> List[AgentAction]:
         """
-        从单个动作文件中读取动作
+        从单 动作文件中读取动作
         
         Args:
             file_path: 动作日志文件路径
@@ -1059,7 +1059,7 @@ class SimulationRunner:
     @classmethod
     def get_agent_stats(cls, simulation_id: str) -> List[Dict[str, Any]]:
         """
-        获取每个Agent的统计信息
+        获取每 Agent的统计信息
         
         Returns:
             Agent统计列表
@@ -1298,7 +1298,7 @@ class SimulationRunner:
         
         # Flask debug 模式下，只在 reloader 子进程中注册清理（实际运行应用的进程）
         # WERKZEUG_RUN_MAIN=true 表示是 reloader 子进程
-        # 如果不是 debug 模式，则没有这个环境变量，也需要注册
+        # 如果不是 debug 模式，则没有这 环境变量，也需要注册
         is_reloader_process = os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
         is_debug_mode = os.environ.get('FLASK_DEBUG') == '1' or os.environ.get('WERKZEUG_RUN_MAIN') is not None
         
@@ -1434,7 +1434,7 @@ class SimulationRunner:
         timeout: float = 60.0
     ) -> Dict[str, Any]:
         """
-        采访单个Agent
+        采访单 Agent
 
         Args:
             simulation_id: 模拟ID
@@ -1443,7 +1443,7 @@ class SimulationRunner:
             platform: 指定平台（可选）
                 - "twitter": 只采访Twitter平台
                 - "reddit": 只采访Reddit平台
-                - None: 双平台模拟时同时采访两个平台，返回整合结果
+                - None: 双平台模拟时同时采访两 平台，返回整合结果
             timeout: 超时时间（秒）
 
         Returns:
@@ -1497,15 +1497,15 @@ class SimulationRunner:
         timeout: float = 120.0
     ) -> Dict[str, Any]:
         """
-        批量采访多个Agent
+        批量采访多 Agent
 
         Args:
             simulation_id: 模拟ID
-            interviews: 采访列表，每个元素包含 {"agent_id": int, "prompt": str, "platform": str(可选)}
-            platform: 默认平台（可选，会被每个采访项的platform覆盖）
+            interviews: 采访列表，每 元素包含 {"agent_id": int, "prompt": str, "platform": str(可选)}
+            platform: 默认平台（可选，会被每 采访项的platform覆盖）
                 - "twitter": 默认只采访Twitter平台
                 - "reddit": 默认只采访Reddit平台
-                - None: 双平台模拟时每个Agent同时采访两个平台
+                - None: 双平台模拟时每 Agent同时采访两 平台
             timeout: 超时时间（秒）
 
         Returns:
@@ -1566,7 +1566,7 @@ class SimulationRunner:
             platform: 指定平台（可选）
                 - "twitter": 只采访Twitter平台
                 - "reddit": 只采访Reddit平台
-                - None: 双平台模拟时每个Agent同时采访两个平台
+                - None: 双平台模拟时每 Agent同时采访两 平台
             timeout: 超时时间（秒）
 
         Returns:
@@ -1663,7 +1663,7 @@ class SimulationRunner:
         agent_id: Optional[int] = None,
         limit: int = 100
     ) -> List[Dict[str, Any]]:
-        """从单个数据库获取Interview历史"""
+        """从单 数据库获取Interview历史"""
         import sqlite3
         
         if not os.path.exists(db_path):
@@ -1729,9 +1729,9 @@ class SimulationRunner:
             platform: 平台类型（reddit/twitter/None）
                 - "reddit": 只获取Reddit平台的历史
                 - "twitter": 只获取Twitter平台的历史
-                - None: 获取两个平台的所有历史
+                - None: 获取两 平台的所有历史
             agent_id: 指定Agent ID（可选，只获取该Agent的历史）
-            limit: 每个平台返回数量限制
+            limit: 每 平台返回数量限制
             
         Returns:
             Interview历史记录列表
@@ -1744,7 +1744,7 @@ class SimulationRunner:
         if platform in ("reddit", "twitter"):
             platforms = [platform]
         else:
-            # 不指定platform时，查询两个平台
+            # 不指定platform时，查询两 平台
             platforms = ["twitter", "reddit"]
         
         for p in platforms:
@@ -1760,7 +1760,7 @@ class SimulationRunner:
         # 按时间降序排序
         results.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
         
-        # 如果查询了多个平台，限制总数
+        # 如果查询了多 平台，限制总数
         if len(platforms) > 1 and len(results) > limit:
             results = results[:limit]
         

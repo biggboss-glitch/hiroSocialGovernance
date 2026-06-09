@@ -49,3 +49,23 @@ export const getReport = (reportId) => {
 export const chatWithReport = (data) => {
   return requestWithRetry(() => service.post('/api/report/chat', data), 3, 1000)
 }
+
+/**
+ * Download report as Markdown file
+ * @param {string} reportId
+ */
+export const downloadReport = async (reportId) => {
+  const response = await service.get(`/api/report/${reportId}/download`, {
+    responseType: 'blob'
+  })
+  // Create download link
+  const blob = new Blob([response], { type: 'text/markdown' })
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${reportId}_report.md`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
+}

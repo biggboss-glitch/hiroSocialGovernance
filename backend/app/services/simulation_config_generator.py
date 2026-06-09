@@ -1,6 +1,6 @@
 """
 模拟配置智能生成器
-使用LLM根据模拟需求、文档内容、图谱信息自动生成细致的模拟参数
+使用LLM根据Simulation Requirement、文档内容、图谱信息自动生成细致的模拟参数
 实现全程自动化，无需人工设置参数
 
 采用分步生成策略，避免一次性生成过长内容导致失败：
@@ -50,7 +50,7 @@ CHINA_TIMEZONE_CONFIG = {
 
 @dataclass
 class AgentActivityConfig:
-    """单个Agent的活动配置"""
+    """单 Agent的活动配置"""
     agent_id: int
     entity_uuid: str
     entity_name: str
@@ -201,12 +201,12 @@ class SimulationConfigGenerator:
     """
     模拟配置智能生成器
     
-    使用LLM分析模拟需求、文档内容、图谱实体信息，
+    使用LLM分析Simulation Requirement、文档内容、图谱Entity Info，
     自动生成最佳的模拟参数配置
     
     采用分步生成策略：
     1. 生成时间配置和事件配置（轻量级）
-    2. 分批生成Agent配置（每批10-20个）
+    2. 分批生成Agent配置（每批10-20 ）
     3. 生成平台配置
     """
     
@@ -218,9 +218,9 @@ class SimulationConfigGenerator:
     # 各步骤的上下文截断长度（字符数）
     TIME_CONFIG_CONTEXT_LENGTH = 10000   # 时间配置
     EVENT_CONFIG_CONTEXT_LENGTH = 8000   # 事件配置
-    ENTITY_SUMMARY_LENGTH = 300          # 实体摘要
-    AGENT_SUMMARY_LENGTH = 300           # Agent配置中的实体摘要
-    ENTITIES_PER_TYPE_DISPLAY = 20       # 每类实体显示数量
+    ENTITY_SUMMARY_LENGTH = 300          # Entities摘要
+    AGENT_SUMMARY_LENGTH = 300           # Agent配置中的Entities摘要
+    ENTITIES_PER_TYPE_DISPLAY = 20       # 每类Entities显示数量
     
     def __init__(
         self,
@@ -257,11 +257,11 @@ class SimulationConfigGenerator:
         
         Args:
             simulation_id: 模拟ID
-            project_id: 项目ID
-            graph_id: 图谱ID
-            simulation_requirement: 模拟需求描述
+            project_id: Project ID
+            graph_id: Graph ID
+            simulation_requirement: Simulation Requirement描述
             document_text: 原始文档内容
-            entities: 过滤后的实体列表
+            entities: 过滤后的Entities列表
             enable_twitter: 是否启用Twitter
             enable_reddit: 是否启用Reddit
             progress_callback: 进度回调函数(current_step, total_steps, message)
@@ -269,7 +269,7 @@ class SimulationConfigGenerator:
         Returns:
             SimulationParameters: 完整的模拟参数
         """
-        logger.info(f"开始智能生成模拟配置: simulation_id={simulation_id}, 实体数={len(entities)}")
+        logger.info(f"开始智能生成模拟配置: simulation_id={simulation_id}, Entities数={len(entities)}")
         
         # 计算总步骤数
         num_batches = math.ceil(len(entities) / self.AGENTS_PER_BATCH)
@@ -374,7 +374,7 @@ class SimulationConfigGenerator:
             generation_reasoning=" | ".join(reasoning_parts)
         )
         
-        logger.info(f"模拟配置生成完成: {len(params.agent_configs)} 个Agent配置")
+        logger.info(f"模拟配置生成完成: {len(params.agent_configs)}  Agent配置")
         
         return params
     
@@ -386,13 +386,13 @@ class SimulationConfigGenerator:
     ) -> str:
         """构建LLM上下文，截断到最大长度"""
         
-        # 实体摘要
+        # Entities摘要
         entity_summary = self._summarize_entities(entities)
         
         # 构建上下文
         context_parts = [
-            f"## 模拟需求\n{simulation_requirement}",
-            f"\n## 实体信息 ({len(entities)}个)\n{entity_summary}",
+            f"## Simulation Requirement\n{simulation_requirement}",
+            f"\n## Entity Info ({len(entities)} )\n{entity_summary}",
         ]
         
         current_length = sum(len(p) for p in context_parts)
@@ -407,7 +407,7 @@ class SimulationConfigGenerator:
         return "\n".join(context_parts)
     
     def _summarize_entities(self, entities: List[EntityNode]) -> str:
-        """生成实体摘要"""
+        """生成Entities摘要"""
         lines = []
         
         # 按类型分组
@@ -419,7 +419,7 @@ class SimulationConfigGenerator:
             by_type[t].append(e)
         
         for entity_type, type_entities in by_type.items():
-            lines.append(f"\n### {entity_type} ({len(type_entities)}个)")
+            lines.append(f"\n### {entity_type} ({len(type_entities)} )")
             # 使用配置的显示数量和摘要长度
             display_count = self.ENTITIES_PER_TYPE_DISPLAY
             summary_len = self.ENTITY_SUMMARY_LENGTH
@@ -427,7 +427,7 @@ class SimulationConfigGenerator:
                 summary_preview = (e.summary[:summary_len] + "...") if len(e.summary) > summary_len else e.summary
                 lines.append(f"- {e.name}: {summary_preview}")
             if len(type_entities) > display_count:
-                lines.append(f"  ... 还有 {len(type_entities) - display_count} 个")
+                lines.append(f"  ... 还有 {len(type_entities) - display_count}  ")
         
         return "\n".join(lines)
     
@@ -540,7 +540,7 @@ class SimulationConfigGenerator:
         # 计算最大允许值（80%的agent数）
         max_agents_allowed = max(1, int(num_entities * 0.9))
         
-        prompt = f"""基于以下模拟需求，生成时间模拟配置。
+        prompt = f"""基于以下Simulation Requirement，生成时间模拟配置。
 
 {context_truncated}
 
@@ -651,12 +651,12 @@ class SimulationConfigGenerator:
     ) -> Dict[str, Any]:
         """生成事件配置"""
         
-        # 获取可用的实体类型列表，供 LLM 参考
+        # 获取可用的Entity Types列表，供 LLM 参考
         entity_types_available = list(set(
             e.get_entity_type() or "Unknown" for e in entities
         ))
         
-        # 为每种类型列出代表性实体名称
+        # 为每种类型列出代表性Entities名称
         type_examples = {}
         for e in entities:
             etype = e.get_entity_type() or "Unknown"
@@ -673,22 +673,22 @@ class SimulationConfigGenerator:
         # 使用配置的上下文截断长度
         context_truncated = context[:self.EVENT_CONFIG_CONTEXT_LENGTH]
         
-        prompt = f"""基于以下模拟需求，生成事件配置。
+        prompt = f"""基于以下Simulation Requirement，生成事件配置。
 
-模拟需求: {simulation_requirement}
+Simulation Requirement: {simulation_requirement}
 
 {context_truncated}
 
-## 可用实体类型及示例
+## 可用Entity Types及示例
 {type_info}
 
 ## 任务
 请生成事件配置JSON：
 - 提取热点话题关键词
 - 描述舆论发展方向
-- 设计初始帖子内容，**每个帖子必须指定 poster_type（发布者类型）**
+- 设计初始帖子内容，**每 帖子必须指定 poster_type（发布者类型）**
 
-**重要**: poster_type 必须从上面的"可用实体类型"中选择，这样初始帖子才能分配给合适的 Agent 发布。
+**重要**: poster_type 必须从上面的"可用Entity Types"中选择，这样初始帖子才能分配给合适的 Agent 发布。
 例如：官方声明应由 Official/University 类型发布，新闻由 MediaOutlet 发布，学生观点由 Student 发布。
 
 返回JSON格式（不要markdown）：
@@ -696,13 +696,13 @@ class SimulationConfigGenerator:
     "hot_topics": ["关键词1", "关键词2", ...],
     "narrative_direction": "<舆论发展方向描述>",
     "initial_posts": [
-        {{"content": "帖子内容", "poster_type": "实体类型（必须从可用类型中选择）"}},
+        {{"content": "帖子内容", "poster_type": "Entity Types（必须从可用类型中选择）"}},
         ...
     ],
     "reasoning": "<简要说明>"
 }}"""
 
-        system_prompt = "你是舆论分析专家。返回纯JSON格式。注意 poster_type 必须精确匹配可用实体类型。"
+        system_prompt = "你是舆论分析专家。返回纯JSON格式。注意 poster_type 必须精确匹配可用Entity Types。"
         system_prompt = f"{system_prompt}\n\n{get_language_instruction()}\nIMPORTANT: The 'poster_type' field value MUST be in English PascalCase exactly matching the available entity types. Only 'content', 'narrative_direction', 'hot_topics' and 'reasoning' fields should use the specified language."
 
         try:
@@ -733,12 +733,12 @@ class SimulationConfigGenerator:
         """
         为初始帖子分配合适的发布者 Agent
         
-        根据每个帖子的 poster_type 匹配最合适的 agent_id
+        根据每 帖子的 poster_type 匹配最合适的 agent_id
         """
         if not event_config.initial_posts:
             return event_config
         
-        # 按实体类型建立 agent 索引
+        # 按Entity Types建立 agent 索引
         agents_by_type: Dict[str, List[AgentActivityConfig]] = {}
         for agent in agent_configs:
             etype = agent.entity_type.lower()
@@ -758,7 +758,7 @@ class SimulationConfigGenerator:
             "person": ["person", "student", "alumni"],
         }
         
-        # 记录每种类型已使用的 agent 索引，避免重复使用同一个 agent
+        # 记录每种类型已使用的 agent 索引，避免重复使用同一  agent
         used_indices: Dict[str, int] = {}
         
         updated_posts = []
@@ -819,7 +819,7 @@ class SimulationConfigGenerator:
     ) -> List[AgentActivityConfig]:
         """分批生成Agent配置"""
         
-        # 构建实体信息（使用配置的摘要长度）
+        # 构建Entity Info（使用配置的摘要长度）
         entity_list = []
         summary_len = self.AGENT_SUMMARY_LENGTH
         for i, e in enumerate(entities):
@@ -830,21 +830,21 @@ class SimulationConfigGenerator:
                 "summary": e.summary[:summary_len] if e.summary else ""
             })
         
-        prompt = f"""基于以下信息，为每个实体生成社交媒体活动配置。
+        prompt = f"""基于以下信息，为每 Entities生成社交媒体活动配置。
 
-模拟需求: {simulation_requirement}
+Simulation Requirement: {simulation_requirement}
 
-## 实体列表
+## Entities列表
 ```json
 {json.dumps(entity_list, ensure_ascii=False, indent=2)}
 ```
 
 ## 任务
-为每个实体生成活动配置，注意：
+为每 Entities生成活动配置，注意：
 - **时间符合目标用户群体作息**：以下为参考（东八区），请根据模拟场景调整
 - **官方机构**（University/GovernmentAgency）：活跃度低(0.1-0.3)，工作时间(9-17)活动，响应慢(60-240分钟)，影响力高(2.5-3.0)
 - **媒体**（MediaOutlet）：活跃度中(0.4-0.6)，全天活动(8-23)，响应快(5-30分钟)，影响力高(2.0-2.5)
-- **个人**（Student/Person/Alumni）：活跃度高(0.6-0.9)，主要晚间活动(18-23)，响应快(1-15分钟)，影响力低(0.8-1.2)
+- ** 人**（Student/Person/Alumni）：活跃度高(0.6-0.9)，主要晚间活动(18-23)，响应快(1-15分钟)，影响力低(0.8-1.2)
 - **公众人物/专家**：活跃度中(0.4-0.6)，影响力中高(1.5-2.0)
 
 返回JSON格式（不要markdown）：
@@ -906,7 +906,7 @@ class SimulationConfigGenerator:
         return configs
     
     def _generate_agent_config_by_rule(self, entity: EntityNode) -> Dict[str, Any]:
-        """基于规则生成单个Agent配置（中国人作息）"""
+        """基于规则生成单 Agent配置（中国人作息）"""
         entity_type = (entity.get_entity_type() or "Unknown").lower()
         
         if entity_type in ["university", "governmentagency", "ngo"]:

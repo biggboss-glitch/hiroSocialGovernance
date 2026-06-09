@@ -284,29 +284,45 @@ class LocalGraphNamespace:
             logger.info(f"Ontology updated successfully for graph '{graph_id}'")
 
     def add_batch(self, graph_id: str, episodes: List[Any]) -> List[LocalEpisode]:
+        import concurrent.futures
         graph = self.client._load_graph(graph_id)
         llm = self.client._get_llm()
         results = []
 
-        for ep in episodes:
+        def process_episode(ep):
             text = getattr(ep, 'data', '') or ''
             ep_uuid = f"episode_{uuid.uuid4().hex[:16]}"
             
             logger.info(f"Adding text chunk to graph '{graph_id}': {text[:100]}...")
             
+            # Extract entities and relations using LLM
+            extracted = self.client._extract_ontology_instances(llm, text, graph.get("ontology", {}))
+            
+            return {
+                "ep_uuid": ep_uuid,
+                "text": text,
+                "extracted": extracted
+            }
+
+        # Run extraction in parallel
+        processed_episodes = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            processed_episodes = list(executor.map(process_episode, episodes))
+
+        # Merge results sequentially to avoid race conditions
+        for result in processed_episodes:
+            ep_uuid = result["ep_uuid"]
+            
             # Save episode text
             graph["episodes"][ep_uuid] = {
                 "uuid": ep_uuid,
-                "data": text,
+                "data": result["text"],
                 "type": "text",
                 "created_at": datetime.now().isoformat()
             }
             
-            # Extract entities and relations using LLM
-            extracted = self.client._extract_ontology_instances(llm, text, graph.get("ontology", {}))
-            
             # Merge extracted data into graph
-            self.client._merge_extracted_data(graph, extracted)
+            self.client._merge_extracted_data(graph, result["extracted"])
             
             results.append(LocalEpisode(ep_uuid, processed=True))
 
@@ -443,7 +459,8 @@ class LocalZepClient:
 
     def _get_llm(self) -> LLMClient:
         if self._llm is None:
-            self._llm = LLMClient()
+            # Use the fast boost LLM for graph extraction (runs many times)
+            self._llm = LLMClient.create_boost()
         return self._llm
 
     def _extract_ontology_instances(self, llm: LLMClient, text: str, ontology: dict) -> dict:
@@ -453,65 +470,72 @@ class LocalZepClient:
         if not entity_types and not edge_types:
             logger.warning("Empty ontology, skipping LLM extraction.")
             return {"entities": [], "edges": []}
-            
-        entity_types_desc = json.dumps(entity_types, ensure_ascii=False, indent=2)
-        edge_types_desc = json.dumps(edge_types, ensure_ascii=False, indent=2)
         
-        prompt = f"""You are a high-fidelity knowledge graph extraction engine. Your task is to analyze the text and extract entities and relationships that match the ontology defined below.
+        # Build a compact ontology description to reduce tokens
+        entity_names = [e.get("name", "") for e in entity_types]
+        edge_names = [e.get("name", "") for e in edge_types]
+        
+        # Build source_targets map for edges
+        edge_st_map = {}
+        for e in edge_types:
+            st = e.get("source_targets", [])
+            if st:
+                edge_st_map[e["name"]] = st
+            
+        prompt = f"""Extract ALL possible entities and relationships from the text below.
 
-## Ontology Entity Types:
-{entity_types_desc}
+Entity types allowed: {json.dumps(entity_names)}
+Relationship types allowed: {json.dumps(edge_names)}
 
-## Ontology Edge/Relationship Types:
-{edge_types_desc}
-
-## Text to Analyze:
-「「「
+Text:
+\"\"\"
 {text}
-」」」
+\"\"\"
 
-## Extraction Guidelines:
-1. ONLY extract entities matching the defined Entity Types.
-2. The entity 'name' must be the specific noun/proper name used in the text.
-3. ONLY extract relationships matching the defined Edge Types, and ensuring source/target entities match the allowed source_targets of the edge.
-4. For each relationship/edge, output a single-sentence 'fact' describing their relation based on the text.
-5. Extract attributes (e.g. 'full_name', 'role', 'title', etc.) matching the attributes defined for the entity type in the ontology.
-6. Respond with a valid JSON object only. Do NOT wrap it in markdown code block formatting.
-
-## Output JSON Schema:
+Return a JSON object with this exact schema:
 {{
   "entities": [
-    {{
-      "name": "Entity Name",
-      "label": "EntityType",
-      "summary": "Brief summary describing the entity in this text",
-      "attributes": {{
-        "attr_name": "value"
-      }}
-    }}
+    {{"name": "Entity Name", "label": "EntityType", "summary": "Brief description", "attributes": {{}}}}
   ],
   "edges": [
-    {{
-      "name": "EDGE_TYPE",
-      "fact": "Fact sentence describing the relation",
-      "source_node_name": "Source Entity Name",
-      "target_node_name": "Target Entity Name",
-      "attributes": {{}}
-    }}
+    {{"name": "EDGE_TYPE", "fact": "Fact sentence", "source_node_name": "Source", "target_node_name": "Target", "attributes": {{}}}}
   ]
 }}
-"""
+
+Rules:
+- Extract EVERY named entity mentioned or implied in the text (people, organizations, places, institutions, etc.)
+- Also extract entities that are IMPLICITLY referenced (e.g., "students" implies a university/school entity, "government" implies a government entity)
+- For each entity pair, infer at least one relationship even if not explicitly stated
+- You MUST extract at least 5 entities and 4 relationships from any text - be thorough and creative
+- Entity label MUST be one of the allowed entity types. If an entity doesn't fit exactly, use the CLOSEST matching type
+- Edge name MUST be one of the allowed relationship types
+- Output ONLY the JSON object, no other text"""
+
         messages = [
-            {"role": "system", "content": "You are a JSON-only responder. Always output valid JSON object."},
+            {"role": "system", "content": "You are a JSON extraction engine. Output only valid JSON, nothing else."},
             {"role": "user", "content": prompt}
         ]
         try:
             res = llm.chat_json(messages, temperature=0.1)
-            logger.debug(f"Extracted graph data: {res}")
+            entities_found = len(res.get("entities", []))
+            edges_found = len(res.get("edges", []))
+            logger.info(f"Extracted {entities_found} entities and {edges_found} edges from text chunk")
             return res
         except Exception as e:
             logger.error(f"Failed to extract ontology instances: {e}")
-            return {"entities": [], "edges": []}
+            logger.error(f"Text chunk was: {text[:200]}...")
+            # Try one more time with plain chat (no json_object mode)
+            try:
+                logger.info("Retrying extraction without json_object mode...")
+                raw = llm.chat(messages, temperature=0.1, max_tokens=4096)
+                res = LLMClient._parse_json_response(raw)
+                entities_found = len(res.get("entities", []))
+                edges_found = len(res.get("edges", []))
+                logger.info(f"Retry succeeded: {entities_found} entities and {edges_found} edges")
+                return res
+            except Exception as e2:
+                logger.error(f"Retry also failed: {e2}")
+                return {"entities": [], "edges": []}
 
     def _merge_extracted_data(self, graph: dict, extracted: dict):
         nodes = graph.setdefault("nodes", {})

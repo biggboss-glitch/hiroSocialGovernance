@@ -69,7 +69,7 @@ export const getSimulationConfigRealtime = (simulationId) => {
 
 /**
  * 列出所有模拟
- * @param {string} projectId - 可选，按项目ID过滤
+ * @param {string} projectId - 可选，按Project ID过滤
  */
 export const listSimulations = (projectId) => {
   const params = projectId ? { project_id: projectId } : {}

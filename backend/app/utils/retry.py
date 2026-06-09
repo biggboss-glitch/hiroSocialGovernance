@@ -200,11 +200,11 @@ class RetryableAPIClient:
         continue_on_failure: bool = True
     ) -> Tuple[list, list]:
         """
-        批量调用并对每个失败项单独重试
+        批量调用并对每 失败项单独重试
         
         Args:
             items: 要处理的项目列表
-            process_func: 处理函数，接收单个item作为参数
+            process_func: 处理函数，接收单 item作为参数
             exceptions: 需要重试的异常类型
             continue_on_failure: 单项失败后是否继续处理其他项
             

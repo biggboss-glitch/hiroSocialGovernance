@@ -42,7 +42,7 @@
         
         <div class="hero-right">
           <div class="logo-container">
-            <img src="../assets/logo/Hiro_logo_left.jpeg" alt="Hiro Logo" class="hero-logo" />
+            <img src="../assets/logo/hiro_logo_final.png" alt="Hiro Logo" class="hero-logo" />
           </div>
           
           <button class="scroll-down-btn" @click="scrollToBottom">
@@ -429,6 +429,7 @@ const startSimulation = () => {
 .gradient-text {
   background: linear-gradient(90deg, #000000 0%, #444444 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   display: inline-block;
 }
@@ -511,8 +512,9 @@ const startSimulation = () => {
 }
 
 .hero-logo {
-  max-width: 500px; /* 调整logo大小 */
+  max-width: 350px;
   width: 100%;
+  height: auto;
 }
 
 .scroll-down-btn {

@@ -27,7 +27,7 @@ def generate_report():
     """
     生成模拟分析报告（异步任务）
     
-    这是一个耗时操作，接口会立即返回task_id，
+    这是一 耗时操作，接口会立即返回task_id，
     使用 GET /api/report/generate/status 查询进度
     
     请求（JSON）：
@@ -84,7 +84,7 @@ def generate_report():
                     }
                 })
         
-        # 获取项目信息
+        # 获取Project Information
         project = ProjectManager.get_project(state.project_id)
         if not project:
             return jsonify({
@@ -150,7 +150,7 @@ def generate_report():
                         message=f"[{stage}] {message}"
                     )
                 
-                # 生成报告（传入预先生成的 report_id）
+                # Generate Report（传入预先生成的 report_id）
                 report = agent.generate_report(
                     progress_callback=progress_callback,
                     report_id=report_id
@@ -414,7 +414,7 @@ def download_report(report_id: str):
         md_path = ReportManager._get_report_markdown_path(report_id)
         
         if not os.path.exists(md_path):
-            # 如果MD文件不存在，生成一个临时文件
+            # 如果MD文件不存在，生成一 临时文件
             import tempfile
             with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
                 f.write(report.markdown_content)
@@ -515,7 +515,7 @@ def chat_with_report_agent():
                 "error": t('api.requireMessage')
             }), 400
         
-        # 获取模拟和项目信息
+        # 获取模拟和Project Information
         manager = SimulationManager()
         state = manager.get_simulation(simulation_id)
         
@@ -569,7 +569,7 @@ def chat_with_report_agent():
 @report_bp.route('/<report_id>/progress', methods=['GET'])
 def get_report_progress(report_id: str):
     """
-    获取报告生成进度（实时）
+    获取报告Generation Progress（实时）
     
     返回：
         {
@@ -612,7 +612,7 @@ def get_report_sections(report_id: str):
     """
     获取已生成的章节列表（分章节输出）
     
-    前端可以轮询此接口获取已生成的章节内容，无需等待整个报告完成
+    前端可以轮询此接口获取已生成的章节内容，无需等待整 报告完成
     
     返回：
         {
@@ -661,7 +661,7 @@ def get_report_sections(report_id: str):
 @report_bp.route('/<report_id>/section/<int:section_index>', methods=['GET'])
 def get_single_section(report_id: str, section_index: int):
     """
-    获取单个章节内容
+    获取单 章节内容
     
     返回：
         {
@@ -762,7 +762,7 @@ def get_agent_log(report_id: str):
     
     实时获取报告生成过程中的每一步动作，包括：
     - 报告开始、规划开始/完成
-    - 每个章节的开始、工具调用、LLM响应、完成
+    - 每 章节的开始、工具调用、LLM响应、完成
     - 报告完成或失败
     
     Query参数：

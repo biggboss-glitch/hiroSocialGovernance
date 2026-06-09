@@ -127,9 +127,9 @@ def generate_ontology():
     请求方式：multipart/form-data
     
     参数：
-        files: 上传的文件（PDF/MD/TXT），可多个
-        simulation_requirement: 模拟需求描述（必填）
-        project_name: 项目名称（可选）
+        files: 上传的文件（PDF/MD/TXT），可多 
+        simulation_requirement: Simulation Requirement描述（必填）
+        project_name: Project Name（可选）
         additional_context: 额外说明（可选）
         
     返回：
@@ -155,8 +155,8 @@ def generate_ontology():
         project_name = request.form.get('project_name', 'Unnamed Project')
         additional_context = request.form.get('additional_context', '')
         
-        logger.debug(f"项目名称: {project_name}")
-        logger.debug(f"模拟需求: {simulation_requirement[:100]}...")
+        logger.debug(f"Project Name: {project_name}")
+        logger.debug(f"Simulation Requirement: {simulation_requirement[:100]}...")
         
         if not simulation_requirement:
             return jsonify({
@@ -204,8 +204,8 @@ def generate_ontology():
                     "error": t('api.noDocProcessed')
                 }), 400
         else:
-            # 如果没有上传文件，使用模拟需求本身作为文本内容进行兜底
-            logger.info("未上传文件，将模拟需求用作数据种子")
+            # 如果没有上传文件，使用Simulation Requirement本身作为文本内容进行兜底
+            logger.info("未上传文件，将Simulation Requirement用作数据种子")
             document_texts = [simulation_requirement]
             all_text = f"=== Simulation Requirement ===\n{simulation_requirement}"
         
@@ -226,7 +226,7 @@ def generate_ontology():
         # 保存本体到项目
         entity_count = len(ontology.get("entity_types", []))
         edge_count = len(ontology.get("edge_types", []))
-        logger.info(f"本体生成完成: {entity_count} 个实体类型, {edge_count} 个关系类型")
+        logger.info(f"Ontology Generation完成: {entity_count}  Entity Types, {edge_count}  Edges类型")
         
         project.ontology = {
             "entity_types": ontology.get("entity_types", []),
@@ -235,7 +235,7 @@ def generate_ontology():
         project.analysis_summary = ontology.get("analysis_summary", "")
         project.status = ProjectStatus.ONTOLOGY_GENERATED
         ProjectManager.save_project(project)
-        logger.info(f"=== 本体生成完成 === 项目ID: {project.project_id}")
+        logger.info(f"=== Ontology Generation完成 === Project ID: {project.project_id}")
         
         return jsonify({
             "success": True,
@@ -446,7 +446,7 @@ def build_graph():
                     progress_callback=add_progress_callback
                 )
                 
-                # 等待Zep处理完成（查询每个episode的processed状态）
+                # 等待Zep处理完成（查询每 episode的processed状态）
                 task_manager.update_task(
                     task_id,
                     message=t('progress.waitingZepProcess'),
@@ -477,7 +477,7 @@ def build_graph():
                 
                 node_count = graph_data.get("node_count", 0)
                 edge_count = graph_data.get("edge_count", 0)
-                build_logger.info(f"[{task_id}] 图谱构建完成: graph_id={graph_id}, 节点={node_count}, 边={edge_count}")
+                build_logger.info(f"[{task_id}] 图谱Build Complete: graph_id={graph_id}, Nodes={node_count}, 边={edge_count}")
                 
                 # 完成
                 task_manager.update_task(
@@ -496,7 +496,7 @@ def build_graph():
                 
             except Exception as e:
                 # 更新项目状态为失败
-                build_logger.error(f"[{task_id}] 图谱构建失败: {str(e)}")
+                build_logger.error(f"[{task_id}] 图谱Build Failed: {str(e)}")
                 build_logger.debug(traceback.format_exc())
                 
                 project.status = ProjectStatus.FAILED
@@ -571,7 +571,7 @@ def list_tasks():
 @graph_bp.route('/data/<graph_id>', methods=['GET'])
 def get_graph_data(graph_id: str):
     """
-    获取图谱数据（节点和边）
+    获取图谱数据（Nodes和边）
     """
     try:
         if not Config.ZEP_API_KEY:

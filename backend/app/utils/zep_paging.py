@@ -64,7 +64,7 @@ def fetch_all_nodes(
     max_retries: int = _DEFAULT_MAX_RETRIES,
     retry_delay: float = _DEFAULT_RETRY_DELAY,
 ) -> list[Any]:
-    """分页获取图谱节点，最多返回 max_items 条（默认 2000）。每页请求自带重试。"""
+    """分页获取图谱Nodes，最多返回 max_items 条（默认 2000）。每页请求自带重试。"""
     all_nodes: list[Any] = []
     cursor: str | None = None
     page_num = 0

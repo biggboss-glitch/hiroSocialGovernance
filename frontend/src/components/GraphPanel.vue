@@ -342,7 +342,7 @@ const renderGraph = () => {
   const nodeIds = new Set(nodes.map(n => n.id))
   
   const edgePairCount = {}
-  const selfLoopEdges = {} // 按节点分组的自环边
+  const selfLoopEdges = {} // 按Nodes分组的自环边
   const tempEdges = edgesData
     .filter(e => nodeIds.has(e.source_node_uuid) && nodeIds.has(e.target_node_uuid))
   
@@ -363,7 +363,7 @@ const renderGraph = () => {
   })
   
   const edgePairIndex = {}
-  const processedSelfLoopNodes = new Set() // 已处理的自环节点
+  const processedSelfLoopNodes = new Set() // 已处理的自环Nodes
   
   const edges = []
   

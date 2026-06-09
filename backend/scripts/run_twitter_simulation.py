@@ -5,7 +5,7 @@ OASIS TwitterSimulation预设脚本
 功能特性:
 - CompleteSimulation后不立即关闭环境，进入等待命令模式
 - 支持通过IPC接收Interview命令
-- 支持单个Agent采访和批量采访
+- 支持单 Agent采访和批量采访
 - 支持远程关闭环境命令
 
 使用方式:
@@ -203,7 +203,7 @@ class IPCHandler:
     
     async def handle_interview(self, command_id: str, agent_id: int, prompt: str) -> bool:
         """
-        处理单个Agent采访命令
+        处理单 Agent采访命令
         
         Returns:
             True 表示Success，False 表示Failed
@@ -240,7 +240,7 @@ class IPCHandler:
         """
         try:
             actions = {}
-            agent_prompts = {}  # 记录每个agent的prompt
+            agent_prompts = {}  # 记录每 agent的prompt
             
             for interview in interviews:
                 agent_id = interview.get("agent_id")
@@ -271,7 +271,7 @@ class IPCHandler:
                 "interviews_count": len(results),
                 "results": results
             })
-            print(f"  批量InterviewComplete: {len(results)} 个Agent")
+            print(f"  批量InterviewComplete: {len(results)}  Agent")
             return True
             
         except Exception as e:

@@ -1,9 +1,9 @@
 services:
-  mirofish:
-    image: ghcr.io/666ghj/mirofish:latest
-    # 加速镜像（如拉取缓慢可替换上方地址）
-    # image: ghcr.nju.edu.cn/666ghj/mirofish:latest
-    container_name: mirofish
+  hiro:
+    image: ghcr.io/biggboss-glitch/hirosocialgovernance:latest
+    # Mirror for faster pulling if needed
+    # image: ghcr.nju.edu.cn/biggboss-glitch/hirosocialgovernance:latest
+    container_name: hiro
     env_file:
       - .env
     ports:

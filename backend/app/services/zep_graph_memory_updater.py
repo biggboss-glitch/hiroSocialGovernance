@@ -36,7 +36,7 @@ class AgentActivity:
         """
         将活动转换为可以发送给Zep的文本描述
         
-        采用自然语言描述格式，让Zep能够从中提取实体和关系
+        采用自然语言描述格式，让Zep能够从中提取Entities和Edges
         不添加模拟相关的前缀，避免误导图谱更新
         """
         # 根据不同的动作类型生成不同的描述
@@ -132,7 +132,7 @@ class AgentActivity:
         
         if target_user_name:
             return f"关注了用户「{target_user_name}」"
-        return "关注了一个用户"
+        return "关注了一 用户"
     
     def _describe_create_comment(self) -> str:
         """发表评论 - 包含评论内容和所评论的帖子信息"""
@@ -192,7 +192,7 @@ class AgentActivity:
         
         if target_user_name:
             return f"屏蔽了用户「{target_user_name}」"
-        return "屏蔽了一个用户"
+        return "屏蔽了一 用户"
     
     def _describe_generic(self) -> str:
         # 对于未知的动作类型，生成通用描述
@@ -213,7 +213,7 @@ class ZepGraphMemoryUpdater:
     - 点赞/踩的评论原文
     """
     
-    # 批量发送大小（每个平台累积多少条后发送）
+    # 批量发送大小（每 平台累积多少条后发送）
     BATCH_SIZE = 5
     
     # 平台名称映射（用于控制台显示）
@@ -234,7 +234,7 @@ class ZepGraphMemoryUpdater:
         初始化更新器
         
         Args:
-            graph_id: Zep图谱ID
+            graph_id: ZepGraph ID
             api_key: Zep API Key（可选，默认从配置读取）
         """
         self.graph_id = graph_id
@@ -248,7 +248,7 @@ class ZepGraphMemoryUpdater:
         # 活动队列
         self._activity_queue: Queue = Queue()
         
-        # 按平台分组的活动缓冲区（每个平台各自累积到BATCH_SIZE后批量发送）
+        # 按平台分组的活动缓冲区（每 平台各自累积到BATCH_SIZE后批量发送）
         self._platform_buffers: Dict[str, List[AgentActivity]] = {
             'twitter': [],
             'reddit': [],
@@ -309,7 +309,7 @@ class ZepGraphMemoryUpdater:
     
     def add_activity(self, activity: AgentActivity):
         """
-        添加一个agent活动到队列
+        添加一 agent活动到队列
         
         所有有意义的行为都会被添加到队列，包括：
         - CREATE_POST（发帖）
@@ -446,7 +446,7 @@ class ZepGraphMemoryUpdater:
             except Empty:
                 break
         
-        # 然后发送各平台缓冲区中剩余的活动（即使不足BATCH_SIZE条）
+        # 然后发送各平台缓冲区中剩余的活动（即使不足BATCH_SIZE items)
         with self._buffer_lock:
             for platform, buffer in self._platform_buffers.items():
                 if buffer:
@@ -478,9 +478,9 @@ class ZepGraphMemoryUpdater:
 
 class ZepGraphMemoryManager:
     """
-    管理多个模拟的Zep图谱记忆更新器
+    管理多 模拟的Zep图谱记忆更新器
     
-    每个模拟可以有自己的更新器实例
+    每 模拟可以有自己的更新器实例
     """
     
     _updaters: Dict[str, ZepGraphMemoryUpdater] = {}
@@ -493,7 +493,7 @@ class ZepGraphMemoryManager:
         
         Args:
             simulation_id: 模拟ID
-            graph_id: Zep图谱ID
+            graph_id: ZepGraph ID
             
         Returns:
             ZepGraphMemoryUpdater实例

@@ -137,7 +137,7 @@ class FileParser:
     @classmethod
     def extract_from_multiple(cls, file_paths: List[str]) -> str:
         """
-        从多个文件提取文本并合并
+        从多 文件提取文本并合并
         
         Args:
             file_paths: 文件路径列表
@@ -196,7 +196,7 @@ def split_text_into_chunks(
         if chunk:
             chunks.append(chunk)
         
-        # 下一个块从重叠位置开始
+        # 下一 块从重叠位置开始
         start = end - overlap if end < len(text) else len(text)
     
     return chunks

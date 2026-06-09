@@ -24,7 +24,7 @@ logger = get_logger('mirofish.simulation_ipc')
 
 class CommandType(str, Enum):
     """命令类型"""
-    INTERVIEW = "interview"           # 单个Agent采访
+    INTERVIEW = "interview"           # 单 Agent采访
     BATCH_INTERVIEW = "batch_interview"  # 批量采访
     CLOSE_ENV = "close_env"           # 关闭环境
 
@@ -194,7 +194,7 @@ class SimulationIPCClient:
         timeout: float = 60.0
     ) -> IPCResponse:
         """
-        发送单个Agent采访命令
+        发送单 Agent采访命令
         
         Args:
             agent_id: Agent ID
@@ -202,7 +202,7 @@ class SimulationIPCClient:
             platform: 指定平台（可选）
                 - "twitter": 只采访Twitter平台
                 - "reddit": 只采访Reddit平台  
-                - None: 双平台模拟时同时采访两个平台，单平台模拟时采访该平台
+                - None: 双平台模拟时同时采访两 平台，单平台模拟时采访该平台
             timeout: 超时时间
             
         Returns:
@@ -231,11 +231,11 @@ class SimulationIPCClient:
         发送批量采访命令
         
         Args:
-            interviews: 采访列表，每个元素包含 {"agent_id": int, "prompt": str, "platform": str(可选)}
-            platform: 默认平台（可选，会被每个采访项的platform覆盖）
+            interviews: 采访列表，每 元素包含 {"agent_id": int, "prompt": str, "platform": str(可选)}
+            platform: 默认平台（可选，会被每 采访项的platform覆盖）
                 - "twitter": 默认只采访Twitter平台
                 - "reddit": 默认只采访Reddit平台
-                - None: 双平台模拟时每个Agent同时采访两个平台
+                - None: 双平台模拟时每 Agent同时采访两 平台
             timeout: 超时时间
             
         Returns:
@@ -331,7 +331,7 @@ class SimulationIPCServer:
     
     def poll_commands(self) -> Optional[IPCCommand]:
         """
-        轮询命令目录，返回第一个待处理的命令
+        轮询命令目录，返回第一 待处理的命令
         
         Returns:
             IPCCommand 或 None

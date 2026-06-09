@@ -1,35 +1,35 @@
 [project]
-name = "mirofish-backend"
+name = "hiro-backend"
 version = "0.1.0"
-description = "MiroFish - 简洁通用的群体智能引擎，预测万物"
+description = "HIRO Social Governance Simulator"
 requires-python = ">=3.11,<3.13"
 license = { text = "AGPL-3.0" }
 authors = [
-    { name = "MiroFish Team" }
+    { name = "HIRO Team" }
 ]
 
 dependencies = [
-    # 核心框架
+    # Core Framework
     "flask>=3.0.0",
     "flask-cors>=6.0.0",
     
-    # LLM 相关
+    # LLM Related
     "openai>=1.0.0",
     
     # Mem0
     "mem0ai>=0.1.28",
     
-    # OASIS 社交媒体模拟
+    # OASIS Social Media Simulation
     "camel-oasis==0.2.5",
     "camel-ai==0.2.78",
     
-    # 文件处理
+    # File Processing
     "PyMuPDF>=1.24.0",
-    # 编码检测（支持非UTF-8编码的文本文件）
+    # Encoding Detection (for non-UTF-8 text files)
     "charset-normalizer>=3.0.0",
     "chardet>=5.0.0",
     
-    # 工具库
+    # Utility Libraries
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",
     

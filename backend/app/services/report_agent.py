@@ -3,7 +3,7 @@ Report Agent服务
 使用LangChain + Zep实现ReACT模式的模拟报告生成
 
 功能：
-1. 根据模拟需求和Zep图谱信息生成报告
+1. 根据Simulation Requirement和Zep图谱信息Generate Report
 2. 先规划目录结构，然后分段生成
 3. 每段采用ReACT多轮思考与反思模式
 4. 支持与用户对话，在对话中自主调用检索工具
@@ -38,7 +38,7 @@ class ReportLogger:
     Report Agent 详细日志记录器
     
     在报告文件夹中生成 agent_log.jsonl 文件，记录每一步详细动作。
-    每行是一个完整的 JSON 对象，包含时间戳、动作类型、详细内容等。
+    每行是一 完整的 JSON 对象，包含时间戳、动作类型、详细内容等。
     """
     
     def __init__(self, report_id: str):
@@ -241,7 +241,7 @@ class ReportLogger:
         content: str,
         tool_calls_count: int
     ):
-        """记录章节内容生成完成（仅记录内容，不代表整个章节完成）"""
+        """记录章节内容生成完成（仅记录内容，不代表整 章节完成）"""
         self.log(
             action="section_content",
             stage="generating",
@@ -264,7 +264,7 @@ class ReportLogger:
         """
         记录章节生成完成
 
-        前端应监听此日志来判断一个章节是否真正完成，并获取完整内容
+        前端应监听此日志来判断一 章节是否真正完成，并获取完整内容
         """
         self.log(
             action="section_complete",
@@ -609,28 +609,7 @@ Please examine this future rehearsal from a god's-eye perspective:
 Design the most appropriate report section structure based on the prediction results.
 
 [Reminder] Number of report sections: at minimum 2, at most 5. Content should be concise and focused on core prediction findings."""
-Completed sections (read carefully to avoid repetition):
-{previous_content}
 
-===============================================================
-[CURRENT TASK] Write section: {section_title}
-===============================================================
-
-[IMPORTANT REMINDERS]
-1. Carefully read the completed sections above; do NOT repeat the same content!
-2. You MUST call tools first to retrieve simulation data before writing
-3. Mix different tools - don't rely on just one type
-4. Report content must come from retrieval results; do not use your own knowledge
-
-[FORMAT WARNING - MUST FOLLOW]
-- Do NOT write any headings (#, ##, ###, #### are all forbidden)
-- Do NOT write "{section_title}" as an opening line
-- The section title is added automatically by the system
-- Start directly with body text; use **bold** instead of sub-section headings
-
-Begin now:
-1. First, Thought: what information does this section need?
-2. Then, Action: call a tool to retrieve simulation data
 SECTION_SYSTEM_PROMPT_TEMPLATE = """\
 You are an expert author of "Future Prediction Reports" and are writing one section of the report.
 
@@ -886,12 +865,12 @@ class ReportAgent:
     Report Agent - 模拟报告生成Agent
 
     采用ReACT（Reasoning + Acting）模式：
-    1. 规划阶段：分析模拟需求，规划报告目录结构
+    1. 规划阶段：分析Simulation Requirement，规划报告目录结构
     2. 生成阶段：逐章节生成内容，每章节可多次调用工具获取信息
     3. 反思阶段：检查内容完整性和准确性
     """
     
-    # 最大工具调用次数（每个章节）
+    # 最大工具调用次数（每 章节）
     MAX_TOOL_CALLS_PER_SECTION = 5
     
     # 最大反思轮数
@@ -912,9 +891,9 @@ class ReportAgent:
         初始化Report Agent
         
         Args:
-            graph_id: 图谱ID
+            graph_id: Graph ID
             simulation_id: 模拟ID
-            simulation_requirement: 模拟需求描述
+            simulation_requirement: Simulation Requirement描述
             llm_client: LLM客户端（可选）
             zep_tools: Zep工具服务（可选）
         """
@@ -1089,7 +1068,7 @@ class ReportAgent:
 
         支持的格式（按优先级）：
         1. <tool_call>{"name": "tool_name", "parameters": {...}}</tool_call>
-        2. 裸 JSON（响应整体或单行就是一个工具调用 JSON）
+        2. 裸 JSON（响应整体或单行就是一 工具调用 JSON）
         """
         tool_calls = []
 
@@ -1117,7 +1096,7 @@ class ReportAgent:
             except json.JSONDecodeError:
                 pass
 
-        # 响应可能包含思考文字 + 裸 JSON，尝试提取最后一个 JSON 对象
+        # 响应可能包含思考文字 + 裸 JSON，尝试提取最后一  JSON 对象
         json_pattern = r'(\{"(?:name|tool)"\s*:.*?\})\s*$'
         match = re.search(json_pattern, stripped, re.DOTALL)
         if match:
@@ -1160,7 +1139,7 @@ class ReportAgent:
         """
         规划报告大纲
         
-        使用LLM分析模拟需求，规划报告的目录结构
+        使用LLM分析Simulation Requirement，规划报告的目录结构
         
         Args:
             progress_callback: 进度回调函数
@@ -1226,7 +1205,7 @@ class ReportAgent:
             
         except Exception as e:
             logger.error(t('report.outlinePlanFailed', error=str(e)))
-            # 返回默认大纲（3个章节，作为fallback）
+            # 返回默认大纲（3 章节，作为fallback）
             return ReportOutline(
                 title="未来预测报告",
                 summary="基于模拟预测的未来趋势与风险分析",
@@ -1246,7 +1225,7 @@ class ReportAgent:
         section_index: int = 0
     ) -> str:
         """
-        使用ReACT模式生成单个章节内容
+        使用ReACT模式生成单 章节内容
         
         ReACT循环：
         1. Thought（思考）- 分析需要什么信息
@@ -1280,16 +1259,16 @@ class ReportAgent:
         )
         system_prompt = f"{system_prompt}\n\n{get_language_instruction()}"
 
-        # 构建用户prompt - 每个已完成章节各传入最大4000字
+        # 构建用户prompt - 每 Completed章节各传入最大4000字
         if previous_sections:
             previous_parts = []
             for sec in previous_sections:
-                # 每个章节最多4000字
+                # 每 章节最多4000字
                 truncated = sec[:4000] + "..." if len(sec) > 4000 else sec
                 previous_parts.append(truncated)
             previous_content = "\n\n---\n\n".join(previous_parts)
         else:
-            previous_content = "（这是第一个章节）"
+            previous_content = "（这是第一 章节）"
         
         user_prompt = SECTION_USER_PROMPT_TEMPLATE.format(
             previous_content=previous_content,
@@ -1310,7 +1289,7 @@ class ReportAgent:
         all_tools = {"insight_forge", "panorama_search", "quick_search", "interview_agents"}
 
         # 报告上下文，用于InsightForge的子问题生成
-        report_context = f"章节标题: {section.title}\n模拟需求: {self.simulation_requirement}"
+        report_context = f"章节标题: {section.title}\nSimulation Requirement: {self.simulation_requirement}"
         
         for iteration in range(max_iterations):
             if progress_callback:
@@ -1360,14 +1339,14 @@ class ReportAgent:
                         "content": (
                             "【格式错误】你在一次回复中同时包含了工具调用和 Final Answer，这是不允许的。\n"
                             "每次回复只能做以下两件事之一：\n"
-                            "- 调用一个工具（输出一个 <tool_call> 块，不要写 Final Answer）\n"
+                            "- 调用一 工具（输出一  <tool_call> 块，不要写 Final Answer）\n"
                             "- 输出最终内容（以 'Final Answer:' 开头，不要包含 <tool_call>）\n"
                             "请重新回复，只做其中一件事。"
                         ),
                     })
                     continue
                 else:
-                    # 第三次：降级处理，截断到第一个工具调用，强制执行
+                    # 第三次：降级处理，截断到第一 工具调用，强制执行
                     logger.warning(
                         t('report.sectionConflictDowngrade', title=section.title, conflictCount=conflict_retries)
                     )
@@ -1434,7 +1413,7 @@ class ReportAgent:
                     })
                     continue
 
-                # 只执行第一个工具调用
+                # 只执行第一 工具调用
                 call = tool_calls[0]
                 if len(tool_calls) > 1:
                     logger.info(t('report.multiToolOnlyFirst', total=len(tool_calls), toolName=call['name']))
@@ -1556,12 +1535,12 @@ class ReportAgent:
         """
         生成完整报告（分章节实时输出）
         
-        每个章节生成完成后立即保存到文件夹，不需要等待整个报告完成。
+        每 章节生成完成后立即保存到文件夹，不需要等待整 报告完成。
         文件结构：
         reports/{report_id}/
             meta.json       - 报告元信息
             outline.json    - 报告大纲
-            progress.json   - 生成进度
+            progress.json   - Generation Progress
             section_01.md   - 第1章节
             section_02.md   - 第2章节
             ...
@@ -1590,7 +1569,7 @@ class ReportAgent:
             created_at=datetime.now().isoformat()
         )
         
-        # 已完成的章节标题列表（用于进度追踪）
+        # Completed的章节标题列表（用于进度追踪）
         completed_section_titles = []
         
         try:
@@ -1911,7 +1890,7 @@ class ReportManager:
       {report_id}/
         meta.json          - 报告元信息和状态
         outline.json       - 报告大纲
-        progress.json      - 生成进度
+        progress.json      - Generation Progress
         section_01.md      - 第1章节
         section_02.md      - 第2章节
         ...
@@ -2118,9 +2097,9 @@ class ReportManager:
         section: ReportSection
     ) -> str:
         """
-        保存单个章节
+        保存单 章节
 
-        在每个章节生成完成后立即调用，实现分章节输出
+        在每 章节生成完成后立即调用，实现分章节输出
 
         Args:
             report_id: 报告ID
@@ -2226,7 +2205,7 @@ class ReportManager:
         completed_sections: List[str] = None
     ) -> None:
         """
-        更新报告生成进度
+        更新报告Generation Progress
         
         前端可以通过读取progress.json获取实时进度
         """
@@ -2246,7 +2225,7 @@ class ReportManager:
     
     @classmethod
     def get_progress(cls, report_id: str) -> Optional[Dict[str, Any]]:
-        """获取报告生成进度"""
+        """获取报告Generation Progress"""
         path = cls._get_progress_path(report_id)
         
         if not os.path.exists(path):
@@ -2305,7 +2284,7 @@ class ReportManager:
         for section_info in sections:
             md_content += section_info["content"]
         
-        # 后处理：清理整个报告的标题问题
+        # 后处理：清理整 报告的标题问题
         md_content = cls._post_process_report(md_content, outline)
         
         # 保存完整报告
@@ -2417,7 +2396,7 @@ class ReportManager:
                 continue
             
             elif stripped == '' and prev_was_heading:
-                # 标题后只保留一个空行
+                # 标题后只保留一 空行
                 if processed_lines and processed_lines[-1].strip() != '':
                     processed_lines.append(line)
                 prev_was_heading = False
@@ -2428,7 +2407,7 @@ class ReportManager:
             
             i += 1
         
-        # 清理连续的多个空行（保留最多2个）
+        # 清理连续的多 空行（保留最多2 ）
         result_lines = []
         empty_count = 0
         for line in processed_lines:
@@ -2565,12 +2544,12 @@ class ReportManager:
     
     @classmethod
     def delete_report(cls, report_id: str) -> bool:
-        """删除报告（整个文件夹）"""
+        """删除报告（整 文件夹）"""
         import shutil
         
         folder_path = cls._get_report_folder(report_id)
         
-        # 新格式：删除整个文件夹
+        # 新格式：删除整 文件夹
         if os.path.exists(folder_path) and os.path.isdir(folder_path):
             shutil.rmtree(folder_path)
             logger.info(t('report.reportFolderDeleted', reportId=report_id))

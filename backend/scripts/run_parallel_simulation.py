@@ -6,7 +6,7 @@ OASIS 双平台并行Simulation预设脚本
 - 双平台（Twitter + Reddit）并行Simulation
 - CompleteSimulation后不立即关闭环境，进入等待命令模式
 - 支持通过IPC接收Interview命令
-- 支持单个Agent采访和批量采访
+- 支持单 Agent采访和批量采访
 - 支持远程关闭环境命令
 
 使用方式:
@@ -104,7 +104,7 @@ logging.getLogger().addFilter(MaxTokensWarningFilter())
 def disable_oasis_logging():
     """
     禁用 OASIS 库的详细日志输出
-    OASIS 的日志太冗余（记录每个 agent 的观察和动作），我们使用自己的 action_logger
+    OASIS 的日志太冗余（记录每  agent 的观察和动作），我们使用自己的 action_logger
     """
     oasis_loggers = [
         "social.agent",
@@ -196,7 +196,7 @@ class ParallelIPCHandler:
     """
     双平台IPC命令处理器
     
-    管理两个平台的环境，处理Interview命令
+    管理两 平台的环境，处理Interview命令
     """
     
     def __init__(
@@ -291,7 +291,7 @@ class ParallelIPCHandler:
     
     async def _interview_single_platform(self, agent_id: int, prompt: str, platform: str) -> Dict[str, Any]:
         """
-        在单个平台上执行Interview
+        在单 平台上执行Interview
         
         Returns:
             包含结果的字典，或包含error的字典
@@ -319,7 +319,7 @@ class ParallelIPCHandler:
     
     async def handle_interview(self, command_id: str, agent_id: int, prompt: str, platform: str = None) -> bool:
         """
-        处理单个Agent采访命令
+        处理单 Agent采访命令
         
         Args:
             command_id: 命令ID
@@ -328,7 +328,7 @@ class ParallelIPCHandler:
             platform: 指定平台（可选）
                 - "twitter": 只采访Twitter平台
                 - "reddit": 只采访Reddit平台
-                - None/不指定: 同时采访两个平台，返回整合结果
+                - None/不指定: 同时采访两 平台，返回整合结果
             
         Returns:
             True 表示Success，False 表示Failed
@@ -391,14 +391,14 @@ class ParallelIPCHandler:
         Args:
             command_id: 命令ID
             interviews: [{"agent_id": int, "prompt": str, "platform": str(optional)}, ...]
-            platform: 默认平台（可被每个interview项覆盖）
+            platform: 默认平台（可被每 interview项覆盖）
                 - "twitter": 只采访Twitter平台
                 - "reddit": 只采访Reddit平台
-                - None/不指定: 每个Agent同时采访两个平台
+                - None/不指定: 每 Agent同时采访两 平台
         """
         twitter_interviews = []
         reddit_interviews = []
-        both_platforms_interviews = []  # 需要同时采访两个平台的
+        both_platforms_interviews = []  # 需要同时采访两 平台的
         
         for interview in interviews:
             item_platform = interview.get("platform", platform)
@@ -474,7 +474,7 @@ class ParallelIPCHandler:
                 "interviews_count": len(results),
                 "results": results
             })
-            print(f"  批量InterviewComplete: {len(results)} 个Agent")
+            print(f"  批量InterviewComplete: {len(results)}  Agent")
             return True
         else:
             self.send_response(command_id, "failed", error="没有Success的采访")
@@ -597,7 +597,7 @@ def get_agent_names_from_config(config: Dict[str, Any]) -> Dict[int, str]:
     """
     从 simulation_config 中获取 agent_id -> entity_name 的映射
     
-    这样可以在 actions.jsonl 中显示真实的实体名称，而不是 "Agent_0" 这样的代号
+    这样可以在 actions.jsonl 中显示真实的Entities名称，而不是 "Agent_0" 这样的代号
     
     Args:
         config: simulation_config.json 的内容
@@ -632,7 +632,7 @@ def fetch_new_actions_from_db(
         
     Returns:
         (actions_list, new_last_rowid)
-        - actions_list: 动作列表，每个元素包含 agent_id, agent_name, action_type, action_args（含上下文信息）
+        - actions_list: 动作列表，每 元素包含 agent_id, agent_name, action_type, action_args（含上下文信息）
         - new_last_rowid: 新的最大 rowid 值
     """
     actions = []

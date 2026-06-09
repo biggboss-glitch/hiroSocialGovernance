@@ -19,7 +19,7 @@ class ProjectStatus(str, Enum):
     CREATED = "created"              # 刚创建，文件已上传
     ONTOLOGY_GENERATED = "ontology_generated"  # 本体已生成
     GRAPH_BUILDING = "graph_building"    # 图谱构建中
-    GRAPH_COMPLETED = "graph_completed"  # 图谱构建完成
+    GRAPH_COMPLETED = "graph_completed"  # 图谱Build Complete
     FAILED = "failed"                # 失败
 
 
@@ -135,7 +135,7 @@ class ProjectManager:
         创建新项目
         
         Args:
-            name: 项目名称
+            name: Project Name
             
         Returns:
             新创建的Project对象
@@ -179,7 +179,7 @@ class ProjectManager:
         获取项目
         
         Args:
-            project_id: 项目ID
+            project_id: Project ID
             
         Returns:
             Project对象，如果不存在返回None
@@ -224,7 +224,7 @@ class ProjectManager:
         删除项目及其所有文件
         
         Args:
-            project_id: 项目ID
+            project_id: Project ID
             
         Returns:
             是否删除成功
@@ -243,7 +243,7 @@ class ProjectManager:
         保存上传的文件到项目目录
         
         Args:
-            project_id: 项目ID
+            project_id: Project ID
             file_storage: Flask的FileStorage对象
             original_filename: 原始文件名
             

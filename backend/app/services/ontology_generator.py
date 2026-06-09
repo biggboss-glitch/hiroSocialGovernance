@@ -1,6 +1,6 @@
 """
-本体生成服务
-接口1：分析文本内容，生成适合社会模拟的实体和关系类型定义
+Ontology Generation服务
+接口1：分析文本内容，生成适合社会模拟的Entities和Edges类型定义
 """
 
 import json
@@ -21,7 +21,7 @@ def _to_pascal_case(name: str) -> str:
     words = []
     for part in parts:
         words.extend(re.sub(r'([a-z])([A-Z])', r'\1_\2', part).split('_'))
-    # 每个词首字母大写，过滤空串
+    # 每 词首字母大写，过滤空串
     result = ''.join(word.capitalize() for word in words if word)
     return result if result else 'Unknown'
 
@@ -175,12 +175,12 @@ B. **Specific types (8 types, designed based on text content)**:
 
 class OntologyGenerator:
     """
-    本体生成器
-    分析文本内容，生成实体和关系类型定义
+    Ontology Generation器
+    分析文本内容，生成Entities和Edges类型定义
     """
     
     def __init__(self, llm_client: Optional[LLMClient] = None):
-        self.llm_client = llm_client or LLMClient()
+        self.llm_client = llm_client or LLMClient.create_boost()
     
     def generate(
         self,
@@ -193,7 +193,7 @@ class OntologyGenerator:
         
         Args:
             document_texts: 文档文本列表
-            simulation_requirement: 模拟需求描述
+            simulation_requirement: Simulation Requirement描述
             additional_context: 额外上下文
             
         Returns:
@@ -245,7 +245,7 @@ class OntologyGenerator:
             combined_text = combined_text[:self.MAX_TEXT_LENGTH_FOR_LLM]
             combined_text += f"\n\n...(原文共{original_length}字，已截取前{self.MAX_TEXT_LENGTH_FOR_LLM}字用于本体分析)..."
         
-        message = f"""## 模拟需求
+        message = f"""## Simulation Requirement
 
 {simulation_requirement}
 
@@ -262,13 +262,13 @@ class OntologyGenerator:
 """
         
         message += """
-请根据以上内容，设计适合社会舆论模拟的实体类型和关系类型。
+请根据以上内容，设计适合社会舆论模拟的Entity Types和Edges类型。
 
 **必须遵守的规则**：
-1. 必须正好输出10个实体类型
-2. 最后2个必须是兜底类型：Person（个人兜底）和 Organization（组织兜底）
-3. 前8个是根据文本内容设计的具体类型
-4. 所有实体类型必须是现实中可以发声的主体，不能是抽象概念
+1. 必须正好输出10 Entity Types
+2. 最后2 必须是兜底类型：Person（ 人兜底）和 Organization（组织兜底）
+3. 前8 是根据文本内容设计的具体类型
+4. 所有Entity Types必须是现实中可以发声的主体，不能是抽象概念
 5. 属性名不能使用 name、uuid、group_id 等保留字，用 full_name、org_name 等替代
 """
         
@@ -285,7 +285,7 @@ class OntologyGenerator:
         if "analysis_summary" not in result:
             result["analysis_summary"] = ""
         
-        # 验证实体类型
+        # 验证Entity Types
         # 记录原始名称到 PascalCase 的映射，用于后续修正 edge 的 source_targets 引用
         entity_name_map = {}
         for entity in result["entity_types"]:
@@ -304,7 +304,7 @@ class OntologyGenerator:
             if len(entity.get("description", "")) > 100:
                 entity["description"] = entity["description"][:97] + "..."
         
-        # 验证关系类型
+        # 验证Edges类型
         for edge in result["edge_types"]:
             # 强制将 edge name 转为 SCREAMING_SNAKE_CASE（Zep API 要求）
             if "name" in edge:
@@ -312,7 +312,7 @@ class OntologyGenerator:
                 edge["name"] = original_name.upper()
                 if edge["name"] != original_name:
                     logger.warning(f"Edge type name '{original_name}' auto-converted to '{edge['name']}'")
-            # 修正 source_targets 中的实体名称引用，与转换后的 PascalCase 保持一致
+            # 修正 source_targets 中的Entities名称引用，与转换后的 PascalCase 保持一致
             for st in edge.get("source_targets", []):
                 if st.get("source") in entity_name_map:
                     st["source"] = entity_name_map[st["source"]]
@@ -325,7 +325,7 @@ class OntologyGenerator:
             if len(edge.get("description", "")) > 100:
                 edge["description"] = edge["description"][:97] + "..."
         
-        # Zep API 限制：最多 10 个自定义实体类型，最多 10 个自定义边类型
+        # Zep API 限制：最多 10  自定义Entity Types，最多 10  自定义边类型
         MAX_ENTITY_TYPES = 10
         MAX_EDGE_TYPES = 10
 
@@ -378,9 +378,9 @@ class OntologyGenerator:
             current_count = len(result["entity_types"])
             needed_slots = len(fallbacks_to_add)
             
-            # 如果添加后会超过 10 个，需要移除一些现有类型
+            # 如果添加后会超过 10  ，需要移除一些现有类型
             if current_count + needed_slots > MAX_ENTITY_TYPES:
-                # 计算需要移除多少个
+                # 计算需要移除多少 
                 to_remove = current_count + needed_slots - MAX_ENTITY_TYPES
                 # 从末尾移除（保留前面更重要的具体类型）
                 result["entity_types"] = result["entity_types"][:-to_remove]
@@ -409,7 +409,7 @@ class OntologyGenerator:
         """
         code_lines = [
             '"""',
-            '自定义实体类型定义',
+            '自定义Entity Types定义',
             '由MiroFish自动生成，用于社会舆论模拟',
             '"""',
             '',
@@ -417,11 +417,11 @@ class OntologyGenerator:
             'from zep_cloud.external_clients.ontology import EntityModel, EntityText, EdgeModel',
             '',
             '',
-            '# ============== 实体类型定义 ==============',
+            '# ============== Entity Types定义 ==============',
             '',
         ]
         
-        # 生成实体类型
+        # 生成Entity Types
         for entity in ontology.get("entity_types", []):
             name = entity["name"]
             desc = entity.get("description", f"A {name} entity.")
@@ -444,10 +444,10 @@ class OntologyGenerator:
             code_lines.append('')
             code_lines.append('')
         
-        code_lines.append('# ============== 关系类型定义 ==============')
+        code_lines.append('# ============== Edges类型定义 ==============')
         code_lines.append('')
         
-        # 生成关系类型
+        # 生成Edges类型
         for edge in ontology.get("edge_types", []):
             name = edge["name"]
             # 转换为PascalCase类名

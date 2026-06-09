@@ -46,7 +46,7 @@
     "systemReady": "Ready",
     "systemReadyDesc": "Prediction engine on standby. Upload unstructured data to initialize a simulation sequence.",
     "metricLowCost": "Low Cost",
-    "metricLowCostDesc": "Avg. $5/sim",
+    "metricLowCostDesc": "Free",
     "metricHighAvail": "Scalable",
     "metricHighAvailDesc": "Millions of Agents",
     "workflowSequence": "Workflow",

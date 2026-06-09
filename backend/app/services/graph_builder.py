@@ -222,7 +222,7 @@ class GraphBuilderService:
                 return f"entity_{attr_name}"
             return attr_name
         
-        # 动态创建实体类型
+        # 动态创建Entity Types
         entity_types = {}
         for entity_def in ontology.get("entity_types", []):
             name = entity_def["name"]
@@ -334,8 +334,7 @@ class GraphBuilderService:
                         if ep_uuid:
                             episode_uuids.append(ep_uuid)
                 
-                # 避免请求过快
-                time.sleep(1)
+                # No delay needed for local graph engine
                 
             except Exception as e:
                 if progress_callback:
@@ -350,7 +349,7 @@ class GraphBuilderService:
         progress_callback: Optional[Callable] = None,
         timeout: int = 600
     ):
-        """等待所有 episode 处理完成（通过查询每个 episode 的 processed 状态）"""
+        """等待所有 episode 处理完成（通过查询每  episode 的 processed 状态）"""
         if not episode_uuids:
             if progress_callback:
                 progress_callback(t('progress.noEpisodesWait'), 1.0)
@@ -373,7 +372,7 @@ class GraphBuilderService:
                     )
                 break
             
-            # 检查每个 episode 的处理状态
+            # 检查每  episode 的处理状态
             for ep_uuid in list(pending_episodes):
                 try:
                     episode = self.client.graph.episode.get(uuid_=ep_uuid)
@@ -384,7 +383,7 @@ class GraphBuilderService:
                         completed_count += 1
                         
                 except Exception as e:
-                    # 忽略单个查询错误，继续
+                    # 忽略单 查询错误，继续
                     pass
             
             elapsed = int(time.time() - start_time)
@@ -395,20 +394,20 @@ class GraphBuilderService:
                 )
             
             if pending_episodes:
-                time.sleep(3)  # 每3秒检查一次
+                time.sleep(0.2)  # Fast poll for local engine
         
         if progress_callback:
             progress_callback(t('progress.processingComplete', completed=completed_count, total=total_episodes), 1.0)
     
     def _get_graph_info(self, graph_id: str) -> GraphInfo:
         """获取图谱信息"""
-        # 获取节点（分页）
+        # 获取Nodes（分页）
         nodes = fetch_all_nodes(self.client, graph_id)
 
         # 获取边（分页）
         edges = fetch_all_edges(self.client, graph_id)
 
-        # 统计实体类型
+        # 统计Entity Types
         entity_types = set()
         for node in nodes:
             if node.labels:
@@ -428,7 +427,7 @@ class GraphBuilderService:
         获取完整图谱数据（包含详细信息）
         
         Args:
-            graph_id: 图谱ID
+            graph_id: Graph ID
             
         Returns:
             包含nodes和edges的字典，包括时间信息、属性等详细数据
@@ -436,7 +435,7 @@ class GraphBuilderService:
         nodes = fetch_all_nodes(self.client, graph_id)
         edges = fetch_all_edges(self.client, graph_id)
 
-        # 创建节点映射用于获取节点名称
+        # 创建Nodes映射用于获取Nodes名称
         node_map = {}
         for node in nodes:
             node_map[node.uuid_] = node.name or ""

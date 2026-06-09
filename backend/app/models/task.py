@@ -15,9 +15,9 @@ from ..utils.locale import t
 
 class TaskStatus(str, Enum):
     """任务状态枚举"""
-    PENDING = "pending"          # 等待中
+    PENDING = "pending"          # Waiting
     PROCESSING = "processing"    # 处理中
-    COMPLETED = "completed"      # 已完成
+    COMPLETED = "completed"      # Completed
     FAILED = "failed"            # 失败
 
 

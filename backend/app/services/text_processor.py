@@ -11,7 +11,7 @@ class TextProcessor:
     
     @staticmethod
     def extract_from_files(file_paths: List[str]) -> str:
-        """从多个文件提取文本"""
+        """从多 文件提取文本"""
         return FileParser.extract_from_multiple(file_paths)
     
     @staticmethod
@@ -51,7 +51,7 @@ class TextProcessor:
         # 标准化换行
         text = text.replace('\r\n', '\n').replace('\r', '\n')
         
-        # 移除连续空行（保留最多两个换行）
+        # 移除连续空行（保留最多两 换行）
         text = re.sub(r'\n{3,}', '\n\n', text)
         
         # 移除行首行尾空白

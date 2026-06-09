@@ -1,6 +1,7 @@
 """
 LLM客户端封装
 统一使用OpenAI格式调用
+Supports primary LLM and a fast "boost" LLM for speed-critical paths.
 """
 
 import json
@@ -9,6 +10,9 @@ from typing import Optional, Dict, Any, List
 from openai import OpenAI
 
 from ..config import Config
+from .logger import get_logger
+
+logger = get_logger('mirofish.llm_client')
 
 
 class LLMClient:
@@ -31,6 +35,21 @@ class LLMClient:
             api_key=self.api_key,
             base_url=self.base_url
         )
+    
+    @classmethod
+    def create_boost(cls) -> 'LLMClient':
+        """Create a fast LLM client using the boost/Groq config if available.
+        Falls back to the primary LLM if boost is not configured."""
+        boost_key = getattr(Config, 'LLM_BOOST_API_KEY', None)
+        boost_url = getattr(Config, 'LLM_BOOST_BASE_URL', None)
+        boost_model = getattr(Config, 'LLM_BOOST_MODEL_NAME', None)
+        
+        if boost_key and boost_url and boost_model:
+            logger.info(f"Using BOOST LLM: {boost_model} @ {boost_url}")
+            return cls(api_key=boost_key, base_url=boost_url, model=boost_model)
+        else:
+            logger.info("No BOOST LLM configured, falling back to primary LLM")
+            return cls()
     
     def chat(
         self,
@@ -61,9 +80,19 @@ class LLMClient:
         if response_format:
             kwargs["response_format"] = response_format
         
-        response = self.client.chat.completions.create(**kwargs)
+        try:
+            response = self.client.chat.completions.create(**kwargs)
+        except Exception as e:
+            # Fallback: strip response_format if it caused the error
+            if response_format:
+                logger.warning(f"LLM call failed with response_format, retrying without it. Error: {e}")
+                kwargs.pop("response_format")
+                response = self.client.chat.completions.create(**kwargs)
+            else:
+                raise e
+                
         content = response.choices[0].message.content
-        # 部分模型（如MiniMax M2.5）会在content中包含<think>思考内容，需要移除
+        # Strip <think>...</think> blocks (Qwen 3.5, DeepSeek, etc.)
         content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
         return content
     
@@ -90,14 +119,43 @@ class LLMClient:
             max_tokens=max_tokens,
             response_format={"type": "json_object"}
         )
-        # 清理markdown代码块标记
-        cleaned_response = response.strip()
-        cleaned_response = re.sub(r'^```(?:json)?\s*\n?', '', cleaned_response, flags=re.IGNORECASE)
-        cleaned_response = re.sub(r'\n?```\s*$', '', cleaned_response)
-        cleaned_response = cleaned_response.strip()
-
+        
+        return self._parse_json_response(response)
+    
+    @staticmethod
+    def _parse_json_response(response: str) -> Dict[str, Any]:
+        """Robustly parse JSON from LLM output, handling markdown fences,
+        think blocks, and other common quirks."""
+        cleaned = response.strip()
+        
+        # Strip any remaining <think> blocks that weren't caught
+        cleaned = re.sub(r'<think>[\s\S]*?</think>', '', cleaned).strip()
+        
+        # Strip markdown code fences: ```json ... ``` or ``` ... ```
+        cleaned = re.sub(r'^```(?:json)?\s*\n?', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'\n?```\s*$', '', cleaned)
+        cleaned = cleaned.strip()
+        
+        # Try direct parse first
         try:
-            return json.loads(cleaned_response)
+            return json.loads(cleaned)
         except json.JSONDecodeError:
-            raise ValueError(f"LLM返回的JSON格式无效: {cleaned_response}")
-
+            pass
+        
+        # Fallback: find the first { ... } block using brace matching
+        start = cleaned.find('{')
+        if start != -1:
+            depth = 0
+            for i in range(start, len(cleaned)):
+                if cleaned[i] == '{':
+                    depth += 1
+                elif cleaned[i] == '}':
+                    depth -= 1
+                    if depth == 0:
+                        candidate = cleaned[start:i+1]
+                        try:
+                            return json.loads(candidate)
+                        except json.JSONDecodeError:
+                            break
+        
+        raise ValueError(f"LLM返回的JSON格式无效: {cleaned[:500]}")
