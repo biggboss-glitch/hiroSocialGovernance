@@ -102,8 +102,9 @@ A. **Fallback types (required, placed last 2 in list)**:
    - `Person`: Fallback type for any individual person. Use when a person doesn't fit any other specific person type.
    - `Organization`: Fallback type for any organization. Use when an org doesn't fit any other specific org type.
 
-B. **Specific types (8 types, designed based on text content)**:
-   - Design more specific types for the main roles appearing in the text
+B. **Specific types (8 types, designed based on text content and domain inference)**:
+   - Design more specific types for the main roles appearing in the text OR implied by the domain.
+   - **PROACTIVE INFERENCE (CRITICAL):** Even if the input text is very short (e.g., just "college prediction"), you MUST proactively deduce and include the typical entity types and relationships that belong to that domain. For example, if the user mentions "college", automatically generate `Student`, `Teacher`, `Professor`, `Course`, etc., even if they aren't explicitly mentioned.
    - Example: if text involves academic events, could have `Student`, `Professor`, `University`
    - Example: if text involves business events, could have `Company`, `CEO`, `Employee`
 
@@ -113,7 +114,7 @@ B. **Specific types (8 types, designed based on text content)**:
 - Similarly, small organizations and temporary groups should fall into `Organization`
 
 **Specific type design principles**:
-- Identify frequently appearing or key role types from the text
+- Identify frequently appearing or key role types from the text, OR infer them from the requested domain ecosystem.
 - Each specific type should have clear boundaries, avoiding overlap
 - Description must clearly explain the difference between this type and the fallback type
 
