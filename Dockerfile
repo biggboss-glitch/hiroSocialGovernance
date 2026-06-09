@@ -36,5 +36,11 @@ ENV PYTHONUNBUFFERED=1
 # Expose port
 EXPOSE 7860
 
+# Create a non-root user and set ownership for HF Spaces
+RUN useradd -m -u 1000 user && \
+    mkdir -p /app/backend/uploads /app/backend/logs && \
+    chown -R user:user /app
+USER user
+
 # Run the application
 CMD ["python", "run.py"]
