@@ -430,6 +430,52 @@ const renderGraph = () => {
       }
     })
   })
+  
+  // Ensure all nodes are connected in a single component using Union-Find
+  const parent = {}
+  const find = (i) => {
+    if (parent[i] === undefined) parent[i] = i
+    if (parent[i] === i) return i
+    return parent[i] = find(parent[i])
+  }
+  const union = (i, j) => {
+    const rootI = find(i)
+    const rootJ = find(j)
+    if (rootI !== rootJ) {
+      parent[rootI] = rootJ
+      return true
+    }
+    return false
+  }
+
+  edges.forEach(e => {
+    union(e.source, e.target)
+  })
+
+  let rootNode = nodes.length > 0 ? find(nodes[0].id) : null
+  for (let i = 1; i < nodes.length; i++) {
+    const rootI = find(nodes[i].id)
+    if (rootNode !== rootI) {
+      edges.push({
+        source: rootNode,
+        target: nodes[i].id,
+        type: 'RELATED',
+        name: 'RELATED',
+        curvature: 0,
+        isSelfLoop: false,
+        pairIndex: 0,
+        pairTotal: 1,
+        rawData: { 
+          source_name: 'System', 
+          target_name: nodes[i].name, 
+          name: 'RELATED',
+          fact_type: 'System Link'
+        }
+      })
+      union(rootNode, nodes[i].id)
+      rootNode = find(rootNode)
+    }
+  }
     
   // Color scale
   const colorMap = {}
@@ -449,6 +495,7 @@ const renderGraph = () => {
     .force('y', d3.forceY(height / 2).strength(0.02))
     .velocityDecay(0.25)
     .alphaDecay(0.015)
+    .alphaTarget(0.05)
   
   currentSimulation = simulation
 
@@ -629,7 +676,7 @@ const renderGraph = () => {
       })
       .on('end', (event, d) => {
         if (d._isDragging) {
-          simulation.alphaTarget(0)
+          simulation.alphaTarget(0.05)
         }
         d.fx = null
         d.fy = null
