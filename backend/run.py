@@ -22,16 +22,16 @@ def main():
     """主函数"""
     errors = Config.validate()
     if errors:
-        print("配置错误:")
+        print("Configuration errors:")
         for err in errors:
             print(f"  - {err}")
-        print("\n请检查 .env 文件中的配置")
+        print("\nPlease check your .env file configuration")
         sys.exit(1)
     
     app = create_app()
     
     host = os.environ.get('FLASK_HOST', '0.0.0.0')
-    port = int(os.environ.get('FLASK_PORT', 5001))
+    port = int(os.environ.get('PORT', 7860))
     debug = Config.DEBUG
     
     app.run(host=host, port=port, debug=debug, threaded=True)

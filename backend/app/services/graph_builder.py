@@ -106,9 +106,9 @@ class GraphBuilderService:
         chunk_size: int,
         chunk_overlap: int,
         batch_size: int,
-        locale: str = 'zh'
+        locale: str = 'en'
     ):
-        """图谱构建工作线程"""
+        """Graph build worker thread"""
         set_locale(locale)
         try:
             self.task_manager.update_task(

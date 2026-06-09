@@ -1,29 +1,41 @@
-FROM python:3.11
+# Build frontend
+FROM node:20-slim AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
 
-# 安装 Node.js （满足 >=18）及必要工具
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends nodejs npm \
-  && rm -rf /var/lib/apt/lists/*
+# Build backend
+FROM python:3.11-slim
+WORKDIR /app/backend
 
-# 从 uv 官方镜像复制 uv
-COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
+# Install system dependencies if any
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+# Install uv for fast Python package installation
+RUN pip install uv
 
-# 先复制依赖描述文件以利用缓存
-COPY package.json package-lock.json ./
-COPY frontend/package.json frontend/package-lock.json ./frontend/
-COPY backend/pyproject.toml backend/uv.lock ./backend/
+# Copy backend code
+COPY backend/ ./
 
-# 安装依赖（Node + Python）
-RUN npm ci \
-  && npm ci --prefix frontend \
-  && cd backend && uv sync --frozen
+# Install python dependencies using uv
+# Assuming there is a requirements.txt, or we can use pyproject.toml
+# Let's check if there's a requirements.txt or pyproject.toml
+RUN uv pip install --system -r requirements.txt || uv pip install --system -e .
 
-# 复制项目源码
-COPY . .
+# Copy built frontend static files
+COPY --from=frontend-builder /app/frontend/dist /app/backend/app/static
 
-EXPOSE 3000 5001
+# Setup environment variables for HF Spaces
+ENV PORT=7860
+ENV FLASK_PORT=7860
+ENV PYTHONUNBUFFERED=1
 
-# 同时启动前后端（开发模式）
-CMD ["npm", "run", "dev"]
+# Expose port
+EXPOSE 7860
+
+# Run the application
+CMD ["python", "run.py"]

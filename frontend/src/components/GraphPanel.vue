@@ -438,15 +438,17 @@ const renderGraph = () => {
 
   const simulation = d3.forceSimulation(nodes)
     .force('link', d3.forceLink(edges).id(d => d.id).distance(d => {
-      const baseDistance = 150
+      const baseDistance = 220
       const edgeCount = d.pairTotal || 1
-      return baseDistance + (edgeCount - 1) * 50
+      return baseDistance + (edgeCount - 1) * 80
     }))
-    .force('charge', d3.forceManyBody().strength(-400))
+    .force('charge', d3.forceManyBody().strength(-900))
     .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('collide', d3.forceCollide(50))
-    .force('x', d3.forceX(width / 2).strength(0.04))
-    .force('y', d3.forceY(height / 2).strength(0.04))
+    .force('collide', d3.forceCollide(70))
+    .force('x', d3.forceX(width / 2).strength(0.02))
+    .force('y', d3.forceY(height / 2).strength(0.02))
+    .velocityDecay(0.25)
+    .alphaDecay(0.015)
   
   currentSimulation = simulation
 
@@ -597,7 +599,7 @@ const renderGraph = () => {
   const node = nodeGroup.selectAll('circle')
     .data(nodes)
     .enter().append('circle')
-    .attr('r', 10)
+    .attr('r', 14)
     .attr('fill', d => getColor(d.type))
     .attr('stroke', '#fff')
     .attr('stroke-width', 2.5)
@@ -665,14 +667,15 @@ const renderGraph = () => {
   const nodeLabels = nodeGroup.selectAll('text')
     .data(nodes)
     .enter().append('text')
-    .text(d => d.name.length > 8 ? d.name.substring(0, 8) + '…' : d.name)
-    .attr('font-size', '11px')
-    .attr('fill', '#333')
-    .attr('font-weight', '500')
-    .attr('dx', 14)
-    .attr('dy', 4)
+    .text(d => d.name.length > 15 ? d.name.substring(0, 15) + '…' : d.name)
+    .attr('font-size', '12px')
+    .attr('fill', '#1a1a2e')
+    .attr('font-weight', '600')
+    .attr('dx', 18)
+    .attr('dy', 5)
     .style('pointer-events', 'none')
     .style('font-family', 'system-ui, sans-serif')
+    .style('text-shadow', '0 1px 3px rgba(255,255,255,0.9), 0 -1px 3px rgba(255,255,255,0.9)')
 
   simulation.on('tick', () => {
     link.attr('d', d => getLinkPath(d))
