@@ -323,6 +323,25 @@ const renderGraph = () => {
     
   svg.selectAll('*').remove()
   
+  // Add dotted grid background
+  const defs = svg.append('defs')
+  const pattern = defs.append('pattern')
+    .attr('id', 'gridPattern')
+    .attr('width', 30)
+    .attr('height', 30)
+    .attr('patternUnits', 'userSpaceOnUse')
+  
+  pattern.append('circle')
+    .attr('cx', 2)
+    .attr('cy', 2)
+    .attr('r', 1.5)
+    .attr('fill', '#e0e0e0')
+
+  svg.append('rect')
+    .attr('width', '100%')
+    .attr('height', '100%')
+    .attr('fill', 'url(#gridPattern)')
+  
   const nodesData = props.graphData.nodes || []
   const edgesData = props.graphData.edges || []
   
@@ -431,52 +450,6 @@ const renderGraph = () => {
     })
   })
   
-  // Ensure all nodes are connected in a single component using Union-Find
-  const parent = {}
-  const find = (i) => {
-    if (parent[i] === undefined) parent[i] = i
-    if (parent[i] === i) return i
-    return parent[i] = find(parent[i])
-  }
-  const union = (i, j) => {
-    const rootI = find(i)
-    const rootJ = find(j)
-    if (rootI !== rootJ) {
-      parent[rootI] = rootJ
-      return true
-    }
-    return false
-  }
-
-  edges.forEach(e => {
-    union(e.source, e.target)
-  })
-
-  let rootNode = nodes.length > 0 ? find(nodes[0].id) : null
-  for (let i = 1; i < nodes.length; i++) {
-    const rootI = find(nodes[i].id)
-    if (rootNode !== rootI) {
-      edges.push({
-        source: rootNode,
-        target: nodes[i].id,
-        type: 'RELATED',
-        name: 'RELATED',
-        curvature: 0,
-        isSelfLoop: false,
-        pairIndex: 0,
-        pairTotal: 1,
-        invisible: true,
-        rawData: { 
-          source_name: 'System', 
-          target_name: nodes[i].name, 
-          name: 'RELATED',
-          fact_type: 'System Link'
-        }
-      })
-      union(rootNode, nodes[i].id)
-      rootNode = find(rootNode)
-    }
-  }
     
   // Color scale
   const colorMap = {}
@@ -568,7 +541,7 @@ const renderGraph = () => {
   }
   
   const link = linkGroup.selectAll('path')
-    .data(edges.filter(e => !e.invisible))
+    .data(edges)
     .enter().append('path')
     .attr('stroke', '#C0C0C0')
     .attr('stroke-width', 1.5)
@@ -588,7 +561,7 @@ const renderGraph = () => {
     })
 
   const linkLabelBg = linkGroup.selectAll('rect')
-    .data(edges.filter(e => !e.invisible))
+    .data(edges)
     .enter().append('rect')
     .attr('fill', 'rgba(255,255,255,0.95)')
     .attr('rx', 3)
@@ -612,7 +585,7 @@ const renderGraph = () => {
 
   // Link labels
   const linkLabels = linkGroup.selectAll('text')
-    .data(edges.filter(e => !e.invisible))
+    .data(edges)
     .enter().append('text')
     .text(d => d.name)
     .attr('font-size', '9px')
