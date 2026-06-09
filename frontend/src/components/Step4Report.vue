@@ -5033,6 +5033,23 @@ watch(() => props.reportId, (newId) => {
 .log-msg.error { color: #EF5350; }
 .log-msg.warning { color: #FFA726; }
 .log-msg.success { color: #66BB6A; }
+
+@media (max-width: 768px) {
+  .main-split-layout {
+    flex-direction: column;
+  }
+  .left-panel {
+    border-right: none;
+    border-bottom: 1px solid #E5E7EB;
+    height: 50vh;
+  }
+  .right-panel {
+    height: 50vh;
+  }
+  .workflow-metrics {
+    flex-wrap: wrap;
+  }
+}
 </style>
 
 <style>

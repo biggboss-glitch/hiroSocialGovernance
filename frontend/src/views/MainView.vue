@@ -543,4 +543,70 @@ onUnmounted(() => {
 .panel-wrapper.left {
   border-right: 1px solid #EAEAEA;
 }
+
+@media (max-width: 768px) {
+  .app-header {
+    height: auto;
+    flex-wrap: wrap;
+    padding: 15px;
+    gap: 15px;
+    justify-content: center;
+  }
+  
+  .header-center {
+    position: static;
+    transform: none;
+    order: 3;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+  
+  .header-left, .header-right {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .header-right {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .content-area {
+    flex-direction: column;
+  }
+  
+  /* Override inline styles for split mode on mobile */
+  .panel-wrapper {
+    width: 100% !important;
+  }
+  
+  /* When in split mode, both are visible but stacked top and bottom */
+  .panel-wrapper.left[style*="width: 50%"] {
+    height: 50% !important;
+    border-right: none;
+    border-bottom: 1px solid #EAEAEA;
+  }
+  .panel-wrapper.right[style*="width: 50%"] {
+    height: 50% !important;
+  }
+  
+  /* When in graph mode, left is 100% height, right is 0% */
+  .panel-wrapper.left[style*="width: 100%"] {
+    height: 100% !important;
+  }
+  .panel-wrapper.right[style*="width: 0%"] {
+    height: 0% !important;
+  }
+  
+  /* When in workbench mode, right is 100% height, left is 0% */
+  .panel-wrapper.right[style*="width: 100%"] {
+    height: 100% !important;
+  }
+  .panel-wrapper.left[style*="width: 0%"] {
+    height: 0% !important;
+  }
+}
 </style>

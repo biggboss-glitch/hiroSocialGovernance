@@ -1223,4 +1223,40 @@ onUnmounted(() => {
   animation: spin 0.8s linear infinite;
   margin-right: 6px;
 }
+
+@media (max-width: 768px) {
+  .control-bar {
+    flex-direction: column;
+    height: auto;
+    gap: 12px;
+    padding: 16px;
+  }
+  .status-group {
+    flex-direction: column;
+    width: 100%;
+  }
+  .platform-status {
+    width: 100%;
+  }
+  .action-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .timeline-axis, .timeline-marker {
+    display: none;
+  }
+  .timeline-item.twitter, .timeline-item.reddit {
+    justify-content: center;
+    padding: 0;
+  }
+  .timeline-item.twitter .timeline-card, .timeline-item.reddit .timeline-card {
+    margin: 0;
+    width: 100%;
+  }
+  .timeline-header {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+}
 </style>

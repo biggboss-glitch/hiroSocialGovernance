@@ -70,7 +70,7 @@ cd backend
 uv run python run.py
 ```
 
-The application will be available at `http://localhost:7860`.
+The application will be available at `https://huggingface.co/spaces/arnold2309/HIRO_SOCIAL_GOVERNANCE`.
 
 ## Usage Workflow
 

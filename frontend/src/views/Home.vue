@@ -908,6 +908,51 @@ const startSimulation = () => {
     margin-bottom: 20px;
   }
 }
+
+@media (max-width: 768px) {
+  .main-content {
+    padding: 30px 20px;
+  }
+  
+  .navbar {
+    padding: 15px 20px;
+    flex-wrap: wrap;
+    gap: 15px;
+    justify-content: center;
+  }
+  
+  .main-title {
+    font-size: 2.5rem;
+    margin-bottom: 25px;
+  }
+  
+  .hero-desc {
+    font-size: 0.95rem;
+    margin-bottom: 30px;
+  }
+  
+  .metrics-row {
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .metric-card {
+    min-width: 100%;
+  }
+  
+  .tag-row {
+    flex-wrap: wrap;
+  }
+  
+  .logo-container {
+    padding-right: 0;
+    justify-content: center;
+  }
+  
+  .upload-zone {
+    height: 160px;
+  }
+}
 </style>
 
 <style>

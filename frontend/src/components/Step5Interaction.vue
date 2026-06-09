@@ -2592,6 +2592,31 @@ watch(() => props.simulationId, (newId) => {
   border-top: 1px solid #E5E7EB;
   margin: 24px 0;
 }
+
+@media (max-width: 768px) {
+  .main-split-layout {
+    flex-direction: column;
+  }
+  .left-panel {
+    border-right: none;
+    border-bottom: 1px solid #E5E7EB;
+    height: 50vh;
+  }
+  .right-panel {
+    height: 50vh;
+  }
+  .action-bar-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .action-bar-tabs {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .interaction-agents-list {
+    grid-template-columns: 1fr;
+  }
+}
 </style>
 
 <style>

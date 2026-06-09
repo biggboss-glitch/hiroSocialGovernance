@@ -2544,4 +2544,46 @@ onUnmounted(() => {
   transform: scale(0.95) translateY(10px);
   opacity: 0;
 }
+
+@media (max-width: 768px) {
+  .profiles-grid, .platforms-grid, .modal-info-grid, .persona-dimensions, .time-periods {
+    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+  }
+  .param-group {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .action-group.dual {
+    flex-direction: column;
+  }
+  .action-btn {
+    width: 100%;
+  }
+  .agent-card-header, .config-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .modal-header-info {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .auto-info-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .auto-value {
+    border-right: none;
+    border-bottom: 1px solid #E2E8F0;
+    padding-bottom: 10px;
+    padding-right: 0;
+    width: 100%;
+  }
+}
 </style>

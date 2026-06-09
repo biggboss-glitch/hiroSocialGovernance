@@ -695,4 +695,20 @@ watch(() => props.systemLogs.length, () => {
   color: #CCC;
   word-break: break-all;
 }
+
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  
+  .attr-item, .conn-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .action-btn {
+    padding: 12px;
+  }
+}
 </style>
