@@ -34,15 +34,29 @@ service.interceptors.response.use(
   error => {
     console.error('Response error:', error)
     
+    let errMsg = error.message
+    if (error.response && error.response.data) {
+      if (error.response.data.error) {
+        errMsg = error.response.data.error
+      } else if (error.response.data.message) {
+        errMsg = error.response.data.message
+      }
+    }
+    
     if (error.code === 'ECONNABORTED' && error.message.includes('timeout')) {
-      console.error('Request timeout')
+      errMsg = 'Request timeout: ' + errMsg
     }
     
     if (error.message === 'Network Error') {
-      console.error('Network error - please check your connection')
+      errMsg = 'Network error - please check your connection'
     }
     
-    return Promise.reject(error)
+    const newError = new Error(errMsg)
+    if (error.response && error.response.data && error.response.data.traceback) {
+      console.error('Backend Traceback:', error.response.data.traceback)
+    }
+    
+    return Promise.reject(newError)
   }
 )
 
