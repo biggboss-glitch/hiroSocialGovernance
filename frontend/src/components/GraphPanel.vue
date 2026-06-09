@@ -465,6 +465,7 @@ const renderGraph = () => {
         isSelfLoop: false,
         pairIndex: 0,
         pairTotal: 1,
+        invisible: true,
         rawData: { 
           source_name: 'System', 
           target_name: nodes[i].name, 
@@ -567,7 +568,7 @@ const renderGraph = () => {
   }
   
   const link = linkGroup.selectAll('path')
-    .data(edges)
+    .data(edges.filter(e => !e.invisible))
     .enter().append('path')
     .attr('stroke', '#C0C0C0')
     .attr('stroke-width', 1.5)
@@ -587,7 +588,7 @@ const renderGraph = () => {
     })
 
   const linkLabelBg = linkGroup.selectAll('rect')
-    .data(edges)
+    .data(edges.filter(e => !e.invisible))
     .enter().append('rect')
     .attr('fill', 'rgba(255,255,255,0.95)')
     .attr('rx', 3)
@@ -611,7 +612,7 @@ const renderGraph = () => {
 
   // Link labels
   const linkLabels = linkGroup.selectAll('text')
-    .data(edges)
+    .data(edges.filter(e => !e.invisible))
     .enter().append('text')
     .text(d => d.name)
     .attr('font-size', '9px')
