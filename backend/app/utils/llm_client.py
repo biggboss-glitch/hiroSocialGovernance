@@ -87,9 +87,12 @@ class LLMClient:
             if response_format:
                 logger.warning(f"LLM call failed with response_format, retrying without it. Error: {e}")
                 kwargs.pop("response_format")
-                response = self.client.chat.completions.create(**kwargs)
+                try:
+                    response = self.client.chat.completions.create(**kwargs)
+                except Exception as e2:
+                    raise Exception(f"{str(e2)} (Base URL: {self.base_url})")
             else:
-                raise e
+                raise Exception(f"{str(e)} (Base URL: {self.base_url})")
                 
         content = response.choices[0].message.content
         # Strip <think>...</think> blocks (Qwen 3.5, DeepSeek, etc.)
