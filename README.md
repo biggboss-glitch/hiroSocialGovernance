@@ -1,3 +1,11 @@
+---
+title: HIRO Social Governance
+emoji: 🌍
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 7860
+---
 # Hiro Social Governance
 
 Hiro Social Governance is a real-time, multi-agent AI system designed for analyzing and simulating public opinion and social governance scenarios. It utilizes advanced Large Language Models (LLMs) and Knowledge Graphs to extract insights from raw text data and simulate the propagation of information and interactions among different social roles across multiple platforms (like Twitter and Reddit).
