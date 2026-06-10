@@ -28,7 +28,7 @@ class Config:
     JSON_AS_ASCII = False
     
     # LLM配置（强制使用NVIDIA，忽略可能指向Groq的环境变量）
-    LLM_API_KEY = os.environ.get('NVIDIA_API_KEY', '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')
+    LLM_API_KEY = os.environ.get('LLM_API_KEY')
     LLM_BASE_URL = 'https://integrate.api.nvidia.com/v1'
     LLM_MODEL_NAME = 'qwen/qwen3.5-397b-a17b'
     
