@@ -48,8 +48,6 @@ Create a `.env` file in the `backend/` directory:
 
 ```env
 LLM_API_KEY=your_gemini_api_key_here
-ZEP_API_URL=your_zep_url_here
-ZEP_API_KEY=your_zep_key_here
 ```
 
 ### 3. Build the Frontend

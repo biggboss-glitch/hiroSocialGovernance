@@ -39,7 +39,7 @@ The project is structured with a Python backend and a Vue.js frontend:
 - **`uv`:** Fast Python package installer and resolver.
 - **API Keys:**
   - `GEMINI_API_KEY`: For LLM inference.
-  - `ZEP_API_URL` and `ZEP_API_KEY`: For knowledge graph and memory storage.
+  - `Memo used for local`: For knowledge graph and memory storage.
 
 ## Installation and Setup
 
@@ -56,8 +56,6 @@ Create a `.env` file in the `backend/` directory:
 
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
-ZEP_API_URL=your_zep_url_here
-ZEP_API_KEY=your_zep_key_here
 ```
 
 ### 3. Build the Frontend
