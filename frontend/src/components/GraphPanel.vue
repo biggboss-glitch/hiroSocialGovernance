@@ -574,6 +574,7 @@ const renderGraph = () => {
     .style('cursor', 'pointer')
     .style('pointer-events', 'all')
     .style('font-family', 'system-ui, sans-serif')
+    .style('text-shadow', '1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff')
     .style('display', showEdgeLabels.value ? 'block' : 'none')
     .on('click', (event, d) => {
       event.stopPropagation()
