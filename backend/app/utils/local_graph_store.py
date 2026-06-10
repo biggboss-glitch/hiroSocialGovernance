@@ -527,7 +527,7 @@ Rules:
             # Try one more time with plain chat (no json_object mode)
             try:
                 logger.info("Retrying extraction without json_object mode...")
-                raw = llm.chat(messages, temperature=0.1, max_tokens=4096)
+                raw = llm.chat(messages, temperature=0.1, max_tokens=2000)
                 res = LLMClient._parse_json_response(raw)
                 entities_found = len(res.get("entities", []))
                 edges_found = len(res.get("edges", []))
