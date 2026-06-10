@@ -555,7 +555,7 @@ class RedditSimulationRunner:
             agent_graph=self.agent_graph,
             platform=oasis.DefaultPlatformType.REDDIT,
             database_path=db_path,
-            semaphore=30,  # 限制最大并发 LLM Request数，防止 API 过载
+            semaphore=2,  # 限制最大并发 LLM Request数，防止 API 过载
         )
         
         await self.env.reset()

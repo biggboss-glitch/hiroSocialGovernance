@@ -1084,7 +1084,7 @@ async def run_twitter_simulation(
         agent_graph=result.agent_graph,
         platform=oasis.DefaultPlatformType.TWITTER,
         database_path=db_path,
-        semaphore=30,  # 限制最大并发 LLM Request数，防止 API 过载
+        semaphore=5,  # 限制最大并发 LLM Request数，防止 API 过载
     )
     
     await result.env.reset()
@@ -1262,7 +1262,7 @@ async def run_reddit_simulation(
         agent_graph=result.agent_graph,
         platform=oasis.DefaultPlatformType.REDDIT,
         database_path=db_path,
-        semaphore=30,  # 限制最大并发 LLM Request数，防止 API 过载
+        semaphore=2,  # 限制最大并发 LLM Request数，防止 API 过载
     )
     
     await result.env.reset()
