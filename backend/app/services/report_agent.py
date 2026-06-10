@@ -1259,12 +1259,17 @@ class ReportAgent:
         )
         system_prompt = f"{system_prompt}\n\n{get_language_instruction()}"
 
-        # 构建用户prompt - 每 Completed章节各传入最大4000字
+        # 限制最多3个章节，防止超出LLM处理能力
+        if len(outline.sections) > 3:
+            logger.warning(f"生成的章节数量过多 ({len(outline.sections)})，截断为3个")
+            outline.sections = outline.sections[:3]
+            
+        # 构建用户prompt - 每个已完成章节各传入最大1000字，防止 Token 超出限制
         if previous_sections:
             previous_parts = []
             for sec in previous_sections:
-                # 每 章节最多4000字
-                truncated = sec[:4000] + "..." if len(sec) > 4000 else sec
+                # 每个章节最多1000字，避免 Groq TPM 超限
+                truncated = sec[:1000] + "..." if len(sec) > 1000 else sec
                 previous_parts.append(truncated)
             previous_content = "\n\n---\n\n".join(previous_parts)
         else:
@@ -1628,6 +1633,11 @@ class ReportAgent:
             # 阶段2: 逐章节生成（分章节保存）
             report.status = ReportStatus.GENERATING
             
+            # 限制生成章节数量最大为4个，以防止生成的报告过长导致超时和 token 耗尽
+            if len(outline.sections) > 4:
+                logger.warning(f"生成的章节数量过多 ({len(outline.sections)})，截断为4个")
+                outline.sections = outline.sections[:4]
+                
             total_sections = len(outline.sections)
             generated_sections = []  # 保存内容用于上下文
             
