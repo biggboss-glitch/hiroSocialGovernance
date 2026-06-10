@@ -21,7 +21,6 @@
       </div>
 
       <div class="header-right">
-        <LanguageSwitcher />
         <div class="step-divider"></div>
         <div class="workflow-step">
           <span class="step-num">Step 5/5</span>
@@ -71,7 +70,6 @@ import Step5Interaction from '../components/Step5Interaction.vue'
 import { getProject, getGraphData } from '../api/graph'
 import { getSimulation } from '../api/simulation'
 import { getReport } from '../api/report'
-import LanguageSwitcher from '../components/LanguageSwitcher.vue'
 
 const route = useRoute()
 const router = useRouter()

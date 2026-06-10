@@ -4,7 +4,6 @@
     <nav class="navbar">
       <div class="nav-brand">HIRO</div>
       <div class="nav-links">
-        <LanguageSwitcher />
         <a href="https://github.com/biggboss-glitch/hiroSocialGovernance" target="_blank" class="github-link">
           {{ $t('nav.visitGithub') }} <span class="arrow">↗</span>
         </a>
@@ -208,7 +207,6 @@ import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import HistoryDatabase from '../components/HistoryDatabase.vue'
-import LanguageSwitcher from '../components/LanguageSwitcher.vue'
 
 const router = useRouter()
 const { t } = useI18n()
