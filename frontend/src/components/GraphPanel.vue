@@ -560,28 +560,7 @@ const renderGraph = () => {
       }
     })
 
-  const linkLabelBg = linkGroup.selectAll('rect')
-    .data(edges)
-    .enter().append('rect')
-    .attr('fill', 'rgba(255,255,255,0.95)')
-    .attr('rx', 3)
-    .attr('ry', 3)
-    .style('cursor', 'pointer')
-    .style('pointer-events', 'all')
-    .style('display', showEdgeLabels.value ? 'block' : 'none')
-    .on('click', (event, d) => {
-      event.stopPropagation()
-      linkGroup.selectAll('path').attr('stroke', '#C0C0C0').attr('stroke-width', 1.5)
-      linkLabelBg.attr('fill', 'rgba(255,255,255,0.95)')
-      linkLabels.attr('fill', '#666')
-      link.filter(l => l === d).attr('stroke', '#3498db').attr('stroke-width', 3)
-      d3.select(event.target).attr('fill', 'rgba(52, 152, 219, 0.1)')
-      
-      selectedItem.value = {
-        type: 'edge',
-        data: d.rawData
-      }
-    })
+
 
   // Link labels
   const linkLabels = linkGroup.selectAll('text')
@@ -599,7 +578,6 @@ const renderGraph = () => {
     .on('click', (event, d) => {
       event.stopPropagation()
       linkGroup.selectAll('path').attr('stroke', '#C0C0C0').attr('stroke-width', 1.5)
-      linkLabelBg.attr('fill', 'rgba(255,255,255,0.95)')
       linkLabels.attr('fill', '#666')
       link.filter(l => l === d).attr('stroke', '#3498db').attr('stroke-width', 3)
       d3.select(event.target).attr('fill', '#3498db')
@@ -611,7 +589,6 @@ const renderGraph = () => {
     })
   
   linkLabelsRef = linkLabels
-  linkLabelBgRef = linkLabelBg
 
   // Nodes group
   const nodeGroup = g.append('g').attr('class', 'nodes')
@@ -709,17 +686,7 @@ const renderGraph = () => {
         .attr('transform', '') // 移除旋转，保持水平
     })
     
-    linkLabelBg.each(function(d, i) {
-      const mid = getLinkMidpoint(d)
-      const textEl = linkLabels.nodes()[i]
-      const bbox = textEl.getBBox()
-      d3.select(this)
-        .attr('x', mid.x - bbox.width / 2 - 4)
-        .attr('y', mid.y - bbox.height / 2 - 2)
-        .attr('width', bbox.width + 8)
-        .attr('height', bbox.height + 4)
-        .attr('transform', '') // 移除旋转
-    })
+
 
     node
       .attr('cx', d => d.x)
@@ -734,7 +701,6 @@ const renderGraph = () => {
     selectedItem.value = null
     node.attr('stroke', '#fff').attr('stroke-width', 2.5)
     linkGroup.selectAll('path').attr('stroke', '#C0C0C0').attr('stroke-width', 1.5)
-    linkLabelBg.attr('fill', 'rgba(255,255,255,0.95)')
     linkLabels.attr('fill', '#666')
   })
 }
@@ -746,9 +712,6 @@ watch(() => props.graphData, () => {
 watch(showEdgeLabels, (newVal) => {
   if (linkLabelsRef) {
     linkLabelsRef.style('display', newVal ? 'block' : 'none')
-  }
-  if (linkLabelBgRef) {
-    linkLabelBgRef.style('display', newVal ? 'block' : 'none')
   }
 })
 

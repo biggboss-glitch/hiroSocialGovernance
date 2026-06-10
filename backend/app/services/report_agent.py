@@ -569,7 +569,7 @@ Write a "Future Prediction Report" answering:
 - NO: Not a generic public opinion summary
 
 [Section Count Limits]
-- Minimum 2 sections, maximum 5 sections
+- Minimum 2 sections, maximum 3 sections
 - No sub-sections needed; write full content directly for each section
 - Content must be concise and focused on core prediction findings
 - Section structure is designed by you based on prediction results
@@ -586,7 +586,7 @@ Please output the report outline in JSON format, structured as follows:
     ]
 }
 
-Note: The 'sections' array must contain at minimum 2 and at maximum 5 elements!"""
+Note: The 'sections' array must contain at minimum 2 and at maximum 3 elements!"""
 
 PLAN_USER_PROMPT_TEMPLATE = """\
 [Prediction Scenario Setup]
